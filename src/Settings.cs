@@ -3,15 +3,53 @@ using System.IO;
 
 namespace TVFollow
 {
-    // Settings live in %APPDATA%\TVFollow\settings.ini as key=value lines.
-    // TVFOLLOW_HOME points them somewhere else, for trying things out next to a running copy.
+    // Settings live in settings.ini as key=value lines, in one of three places:
+    //   %APPDATA%\TVFollow         installed (the usual)
+    //   "TVFollow data" next to the exe   portable: present only when set up that way
+    //   TVFOLLOW_HOME              a trial copy, for trying things out next to a running one
     class Settings
     {
+        public const string PortableFolderName = "TVFollow data";
+
         public static readonly string DefaultDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TVFollow");
-        public static string Dir = string.IsNullOrEmpty(Environment.GetEnvironmentVariable("TVFOLLOW_HOME"))
-            ? DefaultDir : Environment.GetEnvironmentVariable("TVFOLLOW_HOME");
+        public static readonly string ExeDir = Path.GetDirectoryName(
+            (System.Reflection.Assembly.GetEntryAssembly() ?? typeof(Settings).Assembly).Location);
+        public static string PortableDir { get { return Path.Combine(ExeDir, PortableFolderName); } }
+        public static string Dir = PickDir(Environment.GetEnvironmentVariable("TVFOLLOW_HOME"), PortableDir, Directory.Exists(PortableDir));
+
         public static string FilePath { get { return Path.Combine(Dir, "settings.ini"); } }
-        public static bool IsDefaultDir { get { return string.Equals(Path.GetFullPath(Dir).TrimEnd('\\'), DefaultDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase); } }
+        public static bool IsDefaultDir { get { return SameDir(Dir, DefaultDir); } }
+        public static bool IsPortable { get { return SameDir(Dir, PortableDir); } }
+        public static bool IsTrial { get { return !IsDefaultDir && !IsPortable; } }
+
+        public static string PickDir(string trialHome, string portableDir, bool portableExists)
+        {
+            if (!string.IsNullOrEmpty(trialHome)) return trialHome;
+            return portableExists ? portableDir : DefaultDir;
+        }
+
+        public static bool SameDir(string a, string b)
+        {
+            return string.Equals(Path.GetFullPath(a).TrimEnd('\\'), Path.GetFullPath(b).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Why portable can't be used from this folder, or null if it can: not from the installed
+        // copy's folder, not from Temp (where Windows puts an exe opened straight from a zip),
+        // and only where TVFollow can write.
+        public static string PortableBlocker(string exeDir, string installDir, string tempDir)
+        {
+            if (SameDir(exeDir, installDir)) return "This is the installed copy. To use TVFollow portable, open a TVFollow.exe kept in a folder of your own.";
+            if (Path.GetFullPath(exeDir).StartsWith(Path.GetFullPath(tempDir), StringComparison.OrdinalIgnoreCase))
+                return "TVFollow is running from a temporary folder (opened straight from a zip?). Unzip it into a folder of your own first.";
+            try
+            {
+                string probe = Path.Combine(exeDir, "TVFollow-write-check.tmp");
+                File.WriteAllText(probe, "");
+                File.Delete(probe);
+            }
+            catch { return "TVFollow can't save anything in this folder. Move TVFollow.exe to a folder of your own first."; }
+            return null;
+        }
 
         public const int DefaultPort = 8060;
 

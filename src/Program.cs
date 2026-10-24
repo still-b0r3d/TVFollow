@@ -42,14 +42,17 @@ namespace TVFollow
             if (cmd == "uninstall") return Uninstall(args.Length > 1 && args[1].ToLowerInvariant() == "--quiet");
 
             Settings settings = Settings.Load();
-            bool installed = Installer.SamePath(Application.ExecutablePath, InstallPaths.ForThisPC().Exe);
-            if (ShowsSetup(cmd, settings.IsComplete, Instance.IsRunning(), installed))
+            // "home" is the install folder, or for a portable copy the folder it runs from
+            bool home = Settings.IsPortable || Installer.SamePath(Application.ExecutablePath, InstallPaths.ForThisPC().Exe);
+            if (ShowsSetup(cmd, settings.IsComplete, Instance.IsRunning(), home))
             {
+                bool portable;
                 using (var setup = new SetupForm(settings))
                 {
                     if (setup.ShowDialog() != DialogResult.OK) return 0;
+                    portable = setup.Portable && !Settings.IsTrial;
                 }
-                return InstallAndStart(Settings.Load());
+                return portable ? StartPortable(Settings.Load()) : InstallAndStart(Settings.Load());
             }
 
             if (!settings.IsComplete)
@@ -76,11 +79,33 @@ namespace TVFollow
         }
 
         // Opening TVFollow shows setup the first time, while it's already running (to change
-        // settings), and whenever it's opened from anywhere but its install folder: that's a new
-        // download, and finishing setup installs it over the old one.
-        public static bool ShowsSetup(string cmd, bool setUp, bool running, bool installed)
+        // settings), and whenever it's opened from anywhere but its home folder: that's a new
+        // download, and finishing setup installs it over the old one (or makes it portable).
+        public static bool ShowsSetup(string cmd, bool setUp, bool running, bool home)
         {
-            return cmd == "setup" || (cmd.Length == 0 && (!setUp || running || !installed));
+            return cmd == "setup" || (cmd.Length == 0 && (!setUp || running || !home));
+        }
+
+        // After setup, portable: nothing is installed; this exe follows from where it is.
+        static int StartPortable(Settings settings)
+        {
+            string me = Application.ExecutablePath;
+            Installer.ClearDownloadMark(me); // it lives here now, so no security prompt each time it starts
+            InstallPaths installed = InstallPaths.Installed();
+            if (File.Exists(installed.Exe) && !Installer.SamePath(me, installed.Exe) &&
+                MessageBox.Show("TVFollow is also installed on this PC. Remove the installed copy, so only this portable one runs?",
+                    "TVFollow", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+            {
+                StopRunningCopy();
+                try
+                {
+                    Installer.Uninstall(installed, Settings.DefaultDir);
+                    Log.Write("removed the installed copy; running portable");
+                }
+                catch (Exception e) { Log.Write("couldn't remove the installed copy: " + e.Message); }
+            }
+            Log.Write("running portable from " + Settings.ExeDir);
+            return Follow(settings, new Controller(settings), true, true);
         }
 
         // After setup: put the exe in its folder (replacing an older one), then follow from there.
@@ -107,6 +132,9 @@ namespace TVFollow
                 return 1;
             }
             Log.Write("installed in " + paths.Dir);
+            // a portable copy that's been installed: its folder's settings would make it start
+            // portable again next time, so they go
+            if (!Settings.IsTrial && !fromInstalled && Directory.Exists(Settings.PortableDir)) Installer.RemoveSettings(Settings.PortableDir);
             if (fromInstalled) return Follow(settings, new Controller(settings), true, true);
             StartFollowing(paths);
             return 0;
@@ -120,22 +148,39 @@ namespace TVFollow
 
         static int Uninstall(bool quiet)
         {
-            if (!quiet && MessageBox.Show("Remove TVFollow from this PC?\n\nYour TV will stop turning on and off with the monitors. Nothing on the TV changes.",
-                "Remove TVFollow", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return 0;
-            StopRunningCopy();
             InstallPaths paths = InstallPaths.ForThisPC();
+            if (!quiet && MessageBox.Show(
+                (paths.Portable ? "Remove TVFollow's settings from this folder?" : "Remove TVFollow from this PC?") +
+                "\n\nYour TV will stop turning on and off with the monitors. Nothing on the TV changes.",
+                "Remove TVFollow", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return 0;
+            // only the copy being removed: a portable one shouldn't stop the installed one, or back
+            if (IsRunningFrom(paths.Portable ? Application.ExecutablePath : paths.Exe)) StopRunningCopy();
             bool folderLater;
-            try { folderLater = Installer.Uninstall(paths); }
+            try { folderLater = Installer.Uninstall(paths, Settings.Dir); }
             catch (Exception e)
             {
                 if (!quiet) MessageBox.Show("Couldn't remove everything: " + e.Message, "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return 1;
             }
-            if (!quiet) MessageBox.Show("TVFollow is removed.", "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            if (!quiet) MessageBox.Show(paths.Portable ? "TVFollow's settings are removed. Delete TVFollow.exe to finish." : "TVFollow is removed.",
+                "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Information);
             // last of all, once nothing here is waiting on a click: this exe can only be deleted
             // after it has exited
             if (folderLater) Installer.DeleteAfterExit(paths.Dir);
             return 0;
+        }
+
+        // is another process running this exact exe?
+        static bool IsRunningFrom(string exe)
+        {
+            int self = Process.GetCurrentProcess().Id;
+            foreach (Process p in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(exe)))
+            {
+                try { if (p.Id != self && Installer.SamePath(p.MainModule.FileName, exe)) return true; }
+                catch { }
+                finally { p.Dispose(); }
+            }
+            return false;
         }
 
         static bool StopRunningCopy()

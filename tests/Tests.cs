@@ -534,7 +534,7 @@ namespace TVFollow.Tests
                     Check(run == null || run.GetValue(Installer.RunValue) == null, "start-with-Windows not removed");
 
                 Updates.Save(DateTime.UtcNow, "", "");
-                Installer.Uninstall(p);
+                Installer.Uninstall(p, Settings.Dir);
                 Check(!File.Exists(Updates.FilePath), "update-check file left behind");
                 Check(!Directory.Exists(p.Dir), "program folder left behind");
                 Check(!File.Exists(p.StartMenuLink), "Start menu shortcut left behind");

@@ -32,6 +32,10 @@ namespace TVFollow.Tests
             Run("power test: a TV that's already off passes", PowerTestAlreadyOff);
             Run("power test: a TV that won't turn back on fails cleanly", PowerTestNoPowerOn);
             Run("power test: an input that won't switch fails cleanly", PowerTestNoInput);
+            Run("portable: where the settings live", PortableSettingsPlace);
+            Run("portable: one copy follows, installed or portable", PortableSharesTheLock);
+            Run("portable: refused from the install folder, Temp, or a read-only folder", PortableBlockers);
+            Run("portable: uninstalling keeps the user's exe and folder", PortableUninstallKeepsExe);
 
             // the setup window, driven off screen
             WindowsFormsSynchronizationContext.AutoInstall = false;
@@ -39,6 +43,95 @@ namespace TVFollow.Tests
             Run("setup: the footer buttons tab in screen order", SetupTabOrder);
             Run("setup: walking through and Finish saves the TV", SetupWalkThrough);
             Run("setup: a late answer about another TV is ignored", SetupIgnoresStaleCheck);
+            Run("setup: choosing portable", SetupChoosesPortable);
+        }
+
+        // ---- portable ----
+
+        static void PortableSettingsPlace()
+        {
+            Check(Settings.PickDir("C:\\trial", "D:\\Tools\\TVFollow data", true) == "C:\\trial", "a trial folder wins");
+            Check(Settings.PickDir(null, "D:\\Tools\\TVFollow data", true) == "D:\\Tools\\TVFollow data", "a data folder next to the exe means portable");
+            Check(Settings.PickDir("", "D:\\Tools\\TVFollow data", false) == Settings.DefaultDir, "otherwise the installed place");
+            Check(Settings.PortableDir == Path.Combine(Settings.ExeDir, "TVFollow data"), "portable folder name");
+        }
+
+        static void PortableSharesTheLock()
+        {
+            Check(Instance.SuffixFor(false, "D:\\Tools\\TVFollow data") == "", "portable must share the installed copy's lock");
+            Check(Instance.SuffixFor(false, Settings.DefaultDir) == "", "installed uses the plain name");
+            Check(Instance.SuffixFor(true, "C:\\trial").StartsWith("."), "a trial copy keeps to itself");
+        }
+
+        static void PortableBlockers()
+        {
+            string temp = Path.GetTempPath();
+            string install = Path.Combine(Settings.Dir, "inst", "TVFollow");
+            Directory.CreateDirectory(install);
+            Check(Settings.PortableBlocker(install, install, temp) != null, "allowed in the install folder");
+            Check(Settings.PortableBlocker(Path.Combine(temp, "Temp1_TVFollow.zip"), install, temp) != null, "allowed in Temp");
+            string own = Path.Combine(Settings.Dir, "own folder");
+            Directory.CreateDirectory(own);
+            Check(Settings.PortableBlocker(own, install, Path.Combine(Settings.Dir, "elsewhere")) == null, "refused in a normal folder");
+            Check(Directory.GetFiles(own).Length == 0, "the write check left a file behind");
+            Check(Settings.PortableBlocker(Path.Combine(Settings.Dir, "missing"), install, Path.Combine(Settings.Dir, "elsewhere")) != null,
+                "allowed where it can't write");
+            Directory.Delete(Path.Combine(Settings.Dir, "inst"), true);
+            Directory.Delete(own, true);
+        }
+
+        static void PortableUninstallKeepsExe()
+        {
+            string folder = Path.Combine(Settings.Dir, "TVFollow");   // even a folder named TVFollow is the user's
+            string data = Path.Combine(folder, Settings.PortableFolderName);
+            Directory.CreateDirectory(data);
+            File.WriteAllText(Path.Combine(folder, "TVFollow.exe"), "x");
+            File.WriteAllText(Path.Combine(folder, "notes.txt"), "the user's");
+            File.WriteAllText(Path.Combine(data, "settings.ini"), "ip=1.2.3.4");
+            File.WriteAllText(Path.Combine(data, "TVFollow.log"), "log");
+            bool later = Installer.Uninstall(new InstallPaths { Dir = folder, Portable = true }, data);
+            Check(!later, "nothing should be scheduled for deletion");
+            Check(File.Exists(Path.Combine(folder, "TVFollow.exe")) && File.Exists(Path.Combine(folder, "notes.txt")), "the user's files were deleted");
+            Check(!Directory.Exists(data), "the data folder is still there");
+            Directory.Delete(folder, true);
+        }
+
+        static void SetupChoosesPortable()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                var s = new Settings();
+                s.Port = tv.Port;
+                SetupForm form = OffScreenSetup(s, () => TvScanner.Probe(new[] { "127.0.0.1" }, tv.Port));
+                string trialDir = Settings.Dir;
+                try
+                {
+                    Pump(() => !form.CurrentPage.Busy && form.CurrentPage.CanGoNext, 15);
+                    form.GoNext();
+                    Pump(() => form.CurrentPage.CanGoNext, 15);
+                    form.GoNext();
+                    Pump(() => !form.CurrentPage.Busy && form.CurrentPage.CanGoNext, 15);
+                    form.GoNext();
+                    form.GoNext(); // past the test: skipping isn't allowed, so this stays on the test page
+                    Check(form.CurrentPage is TestPage, "Next went past an unrun test");
+                    ((TestPage)form.CurrentPage).StartTest();
+                    Pump(() => !form.CurrentPage.Busy, 20);
+                    form.GoNext();
+                    Check(form.CurrentPage is FinishPage, "not on the last page");
+                    Check(!form.Portable, "install should be the default");
+                    RadioButton portable = null;
+                    foreach (Control c in ((FinishPage)form.CurrentPage).Controls[0].Controls)
+                        if (c is RadioButton && c.Text.StartsWith("Portable")) portable = (RadioButton)c;
+                    Check(portable != null && portable.Enabled, "the portable choice is missing or greyed out");
+                    portable.Checked = true;
+                    Check(form.Portable, "choosing portable didn't register");
+                    form.GoNext();
+                    Check(form.DialogResult == DialogResult.OK, "Finish didn't close with OK");
+                    Check(Settings.Dir == trialDir, "a trial copy must keep its own folder even when portable is picked");
+                }
+                finally { form.Dispose(); }
+                File.Delete(Settings.FilePath);
+            }
         }
 
         // ---- the TV client ----

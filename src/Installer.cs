@@ -15,6 +15,7 @@ namespace TVFollow
         public string StartMenuLink;  // Start menu shortcut
         public string DesktopDir;     // where the optional TV shortcuts go
         public string RegistryRoot;   // under HKEY_CURRENT_USER; null = leave the registry alone
+        public bool Portable;         // runs from the user's own folder; nothing is installed
 
         public string Exe { get { return Path.Combine(Dir, "TVFollow.exe"); } }
         public string IconDir { get { return Path.Combine(Dir, "icons"); } }
@@ -23,7 +24,7 @@ namespace TVFollow
 
         public static InstallPaths ForThisPC()
         {
-            if (!Settings.IsDefaultDir)
+            if (Settings.IsTrial)
             {
                 // a trial copy (TVFOLLOW_HOME) keeps everything inside its own folder
                 return new InstallPaths
@@ -33,6 +34,13 @@ namespace TVFollow
                     DesktopDir = Path.Combine(Settings.Dir, "Desktop")
                 };
             }
+            if (Settings.IsPortable) return new InstallPaths { Dir = Settings.ExeDir, Portable = true };
+            return Installed();
+        }
+
+        // where the installed copy lives, whatever mode this copy runs in
+        public static InstallPaths Installed()
+        {
             return new InstallPaths
             {
                 Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "TVFollow"),
@@ -141,12 +149,18 @@ namespace TVFollow
             return GetFileAttributesW(path + ":Zone.Identifier") != 0xFFFFFFFF;
         }
 
-        // Takes everything back out: registry, shortcuts, settings, log and the program folder.
-        // Returns true if the program folder still has to go once this copy has exited (it's
-        // running from inside it): call DeleteAfterExit as the very last thing.
-        public static bool Uninstall(InstallPaths p)
+        // Takes everything back out: registry, shortcuts, the settings and log in settingsDir,
+        // and the program folder. Returns true if the program folder still has to go once this
+        // copy has exited (it's running from inside it): call DeleteAfterExit as the very last
+        // thing. A portable copy only loses its settings: its exe and folder are the user's.
+        public static bool Uninstall(InstallPaths p, string settingsDir)
         {
             bool later = false;
+            if (p.Portable)
+            {
+                RemoveSettings(settingsDir);
+                return false;
+            }
             if (p.RegistryRoot != null)
             {
                 using (RegistryKey run = Registry.CurrentUser.OpenSubKey(p.RunKey, true))
@@ -162,17 +176,22 @@ namespace TVFollow
                 DeleteEmptyDir(p.DesktopDir, "Desktop");
             }
 
-            foreach (string name in new[] { "settings.ini", "settings.ini.tmp", "updates.ini", "TVFollow.log", "TVFollow.log.old" })
-                DeleteFile(Path.Combine(Settings.Dir, name));
-
             // only ever delete a folder that is clearly TVFollow's own
             if (File.Exists(p.Exe) && (Path.GetFileName(p.Dir) == "TVFollow" || Path.GetFileName(p.Dir) == "Program"))
             {
                 if (SamePath(Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName), p.Dir)) later = true;
                 else Directory.Delete(p.Dir, true);
             }
-            DeleteEmptyDir(Settings.Dir, null);
+            RemoveSettings(settingsDir);
             return later;
+        }
+
+        // TVFollow's own files in a settings folder, then the folder if that left it empty
+        public static void RemoveSettings(string dir)
+        {
+            foreach (string name in new[] { "settings.ini", "settings.ini.tmp", "updates.ini", "TVFollow.log", "TVFollow.log.old" })
+                DeleteFile(Path.Combine(dir, name));
+            DeleteEmptyDir(dir, null);
         }
 
         // A hidden Command Prompt removes the folder once this copy has exited, trying for about

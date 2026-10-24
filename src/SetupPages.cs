@@ -481,34 +481,55 @@ namespace TVFollow
         }
     }
 
-    // Step 5: what TVFollow will do, and Finish.
+    // Step 5: what TVFollow will do, how it runs (installed or portable), and Finish.
     class FinishPage : SetupPage
     {
-        readonly Label summary;
-        readonly CheckBox off, on, startup, shortcuts, updates;
+        readonly Label summary, portableNote;
+        readonly CheckBox off, on, updates, startup, shortcuts;
+        readonly RadioButton install, portable;
+        string blocker;
 
         public FinishPage(SetupForm setup) : base(setup)
         {
             summary = Para("");
-            off = Option("Turn the TV off when this PC's monitors turn off", 6);
-            on = Option("Turn the TV on and switch it to this PC when you come back", 6);
-            startup = Option("Start TVFollow when you sign in to Windows", 6);
-            shortcuts = Option("Put TV on, TV off and TV to PC shortcuts on the desktop", 6);
-            updates = Option("Tell me when there's a new version (checks GitHub once a week)", 14);
-            updates.CheckedChanged += delegate { Setup.Settings.CheckUpdates = updates.Checked; };
+            off = Option("Turn the TV off when this PC's monitors turn off", 4, 0);
+            on = Option("Turn the TV on and switch it to this PC when you come back", 4, 0);
+            updates = Option("Tell me when there's a new version (checks GitHub once a week)", 14, 0);
+
+            Label how = Para("How should TVFollow run?");
+            how.Font = new Font(setup.Font, FontStyle.Bold);
+            how.Margin = new Padding(0, 0, 0, 4);
+            install = Choice("Install it for this Windows account");
+            startup = Option("Start TVFollow when you sign in to Windows", 2, 20);
+            shortcuts = Option("Put TV on, TV off and TV to PC shortcuts on the desktop", 6, 20);
+            portable = Choice("Portable: run from this folder and change nothing else on this PC");
+            portableNote = Note("");
+            portableNote.Margin = new Padding(20, 0, 0, 12);
+
             off.CheckedChanged += delegate { Setup.Settings.OffWithMonitors = off.Checked; };
             on.CheckedChanged += delegate { Setup.Settings.OnWithMonitors = on.Checked; };
+            updates.CheckedChanged += delegate { Setup.Settings.CheckUpdates = updates.Checked; };
             startup.CheckedChanged += delegate { Setup.Settings.StartWithWindows = startup.Checked; };
             shortcuts.CheckedChanged += delegate { Setup.Settings.DesktopShortcuts = shortcuts.Checked; };
+            install.CheckedChanged += delegate { ShowMode(); };
+            portable.CheckedChanged += delegate { ShowMode(); };
+
             Note("TVFollow only turns the TV off while it's showing this PC, so it won't interrupt anyone watching something else. " +
                 "It runs from the TV icon in the taskbar corner: right-click it for TV buttons, Pause and these settings.");
         }
 
-        CheckBox Option(string text, int gap)
+        CheckBox Option(string text, int gap, int indent)
         {
-            var box = new CheckBox { Text = text, AutoSize = true, Margin = new Padding(0, 0, 0, gap) };
+            var box = new CheckBox { Text = text, AutoSize = true, Margin = new Padding(indent, 0, 0, gap) };
             Body.Controls.Add(box);
             return box;
+        }
+
+        RadioButton Choice(string text)
+        {
+            var radio = new RadioButton { Text = text, AutoSize = true, Margin = new Padding(0, 0, 0, 2) };
+            Body.Controls.Add(radio);
+            return radio;
         }
 
         public override string Title { get { return "All set"; } }
@@ -519,9 +540,23 @@ namespace TVFollow
             summary.Text = "TV: " + Setup.Tv.Title + where + "\r\nInput: " + Setup.InputName;
             off.Checked = Setup.Settings.OffWithMonitors;
             on.Checked = Setup.Settings.OnWithMonitors;
+            updates.Checked = Setup.Settings.CheckUpdates;
             startup.Checked = Setup.Settings.StartWithWindows;
             shortcuts.Checked = Setup.Settings.DesktopShortcuts;
-            updates.Checked = Setup.Settings.CheckUpdates;
+
+            blocker = Settings.PortableBlocker(Settings.ExeDir, InstallPaths.Installed().Dir, System.IO.Path.GetTempPath());
+            portable.Enabled = blocker == null;
+            if (portable.Enabled && Settings.IsPortable) portable.Checked = true; // already portable: stay that way
+            else install.Checked = true;
+            ShowMode();
+        }
+
+        void ShowMode()
+        {
+            Setup.Portable = portable.Checked;
+            startup.Enabled = shortcuts.Enabled = !portable.Checked;
+            portableNote.Text = blocker ?? "Settings are kept in a \"" + Settings.PortableFolderName + "\" folder next to TVFollow.exe, " +
+                "and it won't start by itself when you sign in. To remove it, quit it from the tray and delete the folder.";
         }
     }
 }

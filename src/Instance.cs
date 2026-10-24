@@ -2,15 +2,17 @@ using System.Threading;
 
 namespace TVFollow
 {
-    // Only one TVFollow follows the monitors at a time. When setup saves new settings, the new
-    // copy asks the running one to stop and takes over.
+    // Only one TVFollow follows the monitors at a time, installed or portable. When setup saves
+    // new settings, the new copy asks the running one to stop and takes over.
     static class Instance
     {
-        // a copy using another settings folder (TVFOLLOW_HOME) keeps to itself
-        static string Suffix
+        // a trial copy (TVFOLLOW_HOME) keeps to itself
+        public static string SuffixFor(bool trial, string dir)
         {
-            get { return Settings.IsDefaultDir ? "" : "." + ((uint)Settings.Dir.ToLowerInvariant().GetHashCode()).ToString("x8"); }
+            return trial ? "." + ((uint)dir.ToLowerInvariant().GetHashCode()).ToString("x8") : "";
         }
+
+        static string Suffix { get { return SuffixFor(Settings.IsTrial, Settings.Dir); } }
 
         public static string MutexName { get { return @"Local\TVFollow" + Suffix; } }
         public static string QuitName { get { return @"Local\TVFollow.Quit" + Suffix; } }
