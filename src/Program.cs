@@ -44,7 +44,13 @@ namespace TVFollow
             Settings settings = Settings.Load();
             // "home" is the install folder, or for a portable copy the folder it runs from
             bool home = Settings.IsPortable || Installer.SamePath(Application.ExecutablePath, InstallPaths.ForThisPC().Exe);
-            if (ShowsSetup(cmd, settings.IsComplete, Instance.IsRunning(), home))
+            Opening opening = WhatOpens(cmd, settings.IsComplete, Instance.IsRunning(), home);
+            if (opening == Opening.Settings)
+            {
+                Instance.AskToShowSettings(); // the running copy shows its Settings window
+                return 0;
+            }
+            if (opening == Opening.Setup)
             {
                 bool portable;
                 using (var setup = new SetupForm(settings))
@@ -78,12 +84,18 @@ namespace TVFollow
             return 2;
         }
 
-        // Opening TVFollow shows setup the first time, while it's already running (to change
-        // settings), and whenever it's opened from anywhere but its home folder: that's a new
-        // download, and finishing setup installs it over the old one (or makes it portable).
-        public static bool ShowsSetup(string cmd, bool setUp, bool running, bool home)
+        public enum Opening { Follow, Setup, Settings }
+
+        // Opening TVFollow: the setup wizard the first time, and whenever it's opened from anywhere
+        // but its home folder (a new download: finishing setup installs it over the old one, or
+        // makes it portable). Opened again from home while it runs: the running copy's Settings
+        // window. Otherwise it starts following.
+        public static Opening WhatOpens(string cmd, bool setUp, bool running, bool home)
         {
-            return cmd == "setup" || (cmd.Length == 0 && (!setUp || running || !home));
+            if (cmd == "setup") return Opening.Setup;
+            if (cmd.Length > 0) return Opening.Follow; // the other commands are handled on their own
+            if (!setUp || !home) return Opening.Setup;
+            return running ? Opening.Settings : Opening.Follow;
         }
 
         // After setup, portable: nothing is installed; this exe follows from where it is.
@@ -213,8 +225,9 @@ namespace TVFollow
                     follower.Start();
                     using (var tray = new Tray(follower, controller))
                     {
+                        follower.SettingsRequested += tray.ShowSettings;
                         if (greet) tray.Greet();
-                        UpdateWatcher updates = settings.CheckUpdates ? new UpdateWatcher(tray) : null;
+                        var updates = new UpdateWatcher(tray, settings); // checks only while the setting is on
                         Application.Run();
                         GC.KeepAlive(updates);
                     }

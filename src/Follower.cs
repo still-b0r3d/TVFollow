@@ -136,6 +136,7 @@ namespace TVFollow
             RegisterPowerSettingNotification(Handle, ref GUID_CONSOLE_DISPLAY_STATE, 0);
 
             quit = new EventWaitHandle(false, EventResetMode.AutoReset, Instance.QuitName);
+            showSettings = new EventWaitHandle(false, EventResetMode.AutoReset, Instance.SettingsName);
             tick = new System.Windows.Forms.Timer();
             tick.Interval = 500;
             tick.Tick += delegate
@@ -147,10 +148,15 @@ namespace TVFollow
                     Application.ExitThread();
                     return;
                 }
+                if (showSettings.WaitOne(0)) SettingsRequested();
                 Rules.CheckForInput();
             };
             tick.Start();
         }
+
+        // TVFollow was opened again while this copy runs
+        public event Action SettingsRequested = delegate { };
+        EventWaitHandle showSettings;
 
         void Want(bool on)
         {

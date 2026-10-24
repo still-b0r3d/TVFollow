@@ -119,6 +119,13 @@ namespace TVFollow
         // answer or won't say (the Limited setting hides the list).
         public List<KeyValuePair<string, string>> GetHdmiInputs(int timeoutMs)
         {
+            List<KeyValuePair<string, string>> all = GetTvInputs(timeoutMs);
+            return all == null ? null : all.FindAll(p => p.Key.StartsWith("tvinput.hdmi"));
+        }
+
+        // Every input the TV has (HDMI, Live TV, AV) as (id, name), HDMI first in order.
+        public List<KeyValuePair<string, string>> GetTvInputs(int timeoutMs)
+        {
             try
             {
                 XmlDocument doc = SafeXml.Load(Get("query/apps", timeoutMs));
@@ -126,10 +133,14 @@ namespace TVFollow
                 foreach (XmlElement app in doc.SelectNodes("/apps/app"))
                 {
                     string id = app.GetAttribute("id");
-                    if (!id.StartsWith("tvinput.hdmi")) continue;
+                    if (!id.StartsWith("tvinput.")) continue;
                     inputs.Add(new KeyValuePair<string, string>(id, app.InnerText.Replace((char)0xA0, ' ').Trim()));
                 }
-                inputs.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
+                inputs.Sort((a, b) =>
+                {
+                    bool ha = a.Key.StartsWith("tvinput.hdmi"), hb = b.Key.StartsWith("tvinput.hdmi");
+                    return ha != hb ? (ha ? -1 : 1) : string.CompareOrdinal(a.Key, b.Key);
+                });
                 return inputs;
             }
             catch { return null; }

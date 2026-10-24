@@ -115,12 +115,59 @@ namespace TVFollow.Tests
                 Save(form, folder, "5-finish");
                 form.Close();
 
-                if (onScreen) SaveTrayMenu(folder, settings);
+                if (onScreen)
+                {
+                    SaveRemotesAndSettings(folder, tv);
+                    SaveTrayMenu(folder, settings);
+                }
             }
             if (backdrop != null) backdrop.Close();
             try { Directory.Delete(Settings.Dir, true); } catch { }
             Console.WriteLine("saved the pictures in " + folder);
             return 0;
+        }
+
+        // the three remote layouts and the Settings window, against the pretend living-room TV
+        static void SaveRemotesAndSettings(string folder, FakeTv tv)
+        {
+            var s = new Settings();
+            s.Ip = tv.Ip;
+            s.Port = tv.Port;
+            s.Serial = tv.Serial;
+            s.Input = "hdmi1";
+            tv.App = "tvinput.hdmi1";
+            tv.PowerMode = "PowerOn";
+            SettingsForm.ShownAddress = ip => ip == "127.0.0.2" ? "192.168.1.50" : ip;
+
+            string[] layouts = { RemoteForm.Classic, RemoteForm.Compact, RemoteForm.Strip };
+            for (int i = 0; i < layouts.Length; i++)
+            {
+                var remote = new RemoteForm(s, new Controller(s), layouts[i]);
+                remote.Show();
+                DateTime until = DateTime.UtcNow.AddSeconds(2);
+                while (DateTime.UtcNow < until) { Application.DoEvents(); Thread.Sleep(30); } // inputs arrive
+                WaitFor(() => true);
+                Thread.Sleep(250);
+                Capture(Rectangle.Inflate(VisibleBounds(remote), 24, 24), Path.Combine(folder, (7 + i) + "-remote-" + layouts[i] + ".png"));
+                remote.Close();
+                remote.Dispose();
+            }
+
+            var controller = new Controller(s);
+            var follower = new Follower(s, controller); // not started
+            using (var tray = new Tray(follower, controller))
+            using (var window = new SettingsForm(s, follower, tray))
+            {
+                Rectangle area = Screen.PrimaryScreen.WorkingArea;
+                window.StartPosition = FormStartPosition.Manual;
+                window.Location = new Point(area.Left + 80, area.Top + 40);
+                window.TopMost = true;
+                window.Show();
+                WaitFor(() => Text(window).Contains("Living Room TV") && Text(window).Contains("showing this PC"));
+                Thread.Sleep(250);
+                Capture(Rectangle.Inflate(VisibleBounds(window), 24, 24), Path.Combine(folder, "10-settings.png"));
+                window.Close();
+            }
         }
 
         static void SaveTrayMenu(string folder, Settings settings)

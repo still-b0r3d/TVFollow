@@ -148,13 +148,16 @@ namespace TVFollow
     class UpdateWatcher
     {
         readonly Tray tray;
+        readonly Settings settings;
         readonly Timer timer = new Timer();
         DateTime lastTry = DateTime.MinValue;
         bool checking;
 
-        public UpdateWatcher(Tray tray)
+        // always made; it only asks GitHub while the setting is on (it can change in Settings)
+        public UpdateWatcher(Tray tray, Settings settings)
         {
             this.tray = tray;
+            this.settings = settings;
 
             // a newer version found before this copy started is still worth a menu item
             DateTime last;
@@ -169,6 +172,7 @@ namespace TVFollow
 
         async void Check()
         {
+            if (!settings.CheckUpdates) return;
             DateTime last;
             string latest, url;
             Updates.Load(out last, out latest, out url);

@@ -139,7 +139,7 @@ namespace TVFollow.Tests
             else if (path == "/keypress/PowerOn") { if (!RefusePowerOn) PowerMode = "PowerOn"; }
             else if (path.StartsWith("/keypress/InputHDMI")) { if (IsOn && !IgnoreInput) App = "tvinput.hdmi" + path.Substring("/keypress/InputHDMI".Length); }
             else if (path.StartsWith("/launch/")) { if (IsOn && !IgnoreInput) App = path.Substring("/launch/".Length); }
-            else status = 404;
+            else if (!path.StartsWith("/keypress/")) status = 404; // any other remote key is fine, like a real TV
         }
 
         string DeviceInfoXml()

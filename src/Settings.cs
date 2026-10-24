@@ -64,6 +64,7 @@ namespace TVFollow
         public bool DesktopShortcuts;
         public bool CheckUpdates = true;
         public bool Paused;  // set from the tray; kept across restarts until resumed
+        public string RemoteLayout = "classic";  // classic, compact or strip
 
         public bool IsComplete { get { return Ip.Length > 0 && Serial.Length > 0; } }
 
@@ -102,6 +103,10 @@ namespace TVFollow
                     case "desktop_shortcuts": s.DesktopShortcuts = !IsNo(value); break;
                     case "check_updates": s.CheckUpdates = !IsNo(value); break;
                     case "paused": s.Paused = !IsNo(value); break;
+                    case "remote_layout":
+                        value = value.ToLowerInvariant();
+                        if (value == "classic" || value == "compact" || value == "strip") s.RemoteLayout = value;
+                        break;
                 }
             }
             return s;
@@ -129,6 +134,7 @@ namespace TVFollow
                 "start_with_windows=" + (StartWithWindows ? "yes" : "no") + "\r\n" +
                 "desktop_shortcuts=" + (DesktopShortcuts ? "yes" : "no") + "\r\n" +
                 "check_updates=" + (CheckUpdates ? "yes" : "no") + "\r\n" +
+                "remote_layout=" + RemoteLayout + "\r\n" +
                 (Paused ? "paused=yes\r\n" : "") +
                 (Port != DefaultPort ? "port=" + Port + "\r\n" : "");
             string temp = FilePath + ".tmp";

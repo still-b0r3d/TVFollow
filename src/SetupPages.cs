@@ -515,7 +515,7 @@ namespace TVFollow
             portable.CheckedChanged += delegate { ShowMode(); };
 
             Note("TVFollow only turns the TV off while it's showing this PC, so it won't interrupt anyone watching something else. " +
-                "It runs from the TV icon in the taskbar corner: right-click it for TV buttons, Pause and these settings.");
+                "It runs from the TV icon in the taskbar corner: right-click it for the remote, TV buttons, Pause and Settings.");
         }
 
         CheckBox Option(string text, int gap, int indent)

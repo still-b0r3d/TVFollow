@@ -44,6 +44,7 @@ namespace TVFollow.Tests
             Run("setup: walking through and Finish saves the TV", SetupWalkThrough);
             Run("setup: a late answer about another TV is ignored", SetupIgnoresStaleCheck);
             Run("setup: choosing portable", SetupChoosesPortable);
+            RunRemoteTests();
         }
 
         // ---- portable ----
@@ -309,12 +310,14 @@ namespace TVFollow.Tests
 
         static void SetupShowsWhen()
         {
-            Check(Program.ShowsSetup("", false, false, true), "first run");
-            Check(Program.ShowsSetup("", true, true, true), "opened while running");
-            Check(Program.ShowsSetup("", true, false, false), "a new download, with nothing running");
-            Check(!Program.ShowsSetup("", true, false, true), "the installed copy, not running: just follow");
-            Check(Program.ShowsSetup("setup", true, false, true), "the setup command");
-            Check(!Program.ShowsSetup("--startup", true, false, true) && !Program.ShowsSetup("follow", true, true, false), "internal commands never show it");
+            Check(Program.WhatOpens("", false, false, true) == Program.Opening.Setup, "first run: setup");
+            Check(Program.WhatOpens("", true, true, true) == Program.Opening.Settings, "opened again while running: Settings");
+            Check(Program.WhatOpens("", true, false, false) == Program.Opening.Setup, "a new download, nothing running: setup");
+            Check(Program.WhatOpens("", true, true, false) == Program.Opening.Setup, "a new download while running: setup (to update)");
+            Check(Program.WhatOpens("", true, false, true) == Program.Opening.Follow, "home, not running: just follow");
+            Check(Program.WhatOpens("setup", true, true, true) == Program.Opening.Setup, "the setup command");
+            Check(Program.WhatOpens("--startup", true, false, true) == Program.Opening.Follow &&
+                Program.WhatOpens("follow", true, true, false) == Program.Opening.Follow, "internal commands never open windows");
         }
 
         // ---- installing ----

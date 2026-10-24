@@ -18,7 +18,7 @@ namespace TVFollow
         }
     }
 
-    // The TV in the taskbar corner: TV buttons, Pause, Settings, the log and Quit.
+    // The TV in the taskbar corner: the remote, TV buttons, Pause, Settings, the log and Quit.
     class Tray : IDisposable
     {
         readonly NotifyIcon icon = new NotifyIcon();
@@ -28,6 +28,10 @@ namespace TVFollow
         readonly ToolStripMenuItem state, pause;
         ToolStripMenuItem update;
         string balloonUrl; // where clicking the current notification goes, if anywhere
+        RemoteForm remote;
+        SettingsForm settingsWindow;
+
+        public event Action<bool> PausedChanged = delegate { };
 
         public Tray(Follower follower, Controller controller)
         {
@@ -39,20 +43,23 @@ namespace TVFollow
             var menu = new ContextMenuStrip { ShowImageMargin = false };
             state = new ToolStripMenuItem { Enabled = false };
             pause = new ToolStripMenuItem("Pause following", null, delegate { SetPaused(!follower.Rules.Paused); });
+            var remoteItem = new ToolStripMenuItem("Remote…", null, delegate { ShowRemote(); });
+            remoteItem.Font = new Font(menu.Font, FontStyle.Bold);
             menu.Items.Add(state);
             menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(remoteItem);
             menu.Items.Add("TV on", null, delegate { Do("on (button)", () => controller.TurnOn(TurnOnMode.PowerOnly)); });
             menu.Items.Add("TV off", null, delegate { Do("off (button)", () => controller.TurnOff(true, false)); });
             menu.Items.Add("TV to PC", null, delegate { Do("pc", () => controller.TurnOn(TurnOnMode.ToPc)); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(pause);
-            menu.Items.Add("Settings…", null, delegate { OpenSettings(); });
+            menu.Items.Add("Settings…", null, delegate { ShowSettings(); });
             menu.Items.Add("Open log", null, delegate { OpenLog(); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Quit TVFollow", null, delegate { Log.Write("quit from the tray"); Application.ExitThread(); });
 
             icon.ContextMenuStrip = menu;
-            icon.DoubleClick += delegate { OpenSettings(); };
+            icon.DoubleClick += delegate { ShowSettings(); };
             icon.BalloonTipClicked += delegate { if (balloonUrl != null) SetupForm.OpenUrl(balloonUrl); };
             Show();
             icon.Visible = true;
@@ -82,18 +89,19 @@ namespace TVFollow
         {
             balloonUrl = null;
             icon.ShowBalloonTip(6000, "TVFollow is running",
-                "Your TV now follows this PC's monitors. Right-click the TV icon here for TV buttons and settings.", ToolTipIcon.Info);
+                "Your TV now follows this PC's monitors. Right-click the TV icon here for the remote and settings.", ToolTipIcon.Info);
         }
 
-        void SetPaused(bool value)
+        public void SetPaused(bool value)
         {
             follower.Rules.Paused = value;
-            Log.Write(value ? "paused from the tray" : "following again");
-            // kept in the settings, so a restart or a trip through Settings… doesn't undo it
+            Log.Write(value ? "paused" : "following again");
+            // kept in the settings, so a restart or a trip through setup doesn't undo it
             follower.Settings.Paused = value;
             try { follower.Settings.Save(); }
             catch (Exception e) { Log.Write("couldn't save the pause: " + e.Message); }
             Show();
+            PausedChanged(value);
         }
 
         void Show()
@@ -115,25 +123,36 @@ namespace TVFollow
             });
         }
 
-        // The setup window runs as its own copy; when it's finished, it takes over from this one.
-        static void OpenSettings()
+        // one remote at a time; opening it again brings it to the front
+        public void ShowRemote()
         {
-            try
-            {
-                Process.Start(new ProcessStartInfo(Application.ExecutablePath, "setup")
-                {
-                    WorkingDirectory = Path.GetDirectoryName(Application.ExecutablePath),
-                    UseShellExecute = false
-                });
-            }
-            catch (Exception e) { Log.Write("couldn't open settings: " + e.Message); }
+            if (remote != null && !remote.IsDisposed) { remote.Activate(); return; }
+            remote = new RemoteForm(follower.Settings, controller, follower.Settings.RemoteLayout);
+            remote.Show();
+            remote.Activate();
         }
 
-        static void OpenLog()
+        // a new layout picked in Settings: an open remote changes to it
+        public void RemoteLayoutChanged()
+        {
+            if (remote == null || remote.IsDisposed || remote.LayoutName == follower.Settings.RemoteLayout) return;
+            remote.Close();
+            ShowRemote();
+        }
+
+        public void ShowSettings()
+        {
+            if (settingsWindow != null && !settingsWindow.IsDisposed) { settingsWindow.Activate(); return; }
+            settingsWindow = new SettingsForm(follower.Settings, follower, this);
+            settingsWindow.Show();
+            settingsWindow.Activate();
+        }
+
+        public static void OpenLog()
         {
             try
             {
-                if (!File.Exists(Log.FilePath)) Log.Write("log opened from the tray");
+                if (!File.Exists(Log.FilePath)) Log.Write("log opened");
                 // Notepad by its full path, never whatever "notepad.exe" sits in the current folder
                 Process.Start(Path.Combine(Environment.SystemDirectory, "notepad.exe"), "\"" + Log.FilePath + "\"");
             }
@@ -142,6 +161,8 @@ namespace TVFollow
 
         public void Dispose()
         {
+            if (remote != null && !remote.IsDisposed) remote.Close();
+            if (settingsWindow != null && !settingsWindow.IsDisposed) settingsWindow.Close();
             icon.Visible = false;
             icon.Dispose();
         }
