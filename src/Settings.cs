@@ -22,6 +22,8 @@ namespace TVFollow
         public int Port = DefaultPort;
         public bool OffWithMonitors = true;
         public bool OnWithMonitors = true;
+        public bool StartWithWindows = true;
+        public bool DesktopShortcuts;
 
         public bool IsComplete { get { return Ip.Length > 0 && Serial.Length > 0; } }
 
@@ -52,6 +54,8 @@ namespace TVFollow
                         break;
                     case "off_with_monitors": s.OffWithMonitors = !IsNo(value); break;
                     case "on_with_monitors": s.OnWithMonitors = !IsNo(value); break;
+                    case "start_with_windows": s.StartWithWindows = !IsNo(value); break;
+                    case "desktop_shortcuts": s.DesktopShortcuts = !IsNo(value); break;
                 }
             }
             return s;
@@ -68,6 +72,8 @@ namespace TVFollow
                 "wake_mac=" + WakeMac + "\r\n" +
                 "off_with_monitors=" + (OffWithMonitors ? "yes" : "no") + "\r\n" +
                 "on_with_monitors=" + (OnWithMonitors ? "yes" : "no") + "\r\n" +
+                "start_with_windows=" + (StartWithWindows ? "yes" : "no") + "\r\n" +
+                "desktop_shortcuts=" + (DesktopShortcuts ? "yes" : "no") + "\r\n" +
                 (Port != DefaultPort ? "port=" + Port + "\r\n" : "");
             string temp = FilePath + ".tmp";
             File.WriteAllText(temp, text);

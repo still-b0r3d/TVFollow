@@ -415,7 +415,13 @@ namespace TVFollow
             string input = Setup.Settings.Input;
             string mac = Setup.Tv.Info.WakeMac;
             PowerTest test = Setup.Test;
-            bool ok = await Task.Run(() => test.Run(tv, input, mac, (o, t) => report.Report(Tuple.Create(o, t))));
+            Log.Write("setup test started (input " + input + ")");
+            bool ok = await Task.Run(() => test.Run(tv, input, mac, (o, t) =>
+            {
+                if (o != null) Log.Write("setup test: " + (o.Value ? "ok: " : "problem: ") + t);
+                report.Report(Tuple.Create(o, t));
+            }));
+            Log.Write("setup test " + (ok ? "passed" : "failed"));
             if (IsDisposed) return;
 
             running = false;
@@ -452,19 +458,28 @@ namespace TVFollow
     class FinishPage : SetupPage
     {
         readonly Label summary;
-        readonly CheckBox off, on;
+        readonly CheckBox off, on, startup, shortcuts;
 
         public FinishPage(SetupForm setup) : base(setup)
         {
             summary = Para("");
-            off = new CheckBox { Text = "Turn the TV off when this PC's monitors turn off", AutoSize = true, Margin = new Padding(0, 0, 0, 6) };
-            on = new CheckBox { Text = "Turn the TV on and switch it to this PC when you come back", AutoSize = true, Margin = new Padding(0, 0, 0, 14) };
+            off = Option("Turn the TV off when this PC's monitors turn off", 6);
+            on = Option("Turn the TV on and switch it to this PC when you come back", 6);
+            startup = Option("Start TVFollow when you sign in to Windows", 6);
+            shortcuts = Option("Put TV on, TV off and TV to PC shortcuts on the desktop", 14);
             off.CheckedChanged += delegate { Setup.Settings.OffWithMonitors = off.Checked; };
             on.CheckedChanged += delegate { Setup.Settings.OnWithMonitors = on.Checked; };
-            Body.Controls.Add(off);
-            Body.Controls.Add(on);
+            startup.CheckedChanged += delegate { Setup.Settings.StartWithWindows = startup.Checked; };
+            shortcuts.CheckedChanged += delegate { Setup.Settings.DesktopShortcuts = shortcuts.Checked; };
             Note("TVFollow only turns the TV off while it's showing this PC, so it won't interrupt anyone watching something else. " +
-                "It keeps running in the background. Open TVFollow again any time to change these settings.");
+                "It runs from the TV icon in the taskbar corner: right-click it for TV buttons, Pause and these settings.");
+        }
+
+        CheckBox Option(string text, int gap)
+        {
+            var box = new CheckBox { Text = text, AutoSize = true, Margin = new Padding(0, 0, 0, gap) };
+            Body.Controls.Add(box);
+            return box;
         }
 
         public override string Title { get { return "All set"; } }
@@ -475,6 +490,8 @@ namespace TVFollow
             summary.Text = "TV: " + Setup.Tv.Title + where + "\r\nInput: " + Setup.InputName;
             off.Checked = Setup.Settings.OffWithMonitors;
             on.Checked = Setup.Settings.OnWithMonitors;
+            startup.Checked = Setup.Settings.StartWithWindows;
+            shortcuts.Checked = Setup.Settings.DesktopShortcuts;
         }
     }
 }
