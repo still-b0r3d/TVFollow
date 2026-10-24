@@ -20,8 +20,9 @@ about twice a second.
 | Screens off | Turns the TV off, if it's showing your PC |
 | Screens on, mouse or keyboard used in the last 5 seconds | Turns the TV on and switches it to your PC, unless it's on and showing something else |
 | Screens on, nobody there | Waits for the mouse or keyboard, then as above |
+| Screens dimmed, then back to full brightness | Nothing (the screens never went off) |
 | Sleep or shutdown | Turns the TV off, if it's showing your PC (quickly, without retries) |
-| Paused | Nothing |
+| Paused | Nothing, until you resume (also across restarts) |
 
 TVFollow waits a second after the screens change before acting, so a quick flicker
 doesn't switch the TV off and on.
@@ -41,15 +42,25 @@ TVFollow uses only these:
 | `POST /keypress/PowerOff`, `PowerOn` | Turning it off and on |
 | `POST /keypress/InputHDMI1` (or `/launch/tvinput.hdmi1`) | Switching to your PC |
 
-To find the TV, setup tries port 8060 on every address in your PC's own network (the
-`192.168.1.1` to `.254` around the PC, for example). These are ordinary outgoing
-connections, so Windows Firewall doesn't ask about them. If the TV later gets a new
-address, TVFollow searches the same way and picks it out by its serial number, so it
-never grabs a different Roku in the house.
+TVFollow treats every reply as untrusted, since anything on the network could answer
+on port 8060: it refuses replies over 256 KB, gives every request a hard deadline, and
+never follows references inside a reply (no DTDs, no outside files).
+
+To find the TV, setup tries port 8060 on every address in your PC's own networks (the
+`192.168.1.1` to `.254` around the PC, for example; on bigger networks, up to 1,022
+addresses). These are ordinary outgoing connections, so Windows Firewall doesn't ask
+about them. Setup also tries the address you used last time, so a TV you had to type in
+is found again.
+
+If the TV later stops answering and the PC is on the TV's network, TVFollow searches that
+network only (never other networks a laptop joins), at most once every ten minutes, and
+picks the TV out by its serial number, so it never grabs a different Roku in the house.
 
 If the TV doesn't answer when it's time to turn it on, TVFollow sends a
-**Wake-on-LAN packet** to the TV's network address (Wi-Fi or cable, whichever the TV
-uses) and gives it 20 seconds to wake up.
+**Wake-on-LAN packet** for the TV's network card (Wi-Fi or cable, whichever the TV uses;
+TVFollow notices if that changes) to the broadcast address of each network the PC is on,
+again every 3 seconds, and gives the TV 20 seconds to wake up. If the PC isn't on the
+TV's network, it sends nothing.
 
 ## Checking for new versions
 
@@ -80,16 +91,27 @@ delete that file to make it check again at the next start.
 `settings.ini` is plain text, and setup writes it:
 
 ```ini
-ip=192.168.1.50                 # the TV's address (updated by itself if it changes)
-serial=X000000000               # the TV's serial number, to tell it apart from other Rokus
-input=hdmi1                     # the input your PC is plugged into
-wake_mac=00:11:22:33:44:55      # the TV's network card, for the wake signal
+ip=192.168.1.50
+serial=X000000000
+input=hdmi1
+wake_mac=00:11:22:33:44:55
 off_with_monitors=yes
 on_with_monitors=yes
 start_with_windows=yes
 desktop_shortcuts=no
-check_updates=yes               # ask GitHub once a week whether there's a newer TVFollow
+check_updates=yes
 ```
+
+| Key | Means |
+|---|---|
+| `ip` | The TV's address (updated by itself if it changes) |
+| `serial` | The TV's serial number, to tell it apart from other Rokus |
+| `input` | The input your PC is plugged into |
+| `wake_mac` | The TV's network card, for the wake signal (updated by itself) |
+| `off_with_monitors`, `on_with_monitors` | The two "follow" options |
+| `start_with_windows`, `desktop_shortcuts` | Install options |
+| `check_updates` | Ask GitHub once a week whether there's a newer TVFollow |
+| `paused` | Only there while paused from the tray (`paused=yes`) |
 
 Everything is per user, so TVFollow never needs admin rights. Uninstalling removes all
 of it.

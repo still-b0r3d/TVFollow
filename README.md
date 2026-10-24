@@ -76,12 +76,14 @@ TVFollow runs from a small TV icon in the taskbar corner. You might need to clic
 ![The tray menu: TV on, TV off, TV to PC, Pause following, Settings, Open log, Quit](docs/images/6-tray-menu.png)
 
 - **TV on / TV off / TV to PC**: buttons for the TV, any time.
-- **Pause following**: leave the TV alone until you resume, for example while someone
-  watches TV and your PC goes to sleep. The icon turns grey while paused.
+- **Pause following**: leave the TV alone until you resume (even across restarts), for
+  example while someone watches TV and your PC goes to sleep. The icon turns grey while
+  paused.
 - **Settings…**: opens the setup window again, to change the TV, the input or the
   options. Double-clicking the icon does the same.
 - **Open log**: what TVFollow did and when, handy if something seems off.
-- **Quit TVFollow**: stops it until you sign in again, or open TVFollow from the Start menu.
+- **Quit TVFollow**: stops it. It starts again when you sign in (if it starts with
+  Windows) or when you open TVFollow from the Start menu.
 
 If you ticked the desktop shortcuts option, **TV on**, **TV off** and **TV to PC** are on
 your desktop too.
@@ -105,9 +107,10 @@ More detail in [How it works](docs/HOW-IT-WORKS.md).
 ## Change settings or uninstall
 
 - **Change settings:** right-click the tray icon → **Settings…**, or open **TVFollow**
-  from the Start menu.
-- **Uninstall:** **Settings → Apps → Installed apps → TVFollow → Uninstall**. That
-  removes the program, its shortcuts, its settings and its log. Nothing on the TV changes.
+  from the Start menu while it's running (if it isn't running, that starts it).
+- **Uninstall:** **Settings → Apps → Installed apps → TVFollow → Uninstall** (on
+  Windows 10: **Settings → Apps → Apps & features**). That removes the program, its
+  shortcuts, its settings and its log. Nothing on the TV changes.
 
 ## Privacy
 
@@ -146,11 +149,14 @@ After setup, TVFollow lives in `%LOCALAPPDATA%\Programs\TVFollow`.
 You don't need anything installed. Windows already has the C# compiler TVFollow uses.
 
 1. Download the source (**Code → Download ZIP**) and unzip it.
-2. Double-click **build.cmd**. It makes `bin\TVFollow.exe`.
+2. Double-click **build.cmd**. It makes `bin\TVFollow.exe` and waits for a key press so
+   you can read how it went.
 3. Open `bin\TVFollow.exe` and set it up as above.
 
-`build.cmd test` also runs the tests, against a pretend TV. Every release is built the
-same way on GitHub's own machines, with a SHA-256 checksum next to the download.
+`build.cmd test` also runs the tests, against pretend TVs. Every release is built the
+same way on GitHub's own machines. The SHA-256 checksum next to each download is for
+checking that download; your own build won't match it byte for byte, because the
+compiler stamps each build differently.
 
 ## License
 

@@ -17,7 +17,12 @@ The first public release.
   on.
 - Installs per user without admin. Start menu entry, optional start with Windows,
   optional TV on / off / to PC desktop shortcuts, and uninstall from Settings → Apps.
-- A tray icon with TV buttons, Pause following, Settings, the log and Quit.
+- A tray icon with TV buttons, Pause following (remembered across restarts), Settings,
+  the log and Quit.
+- Opening a newer TVFollow.exe shows setup, and finishing installs it over the old one.
+- Careful on the network: replies from "the TV" are treated as untrusted (no DTDs, size
+  and time limits), and a TV that went missing is only searched for on its own network,
+  at most every ten minutes.
 - Tells you when a new version is out: once a week it asks GitHub for the latest release
   (can be switched off in setup). It never downloads or installs anything by itself.
 - Licensed MIT with the Commons Clause: free to use, change and share, not to sell.
