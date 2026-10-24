@@ -1,22 +1,149 @@
 # TVFollow
 
-Turns a TV with Roku built in on and off along with your PC's monitors. Handy when the TV
-is one of your screens.
+**Turns a TV with Roku built in on and off along with your PC's monitors.** Handy when
+the TV is one of your screens.
 
-- Your monitors go to sleep: the TV turns off (only if it's showing your PC).
-- You come back and move the mouse: the TV turns on and switches to your PC.
-- Sleep and shutdown turn it off too.
+- Your monitors go to sleep, so the TV turns off too.
+- You come back and move the mouse, so the TV turns on and switches to your PC.
+- Sleep and shutdown turn it off as well.
+- It only turns the TV off while the TV is showing your PC, so it never interrupts
+  someone watching something else on it.
 
-**Status:** work in progress, not released yet. Setup instructions come with the first
-release.
+![The TVFollow setup window, finding a TV on the network](docs/images/1-find.png)
 
-## Build it yourself
+## What you need
 
-Run `build.cmd`. It uses the C# compiler that comes with Windows, so there's nothing to
-install. `build.cmd test` also runs the tests against a pretend TV.
+- Windows 10 or Windows 11.
+- A TV with Roku built in, the kind where the Roku menu *is* the TV's menu. Plenty of
+  brands make them (TCL, Hisense, onn, Sharp and more). A Roku stick or
+  box plugged into an ordinary TV won't work: it can't turn that TV on or off.
+- The TV and the PC on the same home network. The TV can use Wi-Fi or a cable.
+
+## Install
+
+1. Download **TVFollow.exe** from the [latest release](https://github.com/still-b0r3d/TVFollow/releases/latest).
+2. Open it.
+   - Your browser may say the file isn't commonly downloaded. Choose **Keep**.
+   - Windows may say **"Windows protected your PC"**. Click **More info**, then
+     **Run anyway**. This happens because TVFollow isn't code-signed (signing costs
+     money every year). If you'd rather not trust a download, [build it yourself](#build-it-yourself).
+3. The setup window walks you through the rest, below. It takes about a minute.
+
+TVFollow installs just for your Windows account and never asks for admin rights.
+
+## Setup, step by step
+
+**1. Find your TV.** TVFollow looks for TVs on your network and picks yours if there's
+only one. If it isn't listed, click **Enter the TV's address instead**. The TV shows its
+address under **Settings → Network → About**.
+
+**2. Let this PC control the TV.** Newer Roku TVs come set to *Limited*, which lets
+phones and PCs open apps but blocks the power button. If yours is on Limited, the
+window shows what to press:
+
+![Step 2: the remote clicks for changing Network access to Enabled](docs/images/2-control-limited.png)
+
+On the TV, with its remote: **Home → Settings → System → Advanced system settings →
+Control by mobile apps → Network access → Enabled**. The window ticks itself off once the
+TV says Enabled. "Enabled" only lets devices on your home network control the TV, not
+the internet.
+
+**3. Pick the input.** Choose the HDMI input your PC is plugged into. TVFollow picks the
+one the TV is showing right now, and uses the names you've given your inputs on the TV.
+**Show it on the TV** switches the TV to that input so you can check.
+
+![Step 3: picking the HDMI input](docs/images/3-input.png)
+
+**4. Test it.** TVFollow turns the TV off, checks it can still reach it, and turns it
+back on showing your PC. It takes about 15 seconds.
+
+![Step 4: the test turned the TV off and back on](docs/images/4-test-done.png)
+
+If the TV can't be reached while it's off, turn on **Fast TV start** on the TV
+(**Settings → System → Power → Fast TV start**) and test again. Without it, some TVs
+switch their network off along with the screen.
+
+**5. All set.** Choose what TVFollow should do, then click **Finish**.
+
+![Step 5: the options](docs/images/5-finish.png)
+
+## Using it
+
+TVFollow runs from a small TV icon in the taskbar corner. You might need to click the
+**^** arrow to see it. Right-click it:
+
+![The tray menu: TV on, TV off, TV to PC, Pause following, Settings, Open log, Quit](docs/images/6-tray-menu.png)
+
+- **TV on / TV off / TV to PC**: buttons for the TV, any time.
+- **Pause following**: leave the TV alone until you resume, for example while someone
+  watches TV and your PC goes to sleep. The icon turns grey while paused.
+- **Settings…**: opens the setup window again, to change the TV, the input or the
+  options. Double-clicking the icon does the same.
+- **Open log**: what TVFollow did and when, handy if something seems off.
+- **Quit TVFollow**: stops it until you sign in again, or open TVFollow from the Start menu.
+
+If you ticked the desktop shortcuts option, **TV on**, **TV off** and **TV to PC** are on
+your desktop too.
+
+### How it decides
+
+- **Monitors off** (Windows' screen timeout, sleep or shutdown): the TV turns off, but
+  only if it's showing your PC.
+- **Monitors back on, and you've touched the mouse or keyboard:** the TV turns on and
+  switches to your PC. If someone is watching something else on it, it's left alone.
+- **Monitors back on with nobody there** (a notification, a screen being plugged in):
+  TVFollow waits for the mouse or keyboard before turning the TV on.
+- **The router gave the TV a new address:** TVFollow finds it again by itself.
+
+More detail in [How it works](docs/HOW-IT-WORKS.md).
+
+## Change settings or uninstall
+
+- **Change settings:** right-click the tray icon → **Settings…**, or open **TVFollow**
+  from the Start menu.
+- **Uninstall:** **Settings → Apps → Installed apps → TVFollow → Uninstall**. That
+  removes the program, its shortcuts, its settings and its log. Nothing on the TV changes.
+
+## Privacy
+
+TVFollow only talks to your TV, over your home network. It doesn't connect to the
+internet, collect anything or phone home. Its settings and log are in
+`%APPDATA%\TVFollow`. The log shows your TV's local network address, so look it over
+before you share it.
+
+## Problems?
+
+See [Troubleshooting](docs/TROUBLESHOOTING.md). If that doesn't help,
+[open an issue](https://github.com/still-b0r3d/TVFollow/issues/new/choose).
+
+## For tinkerers
+
+TVFollow also takes commands, for hotkeys, Stream Deck buttons or scripts:
+
+| Command | Does |
+|---|---|
+| `TVFollow.exe on` | Turns the TV on |
+| `TVFollow.exe off` | Turns the TV off, whatever it's showing |
+| `TVFollow.exe pc` | Turns the TV on and switches it to your PC |
+| `TVFollow.exe setup` | Opens the setup window |
+| `TVFollow.exe uninstall` | Removes TVFollow (`--quiet` skips the questions) |
+| `TVFollow.exe --version` | Prints the version |
+
+After setup, TVFollow lives in `%LOCALAPPDATA%\Programs\TVFollow`.
+
+### Build it yourself
+
+You don't need anything installed. Windows already has the C# compiler TVFollow uses.
+
+1. Download the source (**Code → Download ZIP**) and unzip it.
+2. Double-click **build.cmd**. It makes `bin\TVFollow.exe`.
+3. Open `bin\TVFollow.exe` and set it up as above.
+
+`build.cmd test` also runs the tests, against a pretend TV. Every release is built the
+same way on GitHub's own machines, with a SHA-256 checksum next to the download.
 
 ## License
 
 MIT, see [LICENSE](LICENSE). Made by [b0r3d.org](https://b0r3d.org).
 
-Roku is a trademark of Roku, Inc. This project isn't affiliated with or endorsed by Roku.
+Roku is a trademark of Roku, Inc. TVFollow isn't affiliated with or endorsed by Roku.
