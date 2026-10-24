@@ -23,6 +23,12 @@ namespace TVFollow.Tests
         public string[] InputNames = { "HDMI 1", "HDMI 2", "HDMI 3" };
         public bool Down;                         // stop answering, like a TV in deep standby
         public bool DownWhenOff;                  // go into deep standby as soon as it's turned off
+        public int DelayMs;                       // wait this long before answering anything
+        public int TrickleMs;                     // send the headers, then wait this long before the body
+        public int PadBytes;                      // make device-info this much bigger
+        public string RawDeviceInfo;              // answer device-info with exactly this
+        public bool RefusePowerOn;                // say OK to PowerOn but stay off
+        public bool IgnoreInput;                  // say OK to input changes but don't switch
 
         public readonly string Ip;
         public readonly int Port;
@@ -76,6 +82,7 @@ namespace TVFollow.Tests
             string header;
             while (!string.IsNullOrEmpty(header = reader.ReadLine())) { }
             if (Down) return; // hang up without answering
+            if (DelayMs > 0) Thread.Sleep(DelayMs);
 
             string[] parts = requestLine.Split(' ');
             string method = parts[0], path = parts[1];
@@ -90,6 +97,11 @@ namespace TVFollow.Tests
                 "Content-Type: text/xml; charset=utf-8\r\nContent-Length: " + content.Length + "\r\nConnection: close\r\n\r\n";
             byte[] headBytes = Encoding.ASCII.GetBytes(head);
             stream.Write(headBytes, 0, headBytes.Length);
+            if (TrickleMs > 0)
+            {
+                stream.Flush();
+                Thread.Sleep(TrickleMs);
+            }
             stream.Write(content, 0, content.Length);
         }
 
@@ -97,7 +109,12 @@ namespace TVFollow.Tests
         {
             status = 200;
             body = "";
-            if (method == "GET" && path == "/query/device-info") { body = DeviceInfoXml(); return; }
+            if (method == "GET" && path == "/query/device-info")
+            {
+                body = RawDeviceInfo ?? DeviceInfoXml();
+                if (PadBytes > 0) body += "<!--" + new string('x', PadBytes) + "-->";
+                return;
+            }
             if (method == "GET" && path == "/query/active-app")
             {
                 body = App.Length == 0
@@ -119,9 +136,9 @@ namespace TVFollow.Tests
             if (method != "POST") { status = 404; return; }
             if (ControlMode == "limited" && path.StartsWith("/keypress/")) { status = 403; return; }
             if (path == "/keypress/PowerOff") { PowerMode = "DisplayOff"; if (DownWhenOff) Down = true; }
-            else if (path == "/keypress/PowerOn") PowerMode = "PowerOn";
-            else if (path.StartsWith("/keypress/InputHDMI")) { if (IsOn) App = "tvinput.hdmi" + path.Substring("/keypress/InputHDMI".Length); }
-            else if (path.StartsWith("/launch/")) { if (IsOn) App = path.Substring("/launch/".Length); }
+            else if (path == "/keypress/PowerOn") { if (!RefusePowerOn) PowerMode = "PowerOn"; }
+            else if (path.StartsWith("/keypress/InputHDMI")) { if (IsOn && !IgnoreInput) App = "tvinput.hdmi" + path.Substring("/keypress/InputHDMI".Length); }
+            else if (path.StartsWith("/launch/")) { if (IsOn && !IgnoreInput) App = path.Substring("/launch/".Length); }
             else status = 404;
         }
 

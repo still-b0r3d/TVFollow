@@ -6,7 +6,7 @@ using System.Reflection;
 namespace TVFollow.Tests
 {
     // Runs every test against pretend TVs on this PC's loopback addresses. No real TV needed.
-    static class TestMain
+    static partial class TestMain
     {
         static int passed, failed;
 
@@ -50,6 +50,7 @@ namespace TVFollow.Tests
             Run("updates: comparing versions", UpdateVersions);
             Run("updates: reading GitHub's answer and the weekly timing", UpdateParsingAndTiming);
             Run("updates: remembering the last check", UpdateState);
+            RunReviewFixes();
             Run("version matches the exe's version", VersionMatches);
 
             try { Directory.Delete(home, true); } catch { }
@@ -94,6 +95,9 @@ namespace TVFollow.Tests
             c.SweepWaitMs = 100;
             c.SendWake = mac => { throw new Exception("unexpected wake packet"); };
             c.Candidates = () => new List<string>();
+            c.OnTvNetwork = () => true;
+            c.SearchEvery = TimeSpan.Zero;
+            c.WakeRepeatMs = 1000000;
             return c;
         }
 
@@ -278,7 +282,7 @@ namespace TVFollow.Tests
                 tv.PowerMode = "DisplayOff";
                 var woken = new List<string>();
                 Controller c = Fast(new Controller(SettingsFor(tv)));
-                c.SendWake = mac => { woken.Add(mac); tv.Down = false; tv.PowerMode = "PowerOn"; };
+                c.SendWake = mac => { woken.Add(mac); tv.Down = false; tv.PowerMode = "PowerOn"; return 2; };
                 c.TurnOn(TurnOnMode.Follow);
                 Check(woken.Count == 1 && woken[0] == "00:11:22:33:44:55", "expected one wake packet to the TV's address");
                 Check(tv.IsOn && tv.App == "tvinput.hdmi1", "TV should be on and showing the PC");
@@ -432,7 +436,7 @@ namespace TVFollow.Tests
                 Check(RunPowerTest(tv, FastTest(), lines), "test failed: " + string.Join(" | ", lines));
                 Check(tv.IsOn && tv.App == "tvinput.hdmi1", "TV should end on and showing the PC");
                 Check(lines.Exists(l => l.StartsWith("+It still answers")), "standby answer not reported");
-                Check(lines[lines.Count - 1] == "+Back on and showing this PC.", "last line: " + lines[lines.Count - 1]);
+                Check(lines[lines.Count - 1] == "+Back on and switched to HDMI 1. Check that this PC's screen is on the TV.", "last line: " + lines[lines.Count - 1]);
             }
         }
 
@@ -455,7 +459,7 @@ namespace TVFollow.Tests
                 tv.DownWhenOff = true;
                 PowerTest test = FastTest();
                 var woken = new List<string>();
-                test.SendWake = mac => { woken.Add(mac); tv.Down = false; tv.PowerMode = "PowerOn"; };
+                test.SendWake = mac => { woken.Add(mac); tv.Down = false; tv.PowerMode = "PowerOn"; return 2; };
                 var lines = new List<string>();
                 Check(RunPowerTest(tv, test, lines), "test failed: " + string.Join(" | ", lines));
                 Check(woken.Count == 1, "expected one wake packet");
@@ -469,7 +473,7 @@ namespace TVFollow.Tests
             {
                 tv.DownWhenOff = true;
                 PowerTest test = FastTest();
-                test.SendWake = mac => { };
+                test.SendWake = mac => 2;
                 var lines = new List<string>();
                 Check(!RunPowerTest(tv, test, lines), "should fail");
                 Check(lines[lines.Count - 1].Contains("Fast TV start"), "should explain Fast TV start: " + lines[lines.Count - 1]);

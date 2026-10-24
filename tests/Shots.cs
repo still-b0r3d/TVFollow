@@ -80,7 +80,7 @@ namespace TVFollow.Tests
                 form.Test.OffWaitMs = 3000;
                 form.Test.StandbyCheckMs = 300;
                 form.Test.PollMs = 100;
-                form.Test.SendWake = mac => { };
+                form.Test.SendWake = mac => 0;
                 form.StartPosition = FormStartPosition.Manual;
                 if (onScreen)
                 {
@@ -118,6 +118,7 @@ namespace TVFollow.Tests
                 if (onScreen) SaveTrayMenu(folder, settings);
             }
             if (backdrop != null) backdrop.Close();
+            try { Directory.Delete(Settings.Dir, true); } catch { }
             Console.WriteLine("saved the pictures in " + folder);
             return 0;
         }
@@ -139,7 +140,7 @@ namespace TVFollow.Tests
 
         public static int Probe()
         {
-            foreach (FoundTv tv in TvScanner.FindAll(Settings.DefaultPort))
+            foreach (FoundTv tv in TvScanner.FindAll(Settings.DefaultPort, null))
             {
                 Console.WriteLine(tv.Title + "  |  " + tv.Details + "  |  tv=" + tv.Info.IsTv + " control=" + tv.Info.ControlMode +
                     " power=" + tv.Info.PowerMode + " network=" + tv.Info.NetworkType);
