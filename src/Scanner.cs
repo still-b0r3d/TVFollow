@@ -10,7 +10,10 @@ namespace TVFollow
         public string Ip;
         public DeviceInfo Info;
 
-        public string Title { get { return Info.Name.Length > 0 ? Info.Name : "Roku at " + Ip; } }
+        // the address as shown in the setup window (the screenshot tool shows a home-network one)
+        public virtual string Address { get { return Ip; } }
+
+        public string Title { get { return Info.Name.Length > 0 ? Info.Name : "Roku at " + Address; } }
 
         public string Details
         {
@@ -20,7 +23,7 @@ namespace TVFollow
                 if (Info.Location.Length > 0) parts.Add(Info.Location);
                 string model = (Info.Vendor + " " + Info.Model).Trim();
                 if (model.Length > 0) parts.Add(model);
-                parts.Add(Ip);
+                parts.Add(Address);
                 return string.Join("  ·  ", parts);
             }
         }

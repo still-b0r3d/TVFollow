@@ -167,7 +167,7 @@ namespace TVFollow
             var bottom = new Rectangle(top.X, top.Bottom + 1, top.Width, line + 2);
             TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
             TextRenderer.DrawText(e.Graphics, tv.Title, bold, top, main, flags);
-            string details = tv.Info.IsTv ? tv.Details : "Roku stick or box (can't turn a TV on or off)  ·  " + tv.Ip;
+            string details = tv.Info.IsTv ? tv.Details : "Roku stick or box (can't turn a TV on or off)  ·  " + tv.Address;
             TextRenderer.DrawText(e.Graphics, details, list.Font, bottom, sub, flags);
             e.DrawFocusRectangle();
         }

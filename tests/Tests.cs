@@ -13,7 +13,8 @@ namespace TVFollow.Tests
         [STAThread]
         static int Main(string[] args)
         {
-            if (args.Length == 2 && args[0] == "--shots") return Shots.Run(args[1]);
+            if (args.Length == 2 && args[0] == "--shots") return Shots.Run(args[1], false);
+            if (args.Length == 2 && args[0] == "--screenshots") return Shots.Run(args[1], true);
             if (args.Length == 1 && args[0] == "--probe") return Shots.Probe();
 
             string home = Path.Combine(Path.GetTempPath(), "TVFollowTests-" + Guid.NewGuid().ToString("N"));

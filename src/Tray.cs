@@ -34,7 +34,7 @@ namespace TVFollow
             following = AppIcons.Load("tv.ico", SystemInformation.SmallIconSize);
             paused = AppIcons.Load("tv-paused.ico", SystemInformation.SmallIconSize);
 
-            var menu = new ContextMenuStrip();
+            var menu = new ContextMenuStrip { ShowImageMargin = false };
             state = new ToolStripMenuItem { Enabled = false };
             pause = new ToolStripMenuItem("Pause following", null, delegate { SetPaused(!follower.Rules.Paused); });
             menu.Items.Add(state);
@@ -55,6 +55,8 @@ namespace TVFollow
             icon.Visible = true;
         }
 
+        public ContextMenuStrip Menu { get { return icon.ContextMenuStrip; } }
+
         public void Greet()
         {
             icon.ShowBalloonTip(6000, "TVFollow is running",
@@ -74,7 +76,7 @@ namespace TVFollow
             icon.Icon = isPaused ? paused : following;
             icon.Text = isPaused ? "TVFollow: paused" : "TVFollow: following your monitors"; // 63 characters at most
             state.Text = isPaused ? "Paused: the TV is left alone" : "Following your monitors";
-            pause.Checked = isPaused;
+            pause.Text = isPaused ? "Resume following" : "Pause following";
         }
 
         // TV buttons talk to the network, so they run off the window's thread
