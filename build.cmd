@@ -11,13 +11,14 @@ if not exist "%CSC%" (
     exit /b 1
 )
 
-set "REFS=/r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Xml.dll"
+rem /codepage:65001 reads the source as UTF-8 (it has a few non-ASCII characters)
+set "OPTS=/nologo /debug- /codepage:65001 /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Xml.dll"
 if not exist bin mkdir bin
 
-"%CSC%" /nologo /optimize+ /debug- /target:winexe /win32icon:assets\tv.ico %REFS% /out:bin\TVFollow.exe src\*.cs
+"%CSC%" %OPTS% /optimize+ /target:winexe /win32icon:assets\tv.ico /win32manifest:assets\TVFollow.manifest /out:bin\TVFollow.exe src\*.cs
 if errorlevel 1 exit /b 1
 
-"%CSC%" /nologo /debug- /target:exe /main:TVFollow.Tests.TestMain %REFS% /out:bin\TVFollowTests.exe src\*.cs tests\*.cs
+"%CSC%" %OPTS% /target:exe /win32manifest:assets\TVFollow.manifest /main:TVFollow.Tests.TestMain /out:bin\TVFollowTests.exe src\*.cs tests\*.cs
 if errorlevel 1 exit /b 1
 
 echo Built bin\TVFollow.exe

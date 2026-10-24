@@ -4,10 +4,14 @@ using System.IO;
 namespace TVFollow
 {
     // Settings live in %APPDATA%\TVFollow\settings.ini as key=value lines.
+    // TVFOLLOW_HOME points them somewhere else, for trying things out next to a running copy.
     class Settings
     {
-        public static string Dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TVFollow");
+        public static readonly string DefaultDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "TVFollow");
+        public static string Dir = string.IsNullOrEmpty(Environment.GetEnvironmentVariable("TVFOLLOW_HOME"))
+            ? DefaultDir : Environment.GetEnvironmentVariable("TVFOLLOW_HOME");
         public static string FilePath { get { return Path.Combine(Dir, "settings.ini"); } }
+        public static bool IsDefaultDir { get { return string.Equals(Path.GetFullPath(Dir).TrimEnd('\\'), DefaultDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase); } }
 
         public const int DefaultPort = 8060;
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -91,6 +92,27 @@ namespace TVFollow
                 doc.LoadXml(Get("query/active-app", timeoutMs));
                 var app = doc.SelectSingleNode("/active-app/app") as XmlElement;
                 return app == null ? "" : app.GetAttribute("id");
+            }
+            catch { return null; }
+        }
+
+        // The TV's HDMI inputs as (id, name), like ("tvinput.hdmi1", "PC"). Null if the TV didn't
+        // answer or won't say (the Limited setting hides the list).
+        public List<KeyValuePair<string, string>> GetHdmiInputs(int timeoutMs)
+        {
+            try
+            {
+                var doc = new XmlDocument();
+                doc.LoadXml(Get("query/apps", timeoutMs));
+                var inputs = new List<KeyValuePair<string, string>>();
+                foreach (XmlElement app in doc.SelectNodes("/apps/app"))
+                {
+                    string id = app.GetAttribute("id");
+                    if (!id.StartsWith("tvinput.hdmi")) continue;
+                    inputs.Add(new KeyValuePair<string, string>(id, app.InnerText.Replace(' ', ' ').Trim()));
+                }
+                inputs.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
+                return inputs;
             }
             catch { return null; }
         }

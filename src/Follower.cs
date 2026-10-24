@@ -43,7 +43,7 @@ namespace TVFollow
             Want(false);
         }
 
-        // called about once a second
+        // called about twice a second
         public void CheckForInput()
         {
             if (!waitingForInput || LastInputTick() == inputTickAtWake) return;
@@ -93,7 +93,8 @@ namespace TVFollow
         readonly Controller controller;
         readonly AutoResetEvent kick = new AutoResetEvent(false);
         int wanted = -1;
-        System.Windows.Forms.Timer inputCheck;
+        System.Windows.Forms.Timer tick;
+        EventWaitHandle quit;
 
         public Follower(Settings settings, Controller controller)
         {
@@ -116,10 +117,21 @@ namespace TVFollow
             // Windows answers right away with the current state, which turns the TV on at sign-in
             RegisterPowerSettingNotification(Handle, ref GUID_CONSOLE_DISPLAY_STATE, 0);
 
-            inputCheck = new System.Windows.Forms.Timer();
-            inputCheck.Interval = 1000;
-            inputCheck.Tick += delegate { Rules.CheckForInput(); };
-            inputCheck.Start();
+            quit = new EventWaitHandle(false, EventResetMode.AutoReset, Instance.QuitName);
+            tick = new System.Windows.Forms.Timer();
+            tick.Interval = 500;
+            tick.Tick += delegate
+            {
+                if (quit.WaitOne(0))
+                {
+                    Log.Write("stopping: a new copy with new settings is taking over");
+                    tick.Stop();
+                    Application.ExitThread();
+                    return;
+                }
+                Rules.CheckForInput();
+            };
+            tick.Start();
         }
 
         void Want(bool on)
