@@ -41,6 +41,12 @@ TVFollow uses only these:
 | `GET /query/apps` | The HDMI inputs and their names (setup only) |
 | `POST /keypress/PowerOff`, `PowerOn` | Turning it off and on |
 | `POST /keypress/InputHDMI1` (or `/launch/tvinput.hdmi1`) | Switching to your PC |
+| `POST /keypress/Up`, `Down`, `Left`, `Right`, `Select`, `Back`, `Home`, `Info`, `InstantReplay`, `Search`, `Rev`, `Play`, `Fwd`, `VolumeUp`, `VolumeDown`, `VolumeMute` | The remote's buttons |
+| `POST /keypress/Lit_a` (one per letter), `Backspace`, `Enter` | The remote's typing box |
+| `POST /launch/tvinput.hdmi2` (and the other inputs) | The remote's input buttons |
+
+The remote sends its presses one at a time, in order, so typed letters arrive the way
+they were typed.
 
 TVFollow treats every reply as untrusted, since anything on the network could answer
 on port 8060: it refuses replies over 256 KB, gives every request a hard deadline, and
@@ -100,6 +106,7 @@ on_with_monitors=yes
 start_with_windows=yes
 desktop_shortcuts=no
 check_updates=yes
+remote_layout=classic
 ```
 
 | Key | Means |
@@ -111,6 +118,7 @@ check_updates=yes
 | `off_with_monitors`, `on_with_monitors` | The two "follow" options |
 | `start_with_windows`, `desktop_shortcuts` | Install options |
 | `check_updates` | Ask GitHub once a week whether there's a newer TVFollow |
+| `remote_layout` | `classic` (the default), `compact` or `strip` |
 | `paused` | Only there while paused from the tray (`paused=yes`) |
 
 Everything is per user, so TVFollow never needs admin rights. Uninstalling removes all

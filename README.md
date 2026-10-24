@@ -88,17 +88,58 @@ versions) and whether to install it or run it portable, then click **Finish**.
 TVFollow runs from a small TV icon in the taskbar corner. You might need to click the
 **^** arrow to see it. Right-click it:
 
-![The tray menu: TV on, TV off, TV to PC, Pause following, Settings, Open log, Quit](docs/images/6-tray-menu.png)
+![The tray menu: Remote, TV on, TV off, TV to PC, Pause following, Settings, Open log, Quit](docs/images/6-tray-menu.png)
 
+- **Remote…**: a TV remote on your screen (below).
 - **TV on / TV off / TV to PC**: buttons for the TV, any time.
 - **Pause following**: leave the TV alone until you resume (even across restarts), for
   example while someone watches TV and your PC goes to sleep. The icon turns grey while
   paused.
-- **Settings…**: opens the setup window again, to change the TV, the input or the
-  options. Double-clicking the icon does the same.
+- **Settings…**: the Settings window (below). Double-clicking the icon does the same.
 - **Open log**: what TVFollow did and when, handy if something seems off.
 - **Quit TVFollow**: stops it. It starts again when you sign in (if it starts with
   Windows) or when you open TVFollow from the Start menu.
+
+### The remote
+
+**Remote…** opens a remote above the taskbar corner, with every button that makes
+sense from a PC: power, **TV to PC**, Back, Home, the arrows and OK, Options (✱),
+instant replay, Search, rewind, play/pause and fast-forward, volume and mute, and your
+TV's inputs by the names you gave them.
+
+![The classic remote](docs/images/7-remote-classic.png)
+
+- While the remote has focus, the keyboard works too: the **arrow keys**, **Enter**
+  (OK), **Backspace** (Back), **Space** (play/pause), **Home**, and **+** / **-** for
+  the volume. Hold a volume button to keep going.
+- The box at the bottom types into the TV: whatever you type goes into the TV's search
+  boxes, a lot faster than picking letters with the arrows.
+- The pin keeps the remote above other windows; **Esc** closes it.
+- Prefer a different shape? Settings has three: **Classic** (above), **Compact** and
+  **Wide strip**.
+
+| Compact | Wide strip |
+|---|---|
+| ![The compact remote](docs/images/8-remote-compact.png) | ![The wide strip remote](docs/images/9-remote-strip.png) |
+
+Voice search needs the microphone in the real remote, so it isn't here. The TV's picture
+settings work the way they do with the real remote: **Options (✱)** or **Home →
+Settings**, then the arrows.
+
+### Settings
+
+Right-click the icon → **Settings…**, double-click the icon, or open TVFollow from the
+Start menu while it's running. Changes apply straight away.
+
+![The Settings window](docs/images/10-settings.png)
+
+- **TV:** which TV and whether it's answering, the input your PC is on, and **Change
+  TV…** (runs setup again).
+- **Following:** the two follow options, and Pause.
+- **Remote:** the layout, and a button to open it.
+- **This PC:** start with Windows and the desktop shortcuts. Switching between installed
+  and portable runs setup again.
+- **Updates:** the weekly check, and **Check now**.
 
 If you ticked the desktop shortcuts option, **TV on**, **TV off** and **TV to PC** are on
 your desktop too.
@@ -123,6 +164,8 @@ More detail in [How it works](docs/HOW-IT-WORKS.md).
 
 - **Change settings:** right-click the tray icon → **Settings…**, or open **TVFollow**
   from the Start menu while it's running (if it isn't running, that starts it).
+- **Change TV, or switch between installed and portable:** **Settings… → Change TV…** or
+  the "run setup again" link there.
 - **Uninstall:** **Settings → Apps → Installed apps → TVFollow → Uninstall** (on
   Windows 10: **Settings → Apps → Apps & features**). That removes the program, its
   shortcuts, its settings and its log. Nothing on the TV changes.

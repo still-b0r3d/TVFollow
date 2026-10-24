@@ -89,6 +89,14 @@ network (never on other networks a laptop joins), at most once every ten minutes
 you'd rather check it yourself, [build it from the source](../README.md#build-it-yourself).
 The SHA-256 checksum next to each release download is for checking that download.
 
+## The remote's buttons do nothing
+
+The remote's status line says why. **"Network access is on Limited"**: on the TV,
+**Settings → System → Advanced system settings → Control by mobile apps → Network
+access → Enabled** (Limited still lets the input buttons work, but blocks the others).
+**"The TV isn't answering"**: it's off with Fast TV start turned off, or not on this
+network; **TV to PC** wakes it if it can.
+
 ## The portable choice is greyed out
 
 The note under it says why. Portable needs a folder of your own that TVFollow can write

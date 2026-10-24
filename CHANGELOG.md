@@ -19,8 +19,15 @@ The first public release.
   optional TV on / off / to PC desktop shortcuts, and uninstall from Settings → Apps.
 - Or runs portable: settings in a `TVFollow data` folder next to the exe, nothing else on
   the PC touched.
-- A tray icon with TV buttons, Pause following (remembered across restarts), Settings,
-  the log and Quit.
+- A tray icon with the remote, TV buttons, Pause following (remembered across restarts),
+  Settings, the log and Quit.
+- A remote on screen: power, TV to PC, Back, Home, arrows and OK, Options, instant
+  replay, Search, playback, volume and mute, your inputs by name, the keyboard as a
+  remote, and a box that types into the TV's search. Three layouts: classic (tall),
+  compact and wide strip.
+- A Settings window: the TV and its input, the follow options and Pause, the remote's
+  layout, start with Windows and shortcuts, the update check. Changes apply straight
+  away; opening TVFollow again while it runs brings it up.
 - Opening a newer TVFollow.exe shows setup, and finishing installs it over the old one.
 - Careful on the network: replies from "the TV" are treated as untrusted (no DTDs, size
   and time limits), and a TV that went missing is only searched for on its own network,
