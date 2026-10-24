@@ -43,6 +43,9 @@ namespace TVFollow.Tests
             Run("power test: wakes a TV from deep standby", PowerTestWakes);
             Run("power test: explains Fast TV start when the TV can't be reached", PowerTestUnreachable);
             Run("a separate settings folder gets its own instance", InstanceNames);
+            Run("install, change options, uninstall", InstallAndUninstall);
+            Run("a trial copy stays inside its own folder", TrialInstallPaths);
+            Run("the icons are built in", IconsAreBuiltIn);
             Run("version matches the exe's version", VersionMatches);
 
             try { Directory.Delete(home, true); } catch { }
@@ -112,12 +115,15 @@ namespace TVFollow.Tests
             s.WakeMac = "00:11:22:33:44:55";
             s.Port = 18060;
             s.OnWithMonitors = false;
+            s.StartWithWindows = false;
+            s.DesktopShortcuts = true;
             s.Save();
             s.Save(); // second save replaces the file
             Settings t = Settings.Load();
             Check(t.Ip == s.Ip && t.Serial == s.Serial && t.Input == "hdmi2" && t.WakeMac == s.WakeMac, "fields lost");
             Check(t.Port == 18060, "port lost");
             Check(!t.OnWithMonitors && t.OffWithMonitors, "options lost");
+            Check(!t.StartWithWindows && t.DesktopShortcuts, "install options lost");
             Check(t.PcApp == "tvinput.hdmi2", "PC app wrong");
             File.Delete(Settings.FilePath);
         }
@@ -471,6 +477,82 @@ namespace TVFollow.Tests
             Check(Instance.MutexName.StartsWith(@"Local\TVFollow.") && Instance.QuitName.StartsWith(@"Local\TVFollow.Quit."),
                 "names should carry a suffix: " + Instance.MutexName);
             Check(!Instance.IsRunning(), "nothing should be running for the test folder");
+        }
+
+        // ---- installing ----
+
+        static void InstallAndUninstall()
+        {
+            string root = Path.Combine(Settings.Dir, "install-test");
+            string registry = @"Software\TVFollowTests\" + Guid.NewGuid().ToString("N");
+            var p = new InstallPaths
+            {
+                Dir = Path.Combine(root, "TVFollow"),
+                StartMenuLink = Path.Combine(root, "Start menu", "TVFollow.lnk"),
+                DesktopDir = Path.Combine(root, "Desktop"),
+                RegistryRoot = registry
+            };
+            try
+            {
+                var s = new Settings();
+                s.Ip = "192.168.1.50";
+                s.Serial = "X000000001";
+                s.DesktopShortcuts = true;
+                s.Save();
+                Installer.Install(p, s, System.Reflection.Assembly.GetExecutingAssembly().Location);
+
+                Check(File.Exists(p.Exe), "exe not copied");
+                Check(Directory.GetFiles(p.IconDir, "*.ico").Length == 5, "icons not written");
+                Check(Shortcut.Read(p.StartMenuLink)[0] == p.Exe, "Start menu shortcut wrong");
+                string[] on = Shortcut.Read(Path.Combine(p.DesktopDir, "TV on.lnk"));
+                Check(on[0] == p.Exe && on[1] == "on", "TV on shortcut wrong: " + on[0] + " " + on[1]);
+                Check(File.Exists(Path.Combine(p.DesktopDir, "TV to PC.lnk")), "TV to PC shortcut missing");
+                using (var run = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(p.RunKey))
+                    Check(run != null && (string)run.GetValue(Installer.RunValue) == "\"" + p.Exe + "\" --startup", "start-with-Windows not set");
+                using (var app = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(p.UninstallKey))
+                {
+                    Check(app != null && (string)app.GetValue("DisplayName") == "TVFollow", "Apps entry missing");
+                    Check((string)app.GetValue("UninstallString") == "\"" + p.Exe + "\" uninstall", "uninstall command wrong");
+                    Check((string)app.GetValue("Publisher") == "b0r3d.org" && (string)app.GetValue("DisplayVersion") == Program.Version, "publisher/version");
+                }
+
+                // change the options: shortcuts and start-with-Windows go away
+                s.DesktopShortcuts = false;
+                s.StartWithWindows = false;
+                Installer.Install(p, s, p.Exe);
+                Check(!File.Exists(Path.Combine(p.DesktopDir, "TV on.lnk")), "desktop shortcut not removed");
+                using (var run = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(p.RunKey))
+                    Check(run == null || run.GetValue(Installer.RunValue) == null, "start-with-Windows not removed");
+
+                Installer.Uninstall(p);
+                Check(!Directory.Exists(p.Dir), "program folder left behind");
+                Check(!File.Exists(p.StartMenuLink), "Start menu shortcut left behind");
+                Check(!File.Exists(Settings.FilePath), "settings left behind");
+                using (var app = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(p.UninstallKey))
+                    Check(app == null, "Apps entry left behind");
+            }
+            finally
+            {
+                Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(@"Software\TVFollowTests", false);
+                try { Directory.Delete(root, true); } catch { }
+            }
+        }
+
+        static void TrialInstallPaths()
+        {
+            InstallPaths p = InstallPaths.ForThisPC();
+            Check(p.RegistryRoot == null, "a trial copy must not touch the registry");
+            Check(p.Dir.StartsWith(Settings.Dir) && p.StartMenuLink.StartsWith(Settings.Dir) && p.DesktopDir.StartsWith(Settings.Dir),
+                "a trial copy must keep inside its folder");
+        }
+
+        static void IconsAreBuiltIn()
+        {
+            foreach (string name in new[] { "tv.ico", "tv-paused.ico", "tv-on.ico", "tv-off.ico", "tv-pc.ico" })
+            {
+                using (System.Drawing.Icon icon = AppIcons.Load(name, new System.Drawing.Size(16, 16)))
+                    Check(icon.Width == 16, name + " has no 16 px picture");
+            }
         }
 
         static void VersionMatches()
