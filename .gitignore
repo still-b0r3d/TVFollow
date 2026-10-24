@@ -1,0 +1,7 @@
+bin/
+*.ini
+*.log
+*.log.old
+*.tmp
+Thumbs.db
+desktop.ini

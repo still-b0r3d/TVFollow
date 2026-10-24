@@ -1,0 +1,41 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test
+        shell: cmd
+        run: build.cmd test
+
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash bin\TVFollow.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  TVFollow.exe" | Out-File bin\TVFollow.exe.sha256 -Encoding ascii
+          Get-Content bin\TVFollow.exe.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TVFollow
+          path: |
+            bin/TVFollow.exe
+            bin/TVFollow.exe.sha256
+
+      - name: Draft a release for a version tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME bin/TVFollow.exe bin/TVFollow.exe.sha256 --draft --title "TVFollow $env:GITHUB_REF_NAME" --notes "See CHANGELOG.md for what changed."
