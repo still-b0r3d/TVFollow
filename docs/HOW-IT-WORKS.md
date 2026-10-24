@@ -51,6 +51,20 @@ If the TV doesn't answer when it's time to turn it on, TVFollow sends a
 **Wake-on-LAN packet** to the TV's network address (Wi-Fi or cable, whichever the TV
 uses) and gives it 20 seconds to wake up.
 
+## Checking for new versions
+
+If **Tell me when there's a new version** is on (it is unless you untick it), TVFollow
+asks GitHub once a week for its latest release:
+
+`GET https://api.github.com/repos/still-b0r3d/TVFollow/releases/latest`
+
+It first asks a couple of minutes after starting, then checks every hour whether a week
+has passed. If GitHub can't be reached, it tries again six hours later. A newer version
+gets one notification and a **Get TVFollow …** item in the tray menu, which opens the
+release page on GitHub (it only ever opens TVFollow's own release pages). TVFollow never
+downloads or installs an update by itself. When it last checked lives in `updates.ini`;
+delete that file to make it check again at the next start.
+
 ## Files and settings
 
 | What | Where |
@@ -58,6 +72,7 @@ uses) and gives it 20 seconds to wake up.
 | The program | `%LOCALAPPDATA%\Programs\TVFollow\TVFollow.exe` (plus its icons) |
 | Settings | `%APPDATA%\TVFollow\settings.ini` |
 | Log | `%APPDATA%\TVFollow\TVFollow.log` (kept under 256 KB, one older copy) |
+| Update check | `%APPDATA%\TVFollow\updates.ini` (when it last asked, the newest version seen) |
 | Start with Windows | `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`, value `TVFollow` |
 | Apps list entry | `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\TVFollow` |
 | Start menu | `TVFollow` |
@@ -73,6 +88,7 @@ off_with_monitors=yes
 on_with_monitors=yes
 start_with_windows=yes
 desktop_shortcuts=no
+check_updates=yes               # ask GitHub once a week whether there's a newer TVFollow
 ```
 
 Everything is per user, so TVFollow never needs admin rights. Uninstalling removes all

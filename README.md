@@ -63,7 +63,8 @@ If the TV can't be reached while it's off, turn on **Fast TV start** on the TV
 (**Settings → System → Power → Fast TV start**) and test again. Without it, some TVs
 switch their network off along with the screen.
 
-**5. All set.** Choose what TVFollow should do, then click **Finish**.
+**5. All set.** Choose what TVFollow should do (including whether it tells you about new
+versions), then click **Finish**.
 
 ![Step 5: the options](docs/images/5-finish.png)
 
@@ -84,6 +85,10 @@ TVFollow runs from a small TV icon in the taskbar corner. You might need to clic
 
 If you ticked the desktop shortcuts option, **TV on**, **TV off** and **TV to PC** are on
 your desktop too.
+
+When a new version is out, a notification says so and the menu gets a **Get TVFollow …**
+item that opens its download page. To update, download the new TVFollow.exe and open it:
+setup remembers your TV, and finishing replaces the old version.
 
 ### How it decides
 
@@ -106,10 +111,15 @@ More detail in [How it works](docs/HOW-IT-WORKS.md).
 
 ## Privacy
 
-TVFollow only talks to your TV, over your home network. It doesn't connect to the
-internet, collect anything or phone home. Its settings and log are in
-`%APPDATA%\TVFollow`. The log shows your TV's local network address, so look it over
-before you share it.
+TVFollow talks to your TV over your home network. The only time it goes on the internet
+is the update check, if you leave it on: once a week it asks GitHub what the latest
+TVFollow release is. That request carries nothing about you or your TV beyond what any
+web request does (your internet address, and that it's TVFollow asking). It never
+downloads or installs anything by itself. Untick **Tell me when there's a new version**
+in **Settings…** to switch it off. TVFollow doesn't collect anything else.
+
+Its settings and log are in `%APPDATA%\TVFollow`. The log shows your TV's local network
+address, so look it over before you share it.
 
 ## Problems?
 
@@ -144,6 +154,9 @@ same way on GitHub's own machines, with a SHA-256 checksum next to the download.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Made by [b0r3d.org](https://b0r3d.org).
+TVFollow is free. Use it, change it and share it, at home or at work, under the MIT
+License with the [Commons Clause](https://commonsclause.com/): the one thing nobody may
+do is sell it, or sell something whose value comes mostly from it. See
+[LICENSE](LICENSE). Made by [b0r3d.org](https://b0r3d.org).
 
 Roku is a trademark of Roku, Inc. TVFollow isn't affiliated with or endorsed by Roku.

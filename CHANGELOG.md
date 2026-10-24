@@ -18,4 +18,7 @@ The first public release.
 - Installs per user without admin. Start menu entry, optional start with Windows,
   optional TV on / off / to PC desktop shortcuts, and uninstall from Settings → Apps.
 - A tray icon with TV buttons, Pause following, Settings, the log and Quit.
+- Tells you when a new version is out: once a week it asks GitHub for the latest release
+  (can be switched off in setup). It never downloads or installs anything by itself.
+- Licensed MIT with the Commons Clause: free to use, change and share, not to sell.
 - Commands for scripts and hotkeys: `on`, `off`, `pc`, `setup`, `uninstall`, `--version`.
