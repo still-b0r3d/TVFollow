@@ -3,6 +3,11 @@
 **Turns a TV with Roku built in on and off along with your PC's monitors.** Handy when
 the TV is one of your screens.
 
+> **How it works:** TVFollow is a remote control. It presses the TV's power and input
+> buttons by sending the same remote signals the Roku phone app sends, straight to the
+> TV over your home network. It doesn't change anything on your PC's displays, and none
+> of this goes through the internet.
+
 - Your monitors go to sleep, so the TV turns off too.
 - You come back and move the mouse, so the TV turns on and switches to your PC.
 - Sleep and shutdown turn it off as well.

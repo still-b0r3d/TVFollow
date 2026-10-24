@@ -23,7 +23,8 @@ namespace TVFollow
 
         public FindPage(SetupForm setup) : base(setup)
         {
-            Para("TVFollow works with TVs that have Roku built in. Turn the TV on and make sure it's on the same network as this PC.");
+            Para("TVFollow works like the Roku phone app: it sends your TV's remote presses over your home network. " +
+                "It works with TVs that have Roku built in. Turn the TV on and make sure it's on the same network as this PC.");
 
             status = Para("");
             status.Margin = new Padding(0, 0, 0, 6);

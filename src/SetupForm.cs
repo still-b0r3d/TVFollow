@@ -41,7 +41,8 @@ namespace TVFollow
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(640, 500);
             BackColor = SystemColors.Window;
-            try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
+            // the TV icon built into the program, whichever exe is running (the tests' has no icon)
+            try { Icon = AppIcons.Load("tv.ico", SystemInformation.IconSize); } catch { }
 
             var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(28, 16, 28, 8), BackColor = SystemColors.Window };
             pages.Add(new FindPage(this));
@@ -88,7 +89,7 @@ namespace TVFollow
         {
             var header = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = SystemColors.Window };
             var picture = new PictureBox { Location = new Point(28, 16), Size = new Size(40, 40), SizeMode = PictureBoxSizeMode.Zoom };
-            try { picture.Image = new Icon(Icon, 48, 48).ToBitmap(); } catch { }
+            try { picture.Image = AppIcons.Load("tv.ico", new Size(48, 48)).ToBitmap(); } catch { }
             title.AutoSize = true;
             title.Location = new Point(80, 14);
             title.Font = new Font("Segoe UI Semibold", 14F);
