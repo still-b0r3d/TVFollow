@@ -10,8 +10,12 @@ namespace TVFollow.Tests
     {
         static int passed, failed;
 
-        static int Main()
+        [STAThread]
+        static int Main(string[] args)
         {
+            if (args.Length == 2 && args[0] == "--shots") return Shots.Run(args[1]);
+            if (args.Length == 1 && args[0] == "--probe") return Shots.Probe();
+
             string home = Path.Combine(Path.GetTempPath(), "TVFollowTests-" + Guid.NewGuid().ToString("N"));
             Settings.Dir = home;
 
@@ -32,6 +36,13 @@ namespace TVFollow.Tests
             Run("rules: monitors on with fresh input", RulesFreshInput);
             Run("rules: monitors on with nobody there waits for input", RulesWaitForInput);
             Run("rules: paused and switched-off rules do nothing", RulesPausedAndOptions);
+            Run("TV inputs are read with their names", InputsAreRead);
+            Run("scanner lists TVs before sticks and skips silence", ScannerOrder);
+            Run("power test: passes on a TV that answers while off", PowerTestPasses);
+            Run("power test: stops cleanly on the Limited setting", PowerTestLimited);
+            Run("power test: wakes a TV from deep standby", PowerTestWakes);
+            Run("power test: explains Fast TV start when the TV can't be reached", PowerTestUnreachable);
+            Run("a separate settings folder gets its own instance", InstanceNames);
             Run("version matches the exe's version", VersionMatches);
 
             try { Directory.Delete(home, true); } catch { }
@@ -350,6 +361,116 @@ namespace TVFollow.Tests
             p.Rules.MonitorsOff();
             p.Rules.MonitorsOn();
             Check(p.Wants.Count == 1 && p.Wants[0], "off switched off: only the on should happen");
+        }
+
+        // ---- setup pieces ----
+
+        static void InputsAreRead()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                tv.InputNames = new[] { "PC", "HDMI 2" };
+                List<KeyValuePair<string, string>> inputs = new RokuClient(tv.Ip, tv.Port).GetHdmiInputs(2000);
+                Check(inputs != null && inputs.Count == 2, "expected the two HDMI inputs only");
+                Check(inputs[0].Key == "tvinput.hdmi1" && inputs[0].Value == "PC", "first input wrong");
+                Check(inputs[1].Key == "tvinput.hdmi2" && inputs[1].Value == "HDMI 2", "second input wrong (non-breaking space?)");
+                tv.ControlMode = "limited";
+                Check(new RokuClient(tv.Ip, tv.Port).GetHdmiInputs(2000) == null, "Limited hides the list");
+            }
+        }
+
+        static void ScannerOrder()
+        {
+            using (var tv = new FakeTv("127.0.0.2", 0))
+            using (var stick = new FakeTv("127.0.0.1", tv.Port))
+            {
+                stick.IsTv = false;
+                stick.Name = "A stick";
+                stick.Serial = "X000000002";
+                List<FoundTv> found = TvScanner.Probe(new[] { "127.0.0.1", "127.0.0.2", "127.0.0.3" }, tv.Port);
+                Check(found.Count == 2, "expected 2, found " + found.Count);
+                Check(found[0].Info.IsTv && found[0].Ip == "127.0.0.2", "the TV should come first");
+                Check(found[0].Title == "Test TV" && found[0].Details.Contains("Test room") && found[0].Details.Contains("127.0.0.2"), "title/details");
+            }
+        }
+
+        static PowerTest FastTest()
+        {
+            var t = new PowerTest();
+            t.OffWaitMs = 500;
+            t.StandbyCheckMs = 30;
+            t.WakeWaitMs = 400;
+            t.OnWaitMs = 600;
+            t.PollMs = 20;
+            t.SendWake = mac => { throw new Exception("unexpected wake packet"); };
+            return t;
+        }
+
+        static bool RunPowerTest(FakeTv tv, PowerTest test, List<string> lines)
+        {
+            return test.Run(new RokuClient(tv.Ip, tv.Port), "hdmi1", "00:11:22:33:44:55",
+                (ok, text) => lines.Add((ok == null ? "." : ok.Value ? "+" : "-") + text));
+        }
+
+        static void PowerTestPasses()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                tv.App = ""; // comes back on to the home screen, so it has to switch
+                var lines = new List<string>();
+                Check(RunPowerTest(tv, FastTest(), lines), "test failed: " + string.Join(" | ", lines));
+                Check(tv.IsOn && tv.App == "tvinput.hdmi1", "TV should end on and showing the PC");
+                Check(lines.Exists(l => l.StartsWith("+It still answers")), "standby answer not reported");
+                Check(lines[lines.Count - 1] == "+Back on and showing this PC.", "last line: " + lines[lines.Count - 1]);
+            }
+        }
+
+        static void PowerTestLimited()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                tv.ControlMode = "limited";
+                var lines = new List<string>();
+                Check(!RunPowerTest(tv, FastTest(), lines), "should fail");
+                Check(tv.IsOn, "TV should be untouched");
+                Check(lines[lines.Count - 1].Contains("Limited"), "should name the setting: " + lines[lines.Count - 1]);
+            }
+        }
+
+        static void PowerTestWakes()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                tv.DownWhenOff = true;
+                PowerTest test = FastTest();
+                var woken = new List<string>();
+                test.SendWake = mac => { woken.Add(mac); tv.Down = false; tv.PowerMode = "PowerOn"; };
+                var lines = new List<string>();
+                Check(RunPowerTest(tv, test, lines), "test failed: " + string.Join(" | ", lines));
+                Check(woken.Count == 1, "expected one wake packet");
+                Check(lines.Exists(l => l == "+The wake signal reached it."), "wake not reported");
+            }
+        }
+
+        static void PowerTestUnreachable()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                tv.DownWhenOff = true;
+                PowerTest test = FastTest();
+                test.SendWake = mac => { };
+                var lines = new List<string>();
+                Check(!RunPowerTest(tv, test, lines), "should fail");
+                Check(lines[lines.Count - 1].Contains("Fast TV start"), "should explain Fast TV start: " + lines[lines.Count - 1]);
+            }
+        }
+
+        static void InstanceNames()
+        {
+            Check(!Settings.IsDefaultDir, "tests use their own folder");
+            Check(Instance.MutexName.StartsWith(@"Local\TVFollow.") && Instance.QuitName.StartsWith(@"Local\TVFollow.Quit."),
+                "names should carry a suffix: " + Instance.MutexName);
+            Check(!Instance.IsRunning(), "nothing should be running for the test folder");
         }
 
         static void VersionMatches()

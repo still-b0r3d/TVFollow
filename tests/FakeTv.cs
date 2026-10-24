@@ -17,7 +17,12 @@ namespace TVFollow.Tests
         public string App = "tvinput.hdmi1";      // "" = the Roku home screen
         public string ControlMode = "enabled";    // "limited" refuses button presses
         public string NetworkType = "wifi";
+        public string Name = "Test TV";
+        public string Location = "Test room";
+        public bool IsTv = true;
+        public string[] InputNames = { "HDMI 1", "HDMI 2", "HDMI 3" };
         public bool Down;                         // stop answering, like a TV in deep standby
+        public bool DownWhenOff;                  // go into deep standby as soon as it's turned off
 
         public readonly string Ip;
         public readonly int Port;
@@ -100,9 +105,20 @@ namespace TVFollow.Tests
                     : "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<active-app>\n\t<app id=\"" + App + "\" type=\"tvin\">PC</app>\n</active-app>";
                 return;
             }
+            if (method == "GET" && path == "/query/apps")
+            {
+                if (ControlMode == "limited") { status = 403; return; }
+                var apps = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<apps>\n");
+                for (int i = InputNames.Length; i >= 1; i--)
+                    apps.Append("\t<app id=\"tvinput.hdmi" + i + "\" type=\"tvin\" version=\"1.0.0\">" + InputNames[i - 1] + "</app>\n");
+                apps.Append("\t<app id=\"tvinput.cvbs\" type=\"tvin\" version=\"1.0.0\">AV</app>\n");
+                apps.Append("\t<app id=\"12\" type=\"appl\" version=\"5.2.0\">Some channel</app>\n</apps>");
+                body = apps.ToString();
+                return;
+            }
             if (method != "POST") { status = 404; return; }
             if (ControlMode == "limited" && path.StartsWith("/keypress/")) { status = 403; return; }
-            if (path == "/keypress/PowerOff") PowerMode = "DisplayOff";
+            if (path == "/keypress/PowerOff") { PowerMode = "DisplayOff"; if (DownWhenOff) Down = true; }
             else if (path == "/keypress/PowerOn") PowerMode = "PowerOn";
             else if (path.StartsWith("/keypress/InputHDMI")) { if (IsOn) App = "tvinput.hdmi" + path.Substring("/keypress/InputHDMI".Length); }
             else if (path.StartsWith("/launch/")) { if (IsOn) App = path.Substring("/launch/".Length); }
@@ -115,12 +131,12 @@ namespace TVFollow.Tests
                 "\t<serial-number>" + Serial + "</serial-number>\n" +
                 "\t<vendor-name>Example</vendor-name>\n" +
                 "\t<model-name>EX43</model-name>\n" +
-                "\t<is-tv>true</is-tv>\n" +
+                "\t<is-tv>" + (IsTv ? "true" : "false") + "</is-tv>\n" +
                 "\t<wifi-mac>00:11:22:33:44:55</wifi-mac>\n" +
                 "\t<ethernet-mac>00:11:22:33:44:66</ethernet-mac>\n" +
                 "\t<network-type>" + NetworkType + "</network-type>\n" +
-                "\t<friendly-device-name>Test TV</friendly-device-name>\n" +
-                "\t<user-device-location>Test room</user-device-location>\n" +
+                "\t<friendly-device-name>" + Name + "</friendly-device-name>\n" +
+                "\t<user-device-location>" + Location + "</user-device-location>\n" +
                 "\t<power-mode>" + PowerMode + "</power-mode>\n" +
                 "\t<ecp-setting-mode>" + ControlMode + "</ecp-setting-mode>\n" +
                 "</device-info>";
