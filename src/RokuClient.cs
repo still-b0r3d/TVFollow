@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading;
 using System.Xml;
 
 namespace TVFollow
@@ -33,8 +34,7 @@ namespace TVFollow
 
         public static DeviceInfo Parse(string xml)
         {
-            var doc = new XmlDocument();
-            doc.LoadXml(xml);
+            XmlDocument doc = SafeXml.Load(xml);
             var d = new DeviceInfo();
             d.Serial = Field(doc, "serial-number");
             d.Name = FirstOf(Field(doc, "user-device-name"), Field(doc, "friendly-device-name"), Field(doc, "default-device-name"));
@@ -63,9 +63,29 @@ namespace TVFollow
         }
     }
 
+    // Anything on the network can answer on port 8060, so replies are read with DTDs refused
+    // and nothing outside the reply resolved. Without this, the old .NET default would follow
+    // a reply's DOCTYPE to read local files or reach out to other machines.
+    static class SafeXml
+    {
+        public static XmlDocument Load(string xml)
+        {
+            var settings = new XmlReaderSettings();
+            settings.DtdProcessing = DtdProcessing.Prohibit;
+            settings.XmlResolver = null;
+            var doc = new XmlDocument();
+            doc.XmlResolver = null;
+            using (XmlReader reader = XmlReader.Create(new StringReader(xml), settings)) doc.Load(reader);
+            return doc;
+        }
+    }
+
     // Talks to one TV over Roku's External Control Protocol: plain HTTP on port 8060.
     class RokuClient
     {
+        // a real TV's answers are a few kilobytes; anything bigger isn't a TV
+        public const int MaxReply = 256 * 1024;
+
         public string Ip;
         public int Port;
 
@@ -88,8 +108,7 @@ namespace TVFollow
         {
             try
             {
-                var doc = new XmlDocument();
-                doc.LoadXml(Get("query/active-app", timeoutMs));
+                XmlDocument doc = SafeXml.Load(Get("query/active-app", timeoutMs));
                 var app = doc.SelectSingleNode("/active-app/app") as XmlElement;
                 return app == null ? "" : app.GetAttribute("id");
             }
@@ -102,14 +121,13 @@ namespace TVFollow
         {
             try
             {
-                var doc = new XmlDocument();
-                doc.LoadXml(Get("query/apps", timeoutMs));
+                XmlDocument doc = SafeXml.Load(Get("query/apps", timeoutMs));
                 var inputs = new List<KeyValuePair<string, string>>();
                 foreach (XmlElement app in doc.SelectNodes("/apps/app"))
                 {
                     string id = app.GetAttribute("id");
                     if (!id.StartsWith("tvinput.hdmi")) continue;
-                    inputs.Add(new KeyValuePair<string, string>(id, app.InnerText.Replace(' ', ' ').Trim()));
+                    inputs.Add(new KeyValuePair<string, string>(id, app.InnerText.Replace((char)0xA0, ' ').Trim()));
                 }
                 inputs.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
                 return inputs;
@@ -131,11 +149,30 @@ namespace TVFollow
             return req;
         }
 
+        // Timeout only covers getting the headers and ReadWriteTimeout each single read, so a
+        // device trickling its answer could hold a request forever. This deadline covers it all.
+        static Timer Deadline(HttpWebRequest req, int timeoutMs)
+        {
+            return new Timer(state => { try { req.Abort(); } catch { } }, null, timeoutMs + 500, Timeout.Infinite);
+        }
+
         string Get(string path, int timeoutMs)
         {
-            using (var resp = (HttpWebResponse)Request(path, timeoutMs).GetResponse())
-            using (var reader = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
-                return reader.ReadToEnd();
+            HttpWebRequest req = Request(path, timeoutMs);
+            using (Deadline(req, timeoutMs))
+            using (var resp = (HttpWebResponse)req.GetResponse())
+            using (Stream body = resp.GetResponseStream())
+            {
+                var buffer = new byte[8192];
+                var all = new MemoryStream();
+                int n;
+                while ((n = body.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    all.Write(buffer, 0, n);
+                    if (all.Length > MaxReply) throw new InvalidDataException("reply too big for a TV");
+                }
+                return Encoding.UTF8.GetString(all.ToArray());
+            }
         }
 
         // the HTTP status, or 0 if the TV didn't answer
@@ -146,17 +183,20 @@ namespace TVFollow
             catch { return 0; }
             req.Method = "POST";
             req.ContentLength = 0;
-            try
+            using (Deadline(req, timeoutMs))
             {
-                using (var resp = (HttpWebResponse)req.GetResponse()) return (int)resp.StatusCode;
-            }
-            catch (WebException e)
-            {
-                var resp = e.Response as HttpWebResponse;
-                if (resp == null) return 0;
-                int code = (int)resp.StatusCode;
-                resp.Close();
-                return code;
+                try
+                {
+                    using (var resp = (HttpWebResponse)req.GetResponse()) return (int)resp.StatusCode;
+                }
+                catch (WebException e)
+                {
+                    var resp = e.Response as HttpWebResponse;
+                    if (resp == null) return 0;
+                    int code = (int)resp.StatusCode;
+                    resp.Close();
+                    return code;
+                }
             }
         }
     }

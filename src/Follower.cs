@@ -22,6 +22,21 @@ namespace TVFollow
 
         bool waitingForInput;
         uint inputTickAtWake;
+        int lastDisplay = -1;
+
+        // Windows' display state: 0 off, 1 on, 2 dimmed. Coming back from dimmed isn't the
+        // monitors coming back on (they never went off), so it's ignored; on after on still
+        // counts, since sleep doesn't always send "off" first.
+        public void Display(int state)
+        {
+            int before = lastDisplay;
+            lastDisplay = state;
+            if (state == 0) MonitorsOff();
+            else if (state == 1 && before != 2) MonitorsOn();
+        }
+
+        // after sleep, the next "on" always counts
+        public void Resumed() { lastDisplay = -1; }
 
         public void MonitorsOn()
         {
@@ -89,6 +104,8 @@ namespace TVFollow
 
         public readonly FollowRules Rules = new FollowRules();
 
+        public Settings Settings { get { return settings; } }
+
         readonly Settings settings;
         readonly Controller controller;
         readonly AutoResetEvent kick = new AutoResetEvent(false);
@@ -102,6 +119,7 @@ namespace TVFollow
             this.controller = controller;
             Rules.OnWithMonitors = settings.OnWithMonitors;
             Rules.OffWithMonitors = settings.OffWithMonitors;
+            Rules.Paused = settings.Paused;
             Rules.Want = Want;
         }
 
@@ -164,13 +182,12 @@ namespace TVFollow
                 if (ev == PBT_POWERSETTINGCHANGE)
                 {
                     // POWERBROADCAST_SETTING: GUID, DWORD length, then the data (0 off, 1 on, 2 dimmed)
-                    int display = Marshal.ReadInt32(m.LParam, 20);
-                    if (display == 0) Rules.MonitorsOff();
-                    else if (display == 1) Rules.MonitorsOn();
+                    Rules.Display(Marshal.ReadInt32(m.LParam, 20));
                 }
                 else if (ev == PBT_APMSUSPEND)
                 {
                     Log.Write("PC going to sleep");
+                    Rules.Resumed(); // whatever comes after waking counts as the monitors coming on
                     QuickOff();
                 }
                 m.Result = (IntPtr)1;

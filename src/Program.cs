@@ -11,6 +11,7 @@
 // Used by TVFollow itself: --startup (at sign-in, quietly) and follow (after setup).
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -41,7 +42,8 @@ namespace TVFollow
             if (cmd == "uninstall") return Uninstall(args.Length > 1 && args[1].ToLowerInvariant() == "--quiet");
 
             Settings settings = Settings.Load();
-            if (cmd == "setup" || (cmd.Length == 0 && (!settings.IsComplete || Instance.IsRunning())))
+            bool installed = Installer.SamePath(Application.ExecutablePath, InstallPaths.ForThisPC().Exe);
+            if (ShowsSetup(cmd, settings.IsComplete, Instance.IsRunning(), installed))
             {
                 using (var setup = new SetupForm(settings))
                 {
@@ -73,6 +75,14 @@ namespace TVFollow
             return 2;
         }
 
+        // Opening TVFollow shows setup the first time, while it's already running (to change
+        // settings), and whenever it's opened from anywhere but its install folder: that's a new
+        // download, and finishing setup installs it over the old one.
+        public static bool ShowsSetup(string cmd, bool setUp, bool running, bool installed)
+        {
+            return cmd == "setup" || (cmd.Length == 0 && (!setUp || running || !installed));
+        }
+
         // After setup: put the exe in its folder (replacing an older one), then follow from there.
         static int InstallAndStart(Settings settings)
         {
@@ -88,13 +98,24 @@ namespace TVFollow
             try { Installer.Install(paths, settings, me); }
             catch (Exception e)
             {
-                MessageBox.Show("TVFollow saved your settings but couldn't install itself: " + e.Message, "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Log.Write("couldn't install: " + e.Message);
+                bool old = !fromInstalled && File.Exists(paths.Exe);
+                if (old) StartFollowing(paths); // the version already installed carries on with the new settings
+                MessageBox.Show("TVFollow saved your settings but couldn't install itself: " + e.Message +
+                    (old ? "\n\nThe version that was already installed keeps running. Try again later." : ""),
+                    "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return 1;
             }
             Log.Write("installed in " + paths.Dir);
             if (fromInstalled) return Follow(settings, new Controller(settings), true, true);
-            Process.Start(paths.Exe, "follow");
+            StartFollowing(paths);
             return 0;
+        }
+
+        // the installed copy, started in its own folder (not wherever setup was opened from)
+        static void StartFollowing(InstallPaths paths)
+        {
+            Process.Start(new ProcessStartInfo(paths.Exe, "follow") { WorkingDirectory = paths.Dir, UseShellExecute = false });
         }
 
         static int Uninstall(bool quiet)
@@ -102,13 +123,18 @@ namespace TVFollow
             if (!quiet && MessageBox.Show("Remove TVFollow from this PC?\n\nYour TV will stop turning on and off with the monitors. Nothing on the TV changes.",
                 "Remove TVFollow", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return 0;
             StopRunningCopy();
-            try { Installer.Uninstall(InstallPaths.ForThisPC()); }
+            InstallPaths paths = InstallPaths.ForThisPC();
+            bool folderLater;
+            try { folderLater = Installer.Uninstall(paths); }
             catch (Exception e)
             {
                 if (!quiet) MessageBox.Show("Couldn't remove everything: " + e.Message, "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return 1;
             }
             if (!quiet) MessageBox.Show("TVFollow is removed.", "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            // last of all, once nothing here is waiting on a click: this exe can only be deleted
+            // after it has exited
+            if (folderLater) Installer.DeleteAfterExit(paths.Dir);
             return 0;
         }
 

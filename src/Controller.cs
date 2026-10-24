@@ -24,23 +24,28 @@ namespace TVFollow
     {
         readonly Settings settings;
         readonly RokuClient tv;
+        DateTime lastSearch = DateTime.MinValue;
 
         // waits in milliseconds; the tests shrink them
         public int FirstCheckMs = 1500;
         public int RetryMs = 2500;
         public int PollMs = 1500;
-        public int ReachMs = 8000;       // after sleep the PC's own network takes a few seconds
-        public int WakeReachMs = 20000;  // a TV woken from deep standby takes a while to answer
+        public int ReachMs = 8000;        // after sleep the PC's own network takes a few seconds
+        public int WakeReachMs = 20000;   // a TV woken from deep standby takes a while to answer
+        public int WakeRepeatMs = 3000;   // the wake packet is sent again this often while waiting
         public int SweepWaitMs = 2000;
+        public TimeSpan SearchEvery = TimeSpan.FromMinutes(10);
 
-        public Action<string> SendWake = Wake.Send;
-        public Func<List<string>> Candidates; // where to look if the TV moved
+        public Func<string, int> SendWake = Wake.Send;  // returns how many packets went out
+        public Func<bool> OnTvNetwork;                  // is the PC on the network the TV was last seen on?
+        public Func<List<string>> Candidates;           // where to look if the TV moved
 
         public Controller(Settings settings)
         {
             this.settings = settings;
             tv = new RokuClient(settings.Ip, settings.Port);
-            Candidates = () => Discovery.Sweep(this.settings.Port, SweepWaitMs);
+            OnTvNetwork = () => Discovery.IsLocal(this.settings.Ip);
+            Candidates = () => Discovery.SweepAround(this.settings.Ip, this.settings.Port, SweepWaitMs);
         }
 
         public void TurnOn(TurnOnMode mode)
@@ -49,10 +54,13 @@ namespace TVFollow
             TvState s = WaitReachable(ReachMs);
             if (!s.Reachable)
             {
-                Log.Write(tag + ": TV not answering, sending a wake packet");
-                SendWake(settings.WakeMac);
-                s = WaitReachable(WakeReachMs);
-                if (s.Reachable) Log.Write(tag + ": TV woke up (" + s.PowerMode + ")");
+                if (!OnTvNetwork())
+                {
+                    // a laptop away from home, say: don't wake or search anything on this network
+                    Log.Write(tag + ": this PC isn't on the TV's network, leaving it alone");
+                    return;
+                }
+                s = WakeUp(tag);
             }
             if (!s.Reachable && Rediscover()) s = Query();
             if (!s.Reachable) { Log.Write(tag + ": TV not found"); return; }
@@ -83,13 +91,40 @@ namespace TVFollow
             Log.Write(tag + ": gave up waiting for the PC input");
         }
 
+        // The wake packet, sent again every few seconds while waiting for the TV to answer.
+        TvState WakeUp(string tag)
+        {
+            int sent = SendWake(settings.WakeMac);
+            Log.Write(sent > 0
+                ? tag + ": TV not answering, sent a wake packet (" + sent + " addresses)"
+                : tag + ": TV not answering, and there was no network to send a wake packet on");
+            DateTime until = DateTime.UtcNow.AddMilliseconds(WakeReachMs);
+            DateTime nextSend = DateTime.UtcNow.AddMilliseconds(WakeRepeatMs);
+            while (true)
+            {
+                TvState s = Query();
+                if (s.Reachable) { Log.Write(tag + ": TV woke up (" + s.PowerMode + ")"); return s; }
+                if (DateTime.UtcNow > until) return s;
+                if (DateTime.UtcNow >= nextSend)
+                {
+                    SendWake(settings.WakeMac);
+                    nextSend = DateTime.UtcNow.AddMilliseconds(WakeRepeatMs);
+                }
+                Thread.Sleep(PollMs);
+            }
+        }
+
         // force: turn it off whatever it shows (a button), else only if it shows the PC.
         // quick: sleep and shutdown only give us a moment, so short waits and no searching.
         public void TurnOff(bool force, bool quick)
         {
             string tag = force ? "off (button)" : "off";
             TvState s = Query(quick ? 800 : 3000);
-            if (!s.Reachable && !quick && Rediscover()) s = Query();
+            if (!s.Reachable && !quick)
+            {
+                if (!OnTvNetwork()) { Log.Write(tag + ": this PC isn't on the TV's network"); return; }
+                if (Rediscover()) s = Query();
+            }
             if (!s.Reachable) { Log.Write(tag + ": TV not answering"); return; }
             if (!s.IsOn) { Log.Write(tag + ": already off"); return; }
             if (!force && s.App != settings.PcApp) { Log.Write(tag + ": TV is showing " + Describe(s.App) + ", leaving it on"); return; }
@@ -108,6 +143,13 @@ namespace TVFollow
             s.Reachable = true;
             s.PowerMode = info.PowerMode;
             s.App = tv.GetActiveApp(timeoutMs) ?? "";
+            if (info.WakeMac.Length > 0 && !string.Equals(info.WakeMac, settings.WakeMac, StringComparison.OrdinalIgnoreCase))
+            {
+                // moved from Wi-Fi to a cable, or the other way round
+                settings.WakeMac = info.WakeMac;
+                Log.Write("the TV's network connection changed; its wake address is updated");
+                Save();
+            }
             return s;
         }
 
@@ -122,10 +164,17 @@ namespace TVFollow
             }
         }
 
-        // If the router handed the TV a new address, find it again by its serial number.
+        // If the router handed the TV a new address, find it again by its serial number: only
+        // on the TV's own network, and at most once every ten minutes.
         bool Rediscover()
         {
-            Log.Write("looking for the TV on the network");
+            if (DateTime.UtcNow - lastSearch < SearchEvery)
+            {
+                Log.Write("looked for the TV a few minutes ago; not searching again yet");
+                return false;
+            }
+            lastSearch = DateTime.UtcNow;
+            Log.Write("looking for the TV on its network");
             string ip = Discovery.FindBySerial(Candidates(), settings.Port, settings.Serial);
             if (ip == null) { Log.Write("TV not found on the network"); return false; }
             if (ip != settings.Ip)
@@ -133,10 +182,15 @@ namespace TVFollow
                 Log.Write("TV found at " + ip);
                 settings.Ip = ip;
                 tv.Ip = ip;
-                try { settings.Save(); }
-                catch (Exception e) { Log.Write("couldn't save the new address: " + e.Message); }
+                Save();
             }
             return true;
+        }
+
+        void Save()
+        {
+            try { settings.Save(); }
+            catch (Exception e) { Log.Write("couldn't save the settings: " + e.Message); }
         }
 
         static string Describe(string app)

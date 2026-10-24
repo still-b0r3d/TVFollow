@@ -39,8 +39,10 @@ namespace TVFollow
                 Margin = new Padding(0, 0, 0, 10),
                 BorderStyle = BorderStyle.FixedSingle
             };
-            bold = new Font(list.Font, FontStyle.Bold);
-            list.ItemHeight = list.Font.Height * 2 + 14;
+            // the list isn't in the window yet, so it would measure with the old default font
+            list.Font = setup.Font;
+            bold = new Font(setup.Font, FontStyle.Bold);
+            list.ItemHeight = Math.Max(list.Font.Height, bold.Height) * 2 + 16;
             list.DrawItem += DrawTv;
             list.SelectedIndexChanged += delegate { Picked(); };
             list.DoubleClick += delegate { Setup.GoNext(); };
@@ -59,13 +61,24 @@ namespace TVFollow
             address = new TextBox { Width = 160, Margin = new Padding(0, 3, 8, 0) };
             add = MakeButton("Add");
             add.Click += delegate { AddAddress(); };
-            address.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; AddAddress(); } };
             manualRow.Controls.Add(address);
             manualRow.Controls.Add(add);
 
             hint = Note("Not listed? Check that the TV is on and that this PC isn't on a guest network or a VPN. " +
                 "The TV's address is under Settings → Network → About on the TV.");
             hint.Visible = false;
+        }
+
+        // Enter in the address box adds that address. Without this the window's Next button
+        // would take the Enter first and carry on with whichever TV was already picked.
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            if (keyData == Keys.Enter && address.Focused)
+            {
+                AddAddress();
+                return true;
+            }
+            return base.ProcessCmdKey(ref msg, keyData);
         }
 
         public override string Title { get { return "Find your TV"; } }
@@ -181,6 +194,7 @@ namespace TVFollow
         readonly Label after;
         readonly Timer timer = new Timer { Interval = 2000 };
         bool allowed, checking;
+        int visit; // answers from an earlier visit (maybe about another TV) are ignored
 
         public ControlPage(SetupForm setup) : base(setup)
         {
@@ -203,20 +217,25 @@ namespace TVFollow
 
         public override void Entered()
         {
+            visit++;
+            checking = false;
             allowed = false;
+            steps.Visible = after.Visible = false;
             SetStatus(status, null, "Checking the TV's settings…");
             Check();
             timer.Start();
         }
 
-        public override void Leaving() { timer.Stop(); }
+        public override void Leaving() { timer.Stop(); visit++; }
 
         async void Check()
         {
             if (checking) return;
             checking = true;
+            int thisVisit = visit;
             RokuClient client = Setup.Client;
             DeviceInfo info = await Task.Run(() => client.GetDeviceInfo(3000));
+            if (thisVisit != visit) return; // the page was left (and maybe another TV picked) meanwhile
             checking = false;
             if (IsDisposed || !Visible) return;
 
@@ -296,7 +315,8 @@ namespace TVFollow
             });
             if (IsDisposed) return;
 
-            if (inputs == null || inputs.Count == 0)
+            bool guessed = inputs == null || inputs.Count == 0;
+            if (guessed)
             {
                 inputs = new List<KeyValuePair<string, string>>();
                 for (int i = 1; i <= 4; i++) inputs.Add(new KeyValuePair<string, string>("tvinput.hdmi" + i, ""));
@@ -315,7 +335,13 @@ namespace TVFollow
                 if (input.Key == pick) radio.Checked = true;
                 if (input.Key == active) note.Text = "Your TV is showing " + InputLabel(input.Key, input.Value) + " right now.";
             }
-            loadedFor = Setup.Tv.Info.Serial;
+            if (guessed)
+            {
+                // ask again next time this page opens
+                note.Text = "The TV didn't list its inputs, so these are the usual four. Use Show it on the TV to check.";
+                loadedFor = null;
+            }
+            else loadedFor = Setup.Tv.Info.Serial;
             loading = false;
             NextChanged();
         }

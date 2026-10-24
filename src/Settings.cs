@@ -25,6 +25,7 @@ namespace TVFollow
         public bool StartWithWindows = true;
         public bool DesktopShortcuts;
         public bool CheckUpdates = true;
+        public bool Paused;  // set from the tray; kept across restarts until resumed
 
         public bool IsComplete { get { return Ip.Length > 0 && Serial.Length > 0; } }
 
@@ -41,7 +42,11 @@ namespace TVFollow
                 int eq = line.IndexOf('=');
                 if (line.StartsWith("#") || eq < 0) continue;
                 string key = line.Substring(0, eq).Trim().ToLowerInvariant();
-                string value = line.Substring(eq + 1).Trim();
+                string value = line.Substring(eq + 1);
+                int comment = value.IndexOf(" #");   // "input=hdmi1   # a note" still reads as hdmi1
+                if (comment < 0) comment = value.IndexOf("\t#");
+                if (comment >= 0) value = value.Substring(0, comment);
+                value = value.Trim();
                 switch (key)
                 {
                     case "ip": s.Ip = value; break;
@@ -58,12 +63,21 @@ namespace TVFollow
                     case "start_with_windows": s.StartWithWindows = !IsNo(value); break;
                     case "desktop_shortcuts": s.DesktopShortcuts = !IsNo(value); break;
                     case "check_updates": s.CheckUpdates = !IsNo(value); break;
+                    case "paused": s.Paused = !IsNo(value); break;
                 }
             }
             return s;
         }
 
+        static readonly object SaveLock = new object();
+
+        // several threads can save (a moved TV, the tray's Pause), so one at a time
         public void Save()
+        {
+            lock (SaveLock) SaveNow();
+        }
+
+        void SaveNow()
         {
             Directory.CreateDirectory(Dir);
             string text =
@@ -77,6 +91,7 @@ namespace TVFollow
                 "start_with_windows=" + (StartWithWindows ? "yes" : "no") + "\r\n" +
                 "desktop_shortcuts=" + (DesktopShortcuts ? "yes" : "no") + "\r\n" +
                 "check_updates=" + (CheckUpdates ? "yes" : "no") + "\r\n" +
+                (Paused ? "paused=yes\r\n" : "") +
                 (Port != DefaultPort ? "port=" + Port + "\r\n" : "");
             string temp = FilePath + ".tmp";
             File.WriteAllText(temp, text);

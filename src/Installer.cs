@@ -2,6 +2,8 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Threading;
 using Microsoft.Win32;
 
 namespace TVFollow
@@ -66,7 +68,8 @@ namespace TVFollow
         {
             Directory.CreateDirectory(p.Dir);
             Directory.CreateDirectory(p.IconDir);
-            if (!SamePath(sourceExe, p.Exe)) File.Copy(sourceExe, p.Exe, true);
+            if (!SamePath(sourceExe, p.Exe)) CopyExe(sourceExe, p.Exe);
+            ClearDownloadMark(p.Exe);
             foreach (string name in IconNames) WriteResource(name, Path.Combine(p.IconDir, name));
 
             Directory.CreateDirectory(Path.GetDirectoryName(p.StartMenuLink));
@@ -106,10 +109,44 @@ namespace TVFollow
             }
         }
 
-        // Takes everything back out: registry, shortcuts, settings, log and the program folder.
-        // The folder is deleted a moment after this copy exits if it's running from inside it.
-        public static void Uninstall(InstallPaths p)
+        // Copying over an exe that something still has open (a TV shortcut mid-wake, a second
+        // settings window) fails for a moment, so it tries for about five seconds.
+        static void CopyExe(string source, string target)
         {
+            for (int attempt = 0; ; attempt++)
+            {
+                try { File.Copy(source, target, true); return; }
+                catch (IOException) { if (attempt >= 20) throw; }
+                catch (UnauthorizedAccessException) { if (attempt >= 20) throw; }
+                Thread.Sleep(250);
+            }
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool DeleteFileW(string path);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint GetFileAttributesW(string path);
+
+        // Windows marks downloads as "from the internet" in a hidden Zone.Identifier stream, and
+        // File.Copy carries it along. The installed copy drops it, so starting TVFollow at
+        // sign-in or from its shortcuts never brings up a security prompt.
+        public static void ClearDownloadMark(string path)
+        {
+            DeleteFileW(path + ":Zone.Identifier");
+        }
+
+        public static bool HasDownloadMark(string path)
+        {
+            return GetFileAttributesW(path + ":Zone.Identifier") != 0xFFFFFFFF;
+        }
+
+        // Takes everything back out: registry, shortcuts, settings, log and the program folder.
+        // Returns true if the program folder still has to go once this copy has exited (it's
+        // running from inside it): call DeleteAfterExit as the very last thing.
+        public static bool Uninstall(InstallPaths p)
+        {
+            bool later = false;
             if (p.RegistryRoot != null)
             {
                 using (RegistryKey run = Registry.CurrentUser.OpenSubKey(p.RunKey, true))
@@ -131,18 +168,28 @@ namespace TVFollow
             // only ever delete a folder that is clearly TVFollow's own
             if (File.Exists(p.Exe) && (Path.GetFileName(p.Dir) == "TVFollow" || Path.GetFileName(p.Dir) == "Program"))
             {
-                if (SamePath(Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName), p.Dir))
-                {
-                    Process.Start(new ProcessStartInfo("cmd.exe", "/c ping 127.0.0.1 -n 3 >nul & rmdir /s /q \"" + p.Dir + "\"")
-                    {
-                        WindowStyle = ProcessWindowStyle.Hidden,
-                        CreateNoWindow = true,
-                        UseShellExecute = false
-                    });
-                }
+                if (SamePath(Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName), p.Dir)) later = true;
                 else Directory.Delete(p.Dir, true);
             }
             DeleteEmptyDir(Settings.Dir, null);
+            return later;
+        }
+
+        // A hidden Command Prompt removes the folder once this copy has exited, trying for about
+        // fifteen seconds. The folder goes in through an environment variable, so nothing in the
+        // path is read as a command, and the prompt starts in Temp so it doesn't sit in the folder.
+        public static void DeleteAfterExit(string dir)
+        {
+            var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                "/d /c for /l %i in (1,1,15) do (ping -n 2 127.0.0.1 >nul & rmdir /s /q \"%TVF_DIR%\" 2>nul & if not exist \"%TVF_DIR%\" exit /b 0)")
+            {
+                WindowStyle = ProcessWindowStyle.Hidden,
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                WorkingDirectory = Path.GetTempPath()
+            };
+            psi.EnvironmentVariables["TVF_DIR"] = dir;
+            Process.Start(psi);
         }
 
         static void WriteResource(string name, string path)

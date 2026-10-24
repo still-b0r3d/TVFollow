@@ -89,6 +89,10 @@ namespace TVFollow
         {
             follower.Rules.Paused = value;
             Log.Write(value ? "paused from the tray" : "following again");
+            // kept in the settings, so a restart or a trip through Settings… doesn't undo it
+            follower.Settings.Paused = value;
+            try { follower.Settings.Save(); }
+            catch (Exception e) { Log.Write("couldn't save the pause: " + e.Message); }
             Show();
         }
 
@@ -114,7 +118,14 @@ namespace TVFollow
         // The setup window runs as its own copy; when it's finished, it takes over from this one.
         static void OpenSettings()
         {
-            try { Process.Start(Application.ExecutablePath, "setup"); }
+            try
+            {
+                Process.Start(new ProcessStartInfo(Application.ExecutablePath, "setup")
+                {
+                    WorkingDirectory = Path.GetDirectoryName(Application.ExecutablePath),
+                    UseShellExecute = false
+                });
+            }
             catch (Exception e) { Log.Write("couldn't open settings: " + e.Message); }
         }
 
@@ -123,7 +134,8 @@ namespace TVFollow
             try
             {
                 if (!File.Exists(Log.FilePath)) Log.Write("log opened from the tray");
-                Process.Start("notepad.exe", "\"" + Log.FilePath + "\"");
+                // Notepad by its full path, never whatever "notepad.exe" sits in the current folder
+                Process.Start(Path.Combine(Environment.SystemDirectory, "notepad.exe"), "\"" + Log.FilePath + "\"");
             }
             catch (Exception e) { Log.Write("couldn't open the log: " + e.Message); }
         }

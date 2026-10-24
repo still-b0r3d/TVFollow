@@ -14,7 +14,9 @@ namespace TVFollow
         public int OnWaitMs = 15000;
         public int PollMs = 1000;
 
-        public Action<string> SendWake = Wake.Send;
+        public int WakeRepeatMs = 3000;
+
+        public Func<string, int> SendWake = Wake.Send;  // returns how many packets went out
 
         // report(ok, text): ok is null while working on something, true when a step worked,
         // false for the problem that stopped the test.
@@ -43,7 +45,13 @@ namespace TVFollow
             {
                 report(null, "It stopped answering while it's off. Trying the network wake signal…");
                 SendWake(wakeMac);
-                if (!WaitFor(() => tv.GetDeviceInfo(2000) != null, WakeWaitMs))
+                DateTime nextSend = DateTime.UtcNow.AddMilliseconds(WakeRepeatMs);
+                if (!WaitFor(() =>
+                {
+                    if (tv.GetDeviceInfo(2000) != null) return true;
+                    if (DateTime.UtcNow >= nextSend) { SendWake(wakeMac); nextSend = DateTime.UtcNow.AddMilliseconds(WakeRepeatMs); }
+                    return false;
+                }, WakeWaitMs))
                 {
                     report(false, "This PC can't reach the TV while it's off. On the TV, turn on Fast TV start " +
                         "(Settings → System → Power → Fast TV start), turn the TV back on with the remote, and test again.");
@@ -77,7 +85,8 @@ namespace TVFollow
                 report(false, "It came back on but didn't switch to the input you picked.");
                 return false;
             }
-            report(true, "Back on and showing this PC.");
+            // the TV can only say which input it shows, not whose picture is on it
+            report(true, "Back on and switched to HDMI " + input.Substring("hdmi".Length) + ". Check that this PC's screen is on the TV.");
             return true;
         }
 

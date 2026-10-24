@@ -30,7 +30,7 @@ namespace TVFollow
         public SetupForm(Settings settings)
         {
             Settings = settings;
-            Scan = () => TvScanner.FindAll(Settings.Port);
+            Scan = () => TvScanner.FindAll(Settings.Port, Settings.Ip);
 
             SuspendLayout();
             Text = "TVFollow setup";
@@ -68,7 +68,10 @@ namespace TVFollow
             Load += delegate { ShowPage(0); };
             FormClosing += (s, e) =>
             {
-                if (DialogResult != DialogResult.OK && CurrentPage != null && CurrentPage.Busy)
+                // only a running test is worth waiting for (it may have the TV switched off), and
+                // never when Windows itself is signing out or shutting down
+                if (DialogResult != DialogResult.OK && CurrentPage is TestPage && CurrentPage.Busy &&
+                    e.CloseReason != CloseReason.WindowsShutDown && e.CloseReason != CloseReason.TaskManagerClosing)
                 {
                     MessageBox.Show(this, "Wait for the test to finish first, so the TV isn't left off.", "TVFollow",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -121,9 +124,13 @@ namespace TVFollow
             cancel.Text = "Cancel";
             next.Text = "Next";
             back.Text = "Back";
+            // tab in the order they're on screen (they're laid out right to left)
+            back.TabIndex = 0;
+            next.TabIndex = 1;
+            cancel.TabIndex = 2;
             cancel.Click += delegate { DialogResult = DialogResult.Cancel; Close(); };
             next.Click += delegate { GoNext(); };
-            back.Click += delegate { if (current > 0) ShowPage(current - 1); };
+            back.Click += delegate { GoBack(); };
             CancelButton = cancel;
 
             var about = new LinkLabel
@@ -165,6 +172,9 @@ namespace TVFollow
             page.Visible = true;
             page.Entered();
             UpdateButtons();
+            // Hiding the old page would hand focus to the next control in tab order, which could
+            // be Cancel, and Enter would then throw the setup away. Focus the new page instead.
+            if (!page.SelectNextControl(null, true, true, true, false)) FocusNext();
         }
 
         public void GoNext()
@@ -173,6 +183,13 @@ namespace TVFollow
             if (page == null || !page.CanGoNext || page.Busy) return;
             if (current < pages.Count - 1) ShowPage(current + 1);
             else Finish();
+        }
+
+        public void GoBack()
+        {
+            SetupPage page = CurrentPage;
+            if (page == null || current == 0 || page.Busy) return;
+            ShowPage(current - 1);
         }
 
         public void UpdateButtons()
@@ -184,7 +201,18 @@ namespace TVFollow
             next.Text = last ? "Finish" : "Next";
             next.Enabled = page.CanGoNext && !page.Busy;
             AcceptButton = next.Enabled ? next : null;
+            if (cancel.Focused) FocusNext();
         }
+
+        // Next if it's ready; otherwise nothing, so Enter waits for Next (the AcceptButton)
+        void FocusNext()
+        {
+            if (next.Enabled) next.Focus();
+            else ActiveControl = null;
+        }
+
+        // for the tests: the footer buttons in tab order
+        public Button[] FooterButtons { get { return new[] { back, next, cancel }; } }
 
         void Finish()
         {

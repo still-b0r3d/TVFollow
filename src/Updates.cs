@@ -14,10 +14,12 @@ namespace TVFollow
     [DataContract]
     class Release
     {
+#pragma warning disable 0649 // filled in by the JSON reader
         [DataMember(Name = "tag_name")] public string Tag;
         [DataMember(Name = "html_url")] public string Url;
         [DataMember(Name = "draft")] public bool Draft;
         [DataMember(Name = "prerelease")] public bool Prerelease;
+#pragma warning restore 0649
 
         public string Version { get { return (Tag ?? "").TrimStart('v', 'V'); } }
 
@@ -98,19 +100,29 @@ namespace TVFollow
             catch { return null; }
         }
 
-        // updates.ini: when GitHub was last asked, and the newest version it named
+        // updates.ini: when GitHub was last asked, and the newest version it named. A file that
+        // can't be read counts as "never checked"; it never stops TVFollow from starting.
         public static void Load(out DateTime lastCheckUtc, out string latest, out string latestUrl)
         {
             lastCheckUtc = DateTime.MinValue;
             latest = latestUrl = "";
-            if (!File.Exists(FilePath)) return;
-            foreach (string raw in File.ReadAllLines(FilePath))
+            string[] lines;
+            try
+            {
+                if (!File.Exists(FilePath)) return;
+                lines = File.ReadAllLines(FilePath);
+            }
+            catch (Exception e) { Log.Write("couldn't read updates.ini: " + e.Message); return; }
+            foreach (string raw in lines)
             {
                 int eq = raw.IndexOf('=');
                 if (eq < 0) continue;
                 string key = raw.Substring(0, eq).Trim(), value = raw.Substring(eq + 1).Trim();
                 if (key == "last_check")
-                    DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out lastCheckUtc);
+                {
+                    if (!DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out lastCheckUtc))
+                        lastCheckUtc = DateTime.MinValue;
+                }
                 else if (key == "latest") latest = value;
                 else if (key == "latest_url") latestUrl = value;
             }
@@ -118,12 +130,16 @@ namespace TVFollow
 
         public static void Save(DateTime lastCheckUtc, string latest, string latestUrl)
         {
-            Directory.CreateDirectory(Settings.Dir);
-            File.WriteAllText(FilePath,
-                "# TVFollow's update check. Delete this file to check again right away.\r\n" +
-                "last_check=" + lastCheckUtc.ToString("o", CultureInfo.InvariantCulture) + "\r\n" +
-                "latest=" + latest + "\r\n" +
-                "latest_url=" + latestUrl + "\r\n");
+            try
+            {
+                Directory.CreateDirectory(Settings.Dir);
+                File.WriteAllText(FilePath,
+                    "# TVFollow's update check. Delete this file to check again right away.\r\n" +
+                    "last_check=" + lastCheckUtc.ToString("o", CultureInfo.InvariantCulture) + "\r\n" +
+                    "latest=" + latest + "\r\n" +
+                    "latest_url=" + latestUrl + "\r\n");
+            }
+            catch (Exception e) { Log.Write("couldn't save updates.ini: " + e.Message); }
         }
     }
 
