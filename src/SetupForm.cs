@@ -11,7 +11,8 @@ namespace TVFollow
     class SetupForm : Form
     {
         public const string HelpUrl = "https://github.com/still-b0r3d/TVFollow";
-        public const string MakerUrl = "https://b0r3d.org";
+        public const string MakerUrl = "https://github.com/still-b0r3d";
+        public const string Maker = "still b0r3d";
 
         public readonly Settings Settings;  // filled in step by step, saved on Finish
         public FoundTv Tv;                   // picked on the first page
@@ -139,7 +140,7 @@ namespace TVFollow
             {
                 AutoSize = true,
                 Location = new Point(24, 20),
-                Text = "TVFollow " + Program.Version + "  ·  Help  ·  made by b0r3d.org",
+                Text = "TVFollow " + Program.Version + "  ·  Help  ·  made by " + Maker,
                 LinkColor = SetupPage.Muted,
                 ActiveLinkColor = SystemColors.HotTrack,
                 LinkBehavior = LinkBehavior.HoverUnderline
@@ -147,7 +148,7 @@ namespace TVFollow
             string text = about.Text;
             about.Links.Clear();
             about.Links.Add(text.IndexOf("Help"), 4, HelpUrl);
-            about.Links.Add(text.IndexOf("b0r3d.org"), 9, MakerUrl);
+            about.Links.Add(text.LastIndexOf(Maker), Maker.Length, MakerUrl);
             about.LinkClicked += (s, e) => OpenUrl((string)e.Link.LinkData);
 
             footer.Controls.Add(buttons);

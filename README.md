@@ -221,6 +221,6 @@ compiler stamps each build differently.
 TVFollow is free. Use it, change it and share it, at home or at work, under the MIT
 License with the [Commons Clause](https://commonsclause.com/): the one thing nobody may
 do is sell it, or sell something whose value comes mostly from it. See
-[LICENSE](LICENSE). Made by [b0r3d.org](https://b0r3d.org).
+[LICENSE](LICENSE). Made by [still b0r3d](https://github.com/still-b0r3d).
 
 Roku is a trademark of Roku, Inc. TVFollow isn't affiliated with or endorsed by Roku.

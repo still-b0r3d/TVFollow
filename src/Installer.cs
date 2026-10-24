@@ -104,7 +104,7 @@ namespace TVFollow
             {
                 app.SetValue("DisplayName", "TVFollow");
                 app.SetValue("DisplayVersion", Program.Version);
-                app.SetValue("Publisher", "b0r3d.org");
+                app.SetValue("Publisher", SetupForm.Maker);
                 app.SetValue("DisplayIcon", Path.Combine(p.IconDir, "tv.ico"));
                 app.SetValue("InstallLocation", p.Dir);
                 app.SetValue("UninstallString", "\"" + p.Exe + "\" uninstall");

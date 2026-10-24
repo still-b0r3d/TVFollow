@@ -152,7 +152,7 @@ namespace TVFollow
             {
                 AutoSize = true,
                 Location = new Point(20, 18),
-                Text = "TVFollow " + Program.Version + "  ·  Help  ·  Open log  ·  made by b0r3d.org",
+                Text = "TVFollow " + Program.Version + "  ·  Help  ·  Open log  ·  made by " + SetupForm.Maker,
                 LinkColor = SetupPage.Muted,
                 ActiveLinkColor = SystemColors.HotTrack,
                 LinkBehavior = LinkBehavior.HoverUnderline
@@ -161,7 +161,7 @@ namespace TVFollow
             about.Links.Clear();
             about.Links.Add(text.IndexOf("Help"), 4, SetupForm.HelpUrl);
             about.Links.Add(text.IndexOf("Open log"), 8, "log");
-            about.Links.Add(text.IndexOf("b0r3d.org"), 9, SetupForm.MakerUrl);
+            about.Links.Add(text.LastIndexOf(SetupForm.Maker), SetupForm.Maker.Length, SetupForm.MakerUrl);
             about.LinkClicked += (s, e) =>
             {
                 if ((string)e.Link.LinkData == "log") Tray.OpenLog();

@@ -522,7 +522,7 @@ namespace TVFollow.Tests
                 {
                     Check(app != null && (string)app.GetValue("DisplayName") == "TVFollow", "Apps entry missing");
                     Check((string)app.GetValue("UninstallString") == "\"" + p.Exe + "\" uninstall", "uninstall command wrong");
-                    Check((string)app.GetValue("Publisher") == "b0r3d.org" && (string)app.GetValue("DisplayVersion") == Program.Version, "publisher/version");
+                    Check((string)app.GetValue("Publisher") == "still b0r3d" && (string)app.GetValue("DisplayVersion") == Program.Version, "publisher/version");
                 }
 
                 // change the options: shortcuts and start-with-Windows go away
