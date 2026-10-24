@@ -17,6 +17,8 @@ The first public release.
   on.
 - Installs per user without admin. Start menu entry, optional start with Windows,
   optional TV on / off / to PC desktop shortcuts, and uninstall from Settings → Apps.
+- Or runs portable: settings in a `TVFollow data` folder next to the exe, nothing else on
+  the PC touched.
 - A tray icon with TV buttons, Pause following (remembered across restarts), Settings,
   the log and Quit.
 - Opening a newer TVFollow.exe shows setup, and finishing installs it over the old one.

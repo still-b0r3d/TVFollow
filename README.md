@@ -36,6 +36,16 @@ the TV is one of your screens.
 
 TVFollow installs just for your Windows account and never asks for admin rights.
 
+### Or run it portable
+
+Rather not install anything? On setup's last page, choose **Portable: run from this
+folder and change nothing else on this PC**. Put TVFollow.exe in a folder of your own
+first (not straight out of a zip). TVFollow then keeps its settings and log in a
+`TVFollow data` folder next to the exe, and touches nothing else: no Start menu, no
+Apps list, no registry. It won't start by itself when you sign in, so open it when you
+want it. To remove it, right-click the tray icon → **Quit TVFollow** and delete the
+folder. To update it, replace TVFollow.exe in that folder.
+
 ## Setup, step by step
 
 **1. Find your TV.** TVFollow looks for TVs on your network and picks yours if there's
@@ -69,7 +79,7 @@ If the TV can't be reached while it's off, turn on **Fast TV start** on the TV
 switch their network off along with the screen.
 
 **5. All set.** Choose what TVFollow should do (including whether it tells you about new
-versions), then click **Finish**.
+versions) and whether to install it or run it portable, then click **Finish**.
 
 ![Step 5: the options](docs/images/5-finish.png)
 

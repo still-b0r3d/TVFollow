@@ -89,6 +89,14 @@ network (never on other networks a laptop joins), at most once every ten minutes
 you'd rather check it yourself, [build it from the source](../README.md#build-it-yourself).
 The SHA-256 checksum next to each release download is for checking that download.
 
+## The portable choice is greyed out
+
+The note under it says why. Portable needs a folder of your own that TVFollow can write
+to. It isn't offered when TVFollow runs from its install folder (that's the installed
+copy), or from a temporary folder, which is where Windows puts an exe opened straight from
+a zip: unzip it first. It also isn't offered in a folder TVFollow can't write to, such as
+Program Files.
+
 ## Two PCs, one TV
 
 Both can run TVFollow. Each one only turns the TV off while it's showing *that* PC's

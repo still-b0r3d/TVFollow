@@ -115,3 +115,9 @@ check_updates=yes
 
 Everything is per user, so TVFollow never needs admin rights. Uninstalling removes all
 of it.
+
+**Portable copies** keep `settings.ini`, the log and `updates.ini` in a `TVFollow data`
+folder next to TVFollow.exe, and write nothing anywhere else: no registry, no Start menu,
+no Apps entry. That folder is how TVFollow knows it's portable. Installed or portable,
+only one TVFollow follows the monitors at a time: a second one started alongside steps
+back.
