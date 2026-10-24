@@ -54,6 +54,8 @@ namespace TVFollow
     static class Installer
     {
         public const string RunValue = "TVFollow";
+        // The Apps list's publisher line: a nod to b0r3d.org. Everywhere else says still b0r3d.
+        public const string Publisher = "b0r3d.org";
         static readonly string[] IconNames = { "tv.ico", "tv-paused.ico", "tv-on.ico", "tv-off.ico", "tv-pc.ico" };
 
         // the optional desktop shortcuts: file name, command, icon
@@ -104,7 +106,7 @@ namespace TVFollow
             {
                 app.SetValue("DisplayName", "TVFollow");
                 app.SetValue("DisplayVersion", Program.Version);
-                app.SetValue("Publisher", SetupForm.Maker);
+                app.SetValue("Publisher", Publisher);
                 app.SetValue("DisplayIcon", Path.Combine(p.IconDir, "tv.ico"));
                 app.SetValue("InstallLocation", p.Dir);
                 app.SetValue("UninstallString", "\"" + p.Exe + "\" uninstall");
