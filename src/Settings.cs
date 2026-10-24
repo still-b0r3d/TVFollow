@@ -24,6 +24,7 @@ namespace TVFollow
         public bool OnWithMonitors = true;
         public bool StartWithWindows = true;
         public bool DesktopShortcuts;
+        public bool CheckUpdates = true;
 
         public bool IsComplete { get { return Ip.Length > 0 && Serial.Length > 0; } }
 
@@ -56,6 +57,7 @@ namespace TVFollow
                     case "on_with_monitors": s.OnWithMonitors = !IsNo(value); break;
                     case "start_with_windows": s.StartWithWindows = !IsNo(value); break;
                     case "desktop_shortcuts": s.DesktopShortcuts = !IsNo(value); break;
+                    case "check_updates": s.CheckUpdates = !IsNo(value); break;
                 }
             }
             return s;
@@ -74,6 +76,7 @@ namespace TVFollow
                 "on_with_monitors=" + (OnWithMonitors ? "yes" : "no") + "\r\n" +
                 "start_with_windows=" + (StartWithWindows ? "yes" : "no") + "\r\n" +
                 "desktop_shortcuts=" + (DesktopShortcuts ? "yes" : "no") + "\r\n" +
+                "check_updates=" + (CheckUpdates ? "yes" : "no") + "\r\n" +
                 (Port != DefaultPort ? "port=" + Port + "\r\n" : "");
             string temp = FilePath + ".tmp";
             File.WriteAllText(temp, text);

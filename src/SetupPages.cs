@@ -458,7 +458,7 @@ namespace TVFollow
     class FinishPage : SetupPage
     {
         readonly Label summary;
-        readonly CheckBox off, on, startup, shortcuts;
+        readonly CheckBox off, on, startup, shortcuts, updates;
 
         public FinishPage(SetupForm setup) : base(setup)
         {
@@ -466,7 +466,9 @@ namespace TVFollow
             off = Option("Turn the TV off when this PC's monitors turn off", 6);
             on = Option("Turn the TV on and switch it to this PC when you come back", 6);
             startup = Option("Start TVFollow when you sign in to Windows", 6);
-            shortcuts = Option("Put TV on, TV off and TV to PC shortcuts on the desktop", 14);
+            shortcuts = Option("Put TV on, TV off and TV to PC shortcuts on the desktop", 6);
+            updates = Option("Tell me when there's a new version (checks GitHub once a week)", 14);
+            updates.CheckedChanged += delegate { Setup.Settings.CheckUpdates = updates.Checked; };
             off.CheckedChanged += delegate { Setup.Settings.OffWithMonitors = off.Checked; };
             on.CheckedChanged += delegate { Setup.Settings.OnWithMonitors = on.Checked; };
             startup.CheckedChanged += delegate { Setup.Settings.StartWithWindows = startup.Checked; };
@@ -492,6 +494,7 @@ namespace TVFollow
             on.Checked = Setup.Settings.OnWithMonitors;
             startup.Checked = Setup.Settings.StartWithWindows;
             shortcuts.Checked = Setup.Settings.DesktopShortcuts;
+            updates.Checked = Setup.Settings.CheckUpdates;
         }
     }
 }

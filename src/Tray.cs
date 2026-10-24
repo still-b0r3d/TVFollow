@@ -26,6 +26,8 @@ namespace TVFollow
         readonly Controller controller;
         readonly Icon following, paused;
         readonly ToolStripMenuItem state, pause;
+        ToolStripMenuItem update;
+        string balloonUrl; // where clicking the current notification goes, if anywhere
 
         public Tray(Follower follower, Controller controller)
         {
@@ -51,14 +53,34 @@ namespace TVFollow
 
             icon.ContextMenuStrip = menu;
             icon.DoubleClick += delegate { OpenSettings(); };
+            icon.BalloonTipClicked += delegate { if (balloonUrl != null) SetupForm.OpenUrl(balloonUrl); };
             Show();
             icon.Visible = true;
         }
 
         public ContextMenuStrip Menu { get { return icon.ContextMenuStrip; } }
 
+        // A newer TVFollow is out: a menu item from now on, and a notification if notify is set.
+        public void ShowUpdate(string version, string url, bool notify)
+        {
+            if (update == null)
+            {
+                update = new ToolStripMenuItem { Font = new Font(icon.ContextMenuStrip.Font, FontStyle.Bold) };
+                update.Click += delegate { SetupForm.OpenUrl((string)update.Tag); };
+                icon.ContextMenuStrip.Items.Insert(1, update);
+            }
+            update.Text = "Get TVFollow " + version + "…";
+            update.Tag = url;
+            if (!notify) return;
+            balloonUrl = url;
+            icon.ShowBalloonTip(10000, "TVFollow " + version + " is out",
+                "Click here to see what's new and download it. You're on " + Program.Version + ".", ToolTipIcon.Info);
+            Log.Write("told about TVFollow " + version);
+        }
+
         public void Greet()
         {
+            balloonUrl = null;
             icon.ShowBalloonTip(6000, "TVFollow is running",
                 "Your TV now follows this PC's monitors. Right-click the TV icon here for TV buttons and settings.", ToolTipIcon.Info);
         }

@@ -125,7 +125,7 @@ namespace TVFollow
                 DeleteEmptyDir(p.DesktopDir, "Desktop");
             }
 
-            foreach (string name in new[] { "settings.ini", "settings.ini.tmp", "TVFollow.log", "TVFollow.log.old" })
+            foreach (string name in new[] { "settings.ini", "settings.ini.tmp", "updates.ini", "TVFollow.log", "TVFollow.log.old" })
                 DeleteFile(Path.Combine(Settings.Dir, name));
 
             // only ever delete a folder that is clearly TVFollow's own

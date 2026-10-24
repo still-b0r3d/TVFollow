@@ -13,7 +13,7 @@ if not exist "%CSC%" (
 )
 
 rem /codepage:65001 reads the source as UTF-8 (it has a few non-ASCII characters)
-set "OPTS=/nologo /debug- /codepage:65001 /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll /r:System.Xml.dll"
+set "OPTS=/nologo /debug- /codepage:65001 /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Runtime.Serialization.dll /r:System.Windows.Forms.dll /r:System.Xml.dll"
 set "ICONS=/resource:assets\tv.ico,TVFollow.tv.ico /resource:assets\tv-paused.ico,TVFollow.tv-paused.ico /resource:assets\tv-on.ico,TVFollow.tv-on.ico /resource:assets\tv-off.ico,TVFollow.tv-off.ico /resource:assets\tv-pc.ico,TVFollow.tv-pc.ico"
 if not exist bin mkdir bin
 

@@ -47,6 +47,9 @@ namespace TVFollow.Tests
             Run("install, change options, uninstall", InstallAndUninstall);
             Run("a trial copy stays inside its own folder", TrialInstallPaths);
             Run("the icons are built in", IconsAreBuiltIn);
+            Run("updates: comparing versions", UpdateVersions);
+            Run("updates: reading GitHub's answer and the weekly timing", UpdateParsingAndTiming);
+            Run("updates: remembering the last check", UpdateState);
             Run("version matches the exe's version", VersionMatches);
 
             try { Directory.Delete(home, true); } catch { }
@@ -118,13 +121,14 @@ namespace TVFollow.Tests
             s.OnWithMonitors = false;
             s.StartWithWindows = false;
             s.DesktopShortcuts = true;
+            s.CheckUpdates = false;
             s.Save();
             s.Save(); // second save replaces the file
             Settings t = Settings.Load();
             Check(t.Ip == s.Ip && t.Serial == s.Serial && t.Input == "hdmi2" && t.WakeMac == s.WakeMac, "fields lost");
             Check(t.Port == 18060, "port lost");
             Check(!t.OnWithMonitors && t.OffWithMonitors, "options lost");
-            Check(!t.StartWithWindows && t.DesktopShortcuts, "install options lost");
+            Check(!t.StartWithWindows && t.DesktopShortcuts && !t.CheckUpdates, "install options lost");
             Check(t.PcApp == "tvinput.hdmi2", "PC app wrong");
             File.Delete(Settings.FilePath);
         }
@@ -525,7 +529,9 @@ namespace TVFollow.Tests
                 using (var run = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(p.RunKey))
                     Check(run == null || run.GetValue(Installer.RunValue) == null, "start-with-Windows not removed");
 
+                Updates.Save(DateTime.UtcNow, "", "");
                 Installer.Uninstall(p);
+                Check(!File.Exists(Updates.FilePath), "update-check file left behind");
                 Check(!Directory.Exists(p.Dir), "program folder left behind");
                 Check(!File.Exists(p.StartMenuLink), "Start menu shortcut left behind");
                 Check(!File.Exists(Settings.FilePath), "settings left behind");
@@ -554,6 +560,48 @@ namespace TVFollow.Tests
                 using (System.Drawing.Icon icon = AppIcons.Load(name, new System.Drawing.Size(16, 16)))
                     Check(icon.Width == 16, name + " has no 16 px picture");
             }
+        }
+
+        // ---- update check ----
+
+        static void UpdateVersions()
+        {
+            Check(Updates.IsNewer("1.1", "1.0") && Updates.IsNewer("v1.0.1", "1.0") && Updates.IsNewer("1.10", "1.9"), "newer not seen");
+            Check(!Updates.IsNewer("v1.0", "1.0") && !Updates.IsNewer("1.0.0", "1.0") && !Updates.IsNewer("0.9", "1.0"), "same or older counted as newer");
+            Check(!Updates.IsNewer("", "1.0") && !Updates.IsNewer("1.1-beta", "1.0") && !Updates.IsNewer(null, "1.0"), "nonsense counted as newer");
+        }
+
+        static void UpdateParsingAndTiming()
+        {
+            Release r = Release.Parse("{\"url\":\"https://api.github.com/x\",\"html_url\":\"https://github.com/still-b0r3d/TVFollow/releases/tag/v1.1\"," +
+                "\"id\":1,\"author\":{\"login\":\"someone\",\"html_url\":\"https://github.com/someone\"},\"tag_name\":\"v1.1\",\"draft\":false," +
+                "\"prerelease\":false,\"assets\":[{\"name\":\"TVFollow.exe\"}],\"body\":\"What's new\"}");
+            Check(r.Tag == "v1.1" && r.Version == "1.1", "tag read wrong: " + r.Tag);
+            Check(r.Url == "https://github.com/still-b0r3d/TVFollow/releases/tag/v1.1", "picked the wrong html_url: " + r.Url);
+            Check(!r.Draft && !r.Prerelease, "flags read wrong");
+            Check(Updates.IsOurPage(r.Url), "own release page refused");
+            Check(!Updates.IsOurPage("https://example.com/TVFollow/releases/") && !Updates.IsOurPage("https://github.com/still-b0r3d/TVFollowX/releases/"),
+                "a stranger's page would be opened");
+
+            DateTime now = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+            Check(Updates.IsDue(DateTime.MinValue, now), "never checked: due");
+            Check(!Updates.IsDue(now.AddDays(-6), now), "six days ago: not due yet");
+            Check(Updates.IsDue(now.AddDays(-7), now), "a week ago: due");
+            Check(Updates.IsDue(now.AddDays(3), now), "a clock set back: due");
+        }
+
+        static void UpdateState()
+        {
+            DateTime when = new DateTime(2026, 11, 1, 12, 30, 0, DateTimeKind.Utc);
+            Updates.Save(when, "1.1", "https://github.com/still-b0r3d/TVFollow/releases/tag/v1.1");
+            DateTime last;
+            string latest, url;
+            Updates.Load(out last, out latest, out url);
+            Check(last == when && last.Kind == DateTimeKind.Utc, "time came back as " + last.ToString("o"));
+            Check(latest == "1.1" && url.EndsWith("/v1.1"), "version or link lost");
+            File.Delete(Updates.FilePath);
+            Updates.Load(out last, out latest, out url);
+            Check(last == DateTime.MinValue && latest == "", "no file should mean never checked");
         }
 
         static void VersionMatches()

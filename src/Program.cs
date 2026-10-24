@@ -143,7 +143,9 @@ namespace TVFollow
                     using (var tray = new Tray(follower, controller))
                     {
                         if (greet) tray.Greet();
+                        UpdateWatcher updates = settings.CheckUpdates ? new UpdateWatcher(tray) : null;
                         Application.Run();
+                        GC.KeepAlive(updates);
                     }
                     GC.KeepAlive(follower);
                 }
