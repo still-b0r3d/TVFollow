@@ -19,6 +19,9 @@ Fixes from a second review of 1.0.
 - A settings file that can't be read at sign-in (held open by another program, say) no
   longer makes TVFollow silently fail to start. It waits a few seconds, then says what's
   wrong, instead of running with the wrong settings or offering setup as if there were none.
+- An `ip=` line in settings.ini that isn't an IPv4 address (a hand edit gone wrong) is
+  ignored and logged, so TVFollow asks to be set up again instead of talking to whatever the
+  line named.
 
 ## 1.0 (2026-10-24)
 

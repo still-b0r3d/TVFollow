@@ -24,6 +24,7 @@ namespace TVFollow.Tests
             Run("remote: pasted text becomes presses, first line only", LettersFromText);
             Run("remote: a paste reaches the TV in order, a busy clipboard sends nothing", RemotePasteIsSent);
             Run("settings: a held file is waited for, then reported, never a crash", SettingsFileHeld);
+            Run("settings: an address that isn't one is dropped", SettingsBadAddress);
         }
 
         // ---- settings ----
@@ -62,6 +63,28 @@ namespace TVFollow.Tests
                 Settings.ReadRetries = retries;
                 File.Delete(Settings.FilePath);
             }
+        }
+
+        static void SettingsBadAddress()
+        {
+            Directory.CreateDirectory(Settings.Dir);
+            // an empty line is what an unfinished setup leaves, not junk: no log line for it
+            File.WriteAllText(Settings.FilePath, "ip=\r\n");
+            Check(Settings.Load().Ip == "" && !LogText().Contains("isn't an IPv4"), "an empty address isn't junk");
+            foreach (string bad in new[] { "example.com/x?", "fe80::1", "192.168.1.50:8060", "my.tv.home" })
+            {
+                File.WriteAllText(Settings.FilePath, "ip=" + bad + "\r\nserial=X000000001\r\n");
+                Settings s = Settings.Load();
+                Check(s.Ip == "" && !s.IsComplete, "a bad address was kept: [" + s.Ip + "]");
+                Check(LogText().Contains("ip=" + bad), "the bad address wasn't logged: " + bad);
+            }
+            foreach (string good in new[] { "192.168.1.50", "10.0.0.7", "0x7F.0.0.1" })
+            {
+                File.WriteAllText(Settings.FilePath, "ip=" + good + "   # the TV\r\nserial=X000000001\r\n");
+                Settings s = Settings.Load();
+                Check(s.Ip == good && s.IsComplete, "a good address was dropped: " + good + " -> [" + s.Ip + "]");
+            }
+            File.Delete(Settings.FilePath);
         }
 
         // ---- the remote's typing box ----

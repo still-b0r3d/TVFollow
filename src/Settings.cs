@@ -115,7 +115,12 @@ namespace TVFollow
                 value = value.Trim();
                 switch (key)
                 {
-                    case "ip": s.Ip = value; break;
+                    case "ip":
+                        // the address goes straight into a URL, so only an IPv4 address will do
+                        uint ipValue;
+                        if (LocalNetwork.TryParse(value, out ipValue)) s.Ip = value;
+                        else if (value.Length > 0) Log.Write("settings: ip=" + value + " isn't an IPv4 address, ignored");
+                        break;
                     case "serial": s.Serial = value; break;
                     case "input": s.Input = value.ToLowerInvariant(); break;
                     case "wake_mac":
