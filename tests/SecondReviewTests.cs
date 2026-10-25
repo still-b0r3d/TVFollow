@@ -27,6 +27,7 @@ namespace TVFollow.Tests
             Run("settings: an address that isn't one is dropped", SettingsBadAddress);
             Run("controller: two callers at once take turns", ControllerIsSerialised);
             Run("controller: the quick off at sleep doesn't wait its turn", QuickOffDoesNotWait);
+            Run("on: a TV that's already on gets the input press at once", InputPressedAtOnceWhenOn);
         }
 
         // ---- the controller ----
@@ -70,6 +71,29 @@ namespace TVFollow.Tests
                 Check(watch.ElapsedMilliseconds < 1500, "the quick off waited " + watch.ElapsedMilliseconds + " ms behind a running sequence");
                 Check(LogText().Contains("leaving it on"), "the quick off should have looked at the TV");
                 Check(busy.Join(30000), "the sequence got stuck");
+            }
+        }
+
+        static void InputPressedAtOnceWhenOn()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                tv.App = "12"; // on, watching some channel
+                Controller c = Fast(new Controller(SettingsFor(tv)));
+                c.FirstCheckMs = 5000; // would be waited out before the first press if the TV had been off
+                var watch = Stopwatch.StartNew();
+                c.TurnOn(TurnOnMode.ToPc);
+                watch.Stop();
+                Check(tv.App == "tvinput.hdmi1", "the input didn't switch");
+                Check(watch.ElapsedMilliseconds < 2500, "waited " + watch.ElapsedMilliseconds + " ms to press the input on a TV that was already on");
+                // a TV that was off still gets its moment after power on
+                tv.PowerMode = "DisplayOff";
+                tv.App = "12";
+                c.FirstCheckMs = 400;
+                watch = Stopwatch.StartNew();
+                c.TurnOn(TurnOnMode.ToPc);
+                watch.Stop();
+                Check(tv.App == "tvinput.hdmi1" && watch.ElapsedMilliseconds >= 350, "a TV just turned on should get a moment before the input press: " + watch.ElapsedMilliseconds + " ms");
             }
         }
 

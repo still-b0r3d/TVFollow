@@ -27,6 +27,8 @@ Fixes from a second review of 1.0.
   it to finish instead of pressing buttons in between. Sleep and shutdown don't wait.
 - The remote no longer risks ending TVFollow when the TV's answer arrives just as the remote
   window closes.
+- TV to PC (the button, the shortcut and the `pc` command) presses the input straight away
+  when the TV is already on, instead of waiting a second and a half first.
 
 ## 1.0 (2026-10-24)
 

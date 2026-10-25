@@ -94,7 +94,9 @@ namespace TVFollow
 
             for (int i = 0; i < 8; i++)
             {
-                Thread.Sleep(i == 0 ? FirstCheckMs : RetryMs);
+                // a TV that was already on can take the input press at once; one just turned on
+                // needs a moment first
+                if (i > 0 || !s.IsOn) Thread.Sleep(i == 0 ? FirstCheckMs : RetryMs);
                 TvState now = Query();
                 if (now.IsOn && now.App == settings.PcApp) { Log.Write(tag + ": showing the PC"); return; }
                 if (!now.IsOn) continue;
