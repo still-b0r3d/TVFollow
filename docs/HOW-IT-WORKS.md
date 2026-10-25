@@ -59,21 +59,29 @@ about them. Setup also tries the address you used last time, so a TV you had to 
 is found again.
 
 If the TV later stops answering and the PC is on the TV's network, TVFollow searches that
-network only (never other networks a laptop joins), at most once every ten minutes, and
-picks the TV out by its serial number, so it never grabs a different Roku in the house.
+network only, at most once every ten minutes, and picks the TV out by its serial number, so
+it never grabs a different Roku in the house. It doesn't search other networks a laptop
+joins, except when you press one of its TV buttons yourself (see the router note below).
 
 If the TV doesn't answer when it's time to turn it on, TVFollow sends a
 **Wake-on-LAN packet** for the TV's network card (Wi-Fi or cable, whichever the TV uses;
 TVFollow notices if that changes) to the broadcast address of each network the PC is on,
 again every 3 seconds, and gives the TV 20 seconds to wake up. If the PC isn't on the
-TV's network, it only asks the TV's last address whether it's there, and sends nothing else.
+TV's network, it only asks the TV's last address whether it's there, and sends no wake packet.
 
 "The TV's network" means the network behind your home router, not just the same kind of
 addresses: a laptop that joins a hotel or office network which also uses `192.168.1.x` finds
-a different router there, so TVFollow leaves that network alone. It remembers the home
-router's hardware address the first time the TV answers, and learns a new one the same way
-(after a router swap, turn the TV on once with its remote; if the new router also gave the TV
-a new address, go through **Settings… → Change TV…** once).
+a different router there, so the automatic following leaves that network alone. TVFollow
+remembers the home router's hardware address the first time the TV answers.
+
+After a router swap the router no longer matches, so the automatic following goes quiet at
+home too until TVFollow finds the TV again. Press one of its TV buttons once: **TV to PC**,
+**TV on** or **TV off** in the tray, the remote's **TV to PC**, or a desktop shortcut. On a
+network with your home's addresses, a button you press yourself searches for the TV by its
+serial number, even if the new router gave it a new address, without a wake packet; once the
+TV answers, TVFollow learns the new router and follows again. The flip side: pressing one of
+those buttons on a hotel network that happens to use your home's addresses makes TVFollow look
+for your TV there. It only ever acts on a TV with your TV's serial number.
 
 ## Checking for new versions
 

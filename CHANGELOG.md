@@ -8,10 +8,10 @@ Fixes from a second review of 1.0.
   followed, so nothing answering in the TV's place can send the PC on to another address.
 - "The TV's network" now means the network behind your home router, not just the same
   kind of addresses. A laptop on a hotel or office network that happens to use the same
-  numbers no longer sends wake packets or looks around for the TV there. TVFollow learns
-  the router the first time the TV answers (new `gateway_mac` setting). After a router
-  swap, turn the TV on once with its remote and it learns the new one; if the new router
-  also gave the TV a new address, go through Settings… → Change TV… once.
+  numbers no longer sends wake packets or looks around for the TV there on its own. TVFollow
+  learns the router the first time the TV answers (new `gateway_mac` setting). After a
+  router swap, press TV to PC (or TV on or off) once: a button you press yourself looks for
+  the TV by its serial number, even at a new address, and TVFollow learns the new router.
 - Typing an emoji into the remote's search box no longer trips an error dialog (which could
   end TVFollow). It goes to the TV as typed; whether the TV shows it is up to the TV.
 - A dot, slash or backslash typed into the remote's search box now reaches the TV as typed

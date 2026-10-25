@@ -41,13 +41,15 @@ namespace TVFollow
         public Func<bool> OnTvNetwork;                  // is the PC on the network the TV was last seen on?
         public Func<List<string>> Candidates;           // where to look if the TV moved
         public Func<string, string> GatewayMacFor = Discovery.GatewayMacFor;  // the router of the network an address is on
+        public Func<bool> SameNumbers;                  // is the TV's last address in one of the PC's address ranges?
 
         public Controller(Settings settings)
         {
             this.settings = settings;
             tv = new RokuClient(settings.Ip, settings.Port);
+            SameNumbers = () => Discovery.IsLocal(this.settings.Ip);
             // the same address range isn't the same network: the router has to match too, once known
-            OnTvNetwork = () => Discovery.IsLocal(this.settings.Ip) &&
+            OnTvNetwork = () => SameNumbers() &&
                 Discovery.OnNetworkOf(true, this.settings.GatewayMac, GatewayMacFor(this.settings.Ip));
             Candidates = () => Discovery.SweepAround(this.settings.Ip, this.settings.Port, SweepWaitMs);
         }
@@ -70,13 +72,14 @@ namespace TVFollow
             TvState s = WaitReachable(ReachMs);
             if (!s.Reachable)
             {
-                if (!OnTvNetwork())
+                if (OnTvNetwork()) s = WakeUp(tag);
+                else if (mode != TurnOnMode.Follow && SameNumbers()) LookingAfterRouterChange(tag);
+                else
                 {
                     // a laptop away from home, say: don't wake or search anything on this network
                     Log.Write(tag + ": this PC isn't on the TV's network, leaving it alone");
                     return;
                 }
-                s = WakeUp(tag);
             }
             if (!s.Reachable && Rediscover()) s = Query();
             if (!s.Reachable) { Log.Write(tag + ": TV not found"); return; }
@@ -107,6 +110,15 @@ namespace TVFollow
                 if (i == 0) Log.Write(tag + ": switching to the PC -> " + code);
             }
             Log.Write(tag + ": gave up waiting for the PC input");
+        }
+
+        // Someone pressed a TV button (not the automatic following) on a network that has the TV's
+        // addresses but not the router it was last seen behind. After a router swap the TV may
+        // have a new address, so the search by serial number goes ahead; no wake packet, since
+        // this may not be home. Finding the TV teaches TVFollow the new router.
+        void LookingAfterRouterChange(string tag)
+        {
+            Log.Write(tag + ": the router isn't the one the TV was last seen behind; looking for the TV by its serial number");
         }
 
         // The wake packet, sent again every few seconds while waiting for the TV to answer.
@@ -152,7 +164,11 @@ namespace TVFollow
             TvState s = quick ? Query(800) : Query();
             if (!s.Reachable && !quick)
             {
-                if (!OnTvNetwork()) { Log.Write(tag + ": this PC isn't on the TV's network"); return; }
+                if (!OnTvNetwork())
+                {
+                    if (!force || !SameNumbers()) { Log.Write(tag + ": this PC isn't on the TV's network"); return; }
+                    LookingAfterRouterChange(tag);
+                }
                 if (Rediscover()) s = Query();
             }
             if (!s.Reachable) { Log.Write(tag + ": TV not answering"); return; }

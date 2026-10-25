@@ -104,6 +104,7 @@ namespace TVFollow.Tests
             c.SendWake = mac => { throw new Exception("unexpected wake packet"); };
             c.Candidates = () => new List<string>();
             c.OnTvNetwork = () => true;
+            c.SameNumbers = () => false; // a test that takes the PC off the TV's network means all the way off
             c.GatewayMacFor = ip => "";
             c.SearchEvery = TimeSpan.Zero;
             c.WakeRepeatMs = 1000000;

@@ -19,6 +19,7 @@ namespace TVFollow.Tests
             Run("a redirect from the TV is not followed", RedirectIsNotFollowed);
             Run("the TV's network: the same numbers aren't the same network", NetworkGate);
             Run("the TV's router is remembered, kept, and never asked for at sleep", GatewayMacIsRemembered);
+            Run("after a router swap a TV button finds the moved TV; the automatic following doesn't look", RouterSwapButtonFindsTv);
             Run("remote: an emoji is one letter, half of one throws", RemoteEmojiLetter);
             Run("remote: an emoji typed in halves is one press, a stray half is nothing", RemoteEmojiTyped);
             Run("remote: every typed character reaches the TV as typed, . / and \\ too", EveryCharacterArrivesAsTyped);
@@ -342,6 +343,65 @@ namespace TVFollow.Tests
                 tv.PowerMode = "PowerOn";
                 c.TurnOff(false, true);
                 Check(tv.Count("POST /keypress/PowerOff") == 3, "power off pressed " + tv.Count("POST /keypress/PowerOff") + " times, expected 3");
+                File.Delete(Settings.FilePath);
+            }
+        }
+
+        // The router was replaced and the new one gave the TV a new address: the old address has
+        // nothing on it, the TV answers at another one, and the router isn't the remembered one.
+        static void RouterSwapButtonFindsTv()
+        {
+            using (var tv = new FakeTv("127.0.0.2", 0))
+            {
+                tv.App = "12"; // on, showing a channel
+                int searches = 0;
+                Func<Settings, Controller> afterSwap = s =>
+                {
+                    Controller c = Fast(new Controller(s)); // Fast: a wake packet would throw
+                    c.OnTvNetwork = () => false;            // not the router the TV was last seen behind
+                    c.SameNumbers = () => true;             // but home's address range
+                    c.GatewayMacFor = ip => "BB:BB:BB:BB:BB:BB";
+                    c.Candidates = () => { searches++; return new List<string> { "127.0.0.2" }; };
+                    return c;
+                };
+                Func<Settings> moved = () =>
+                {
+                    Settings s = SettingsFor(tv);
+                    s.Ip = "127.0.0.3"; // where the TV used to be
+                    s.GatewayMac = "AA:AA:AA:AA:AA:AA";
+                    s.Save();
+                    return s;
+                };
+
+                // the automatic following leaves a network with another router alone
+                Settings home = moved();
+                Controller follow = afterSwap(home);
+                follow.TurnOn(TurnOnMode.Follow);
+                follow.TurnOff(false, false);
+                Check(searches == 0 && tv.Presses == 0, "the automatic following looked for the TV behind another router");
+
+                // a person pressing TV to PC gets the TV found, switched, and the new router learned
+                Controller button = afterSwap(home);
+                button.TurnOn(TurnOnMode.ToPc);
+                Check(searches == 1, "TV to PC didn't look for the TV: " + searches + " searches");
+                Check(home.Ip == "127.0.0.2" && Settings.Load().Ip == "127.0.0.2", "the TV's new address wasn't saved: " + home.Ip);
+                Check(home.GatewayMac == "BB:BB:BB:BB:BB:BB" && Settings.Load().GatewayMac == "BB:BB:BB:BB:BB:BB", "the new router wasn't learned");
+                Check(tv.App == "tvinput.hdmi1", "the TV wasn't switched to the PC");
+                Check(LogText().Contains("looking for the TV by its serial number"), "the log doesn't say why it looked");
+
+                // the tray's TV off does the same
+                tv.App = "tvinput.hdmi1";
+                Controller off = afterSwap(moved());
+                off.TurnOff(true, false);
+                Check(searches == 2 && tv.Count("POST /keypress/PowerOff") == 1, "TV off didn't find the moved TV");
+
+                // a network with other numbers is left alone even for a button
+                tv.PowerMode = "PowerOn";
+                Controller away = afterSwap(moved());
+                away.SameNumbers = () => false;
+                away.TurnOn(TurnOnMode.ToPc);
+                away.TurnOff(true, false);
+                Check(searches == 2 && tv.Count("POST /keypress/PowerOff") == 1, "a button looked for the TV on a network with other numbers");
                 File.Delete(Settings.FilePath);
             }
         }
