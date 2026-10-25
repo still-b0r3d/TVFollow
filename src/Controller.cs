@@ -187,7 +187,8 @@ namespace TVFollow
             s.Reachable = true;
             s.PowerMode = info.PowerMode;
             s.App = tv.GetActiveApp(timeoutMs) ?? "";
-            if (info.WakeMac.Length > 0 && !string.Equals(info.WakeMac, settings.WakeMac, StringComparison.OrdinalIgnoreCase))
+            // only an address that reads as one replaces the saved one: the reply is the TV's word
+            if (Wake.ParseMac(info.WakeMac) != null && !string.Equals(info.WakeMac, settings.WakeMac, StringComparison.OrdinalIgnoreCase))
             {
                 // moved from Wi-Fi to a cable, or the other way round
                 settings.WakeMac = info.WakeMac;

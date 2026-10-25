@@ -22,6 +22,8 @@ Fixes from a second review of 1.0.
 - An `ip=` line in settings.ini that isn't an IPv4 address (a hand edit gone wrong) is
   ignored and logged, so TVFollow asks to be set up again instead of talking to whatever the
   line named.
+- Nothing a TV says about itself can add lines to settings.ini any more. A reply with a line
+  break in it (in its network address, say) could have changed the saved TV address or port.
 - The automatic following and the tray and remote buttons no longer talk to the TV at the
   same time. A button pressed while a sequence is running (waking the TV, say) waits for
   it to finish instead of pressing buttons in between. Sleep and shutdown don't wait.

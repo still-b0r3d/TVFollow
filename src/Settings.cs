@@ -158,23 +158,33 @@ namespace TVFollow
             Directory.CreateDirectory(Dir);
             string text =
                 "# TVFollow settings. The setup window writes this file.\r\n" +
-                "ip=" + Ip + "\r\n" +
-                "serial=" + Serial + "\r\n" +
-                "input=" + Input + "\r\n" +
-                "wake_mac=" + WakeMac + "\r\n" +
-                "gateway_mac=" + GatewayMac + "\r\n" +
+                "ip=" + OneLine(Ip) + "\r\n" +
+                "serial=" + OneLine(Serial) + "\r\n" +
+                "input=" + OneLine(Input) + "\r\n" +
+                "wake_mac=" + OneLine(WakeMac) + "\r\n" +
+                "gateway_mac=" + OneLine(GatewayMac) + "\r\n" +
                 "off_with_monitors=" + (OffWithMonitors ? "yes" : "no") + "\r\n" +
                 "on_with_monitors=" + (OnWithMonitors ? "yes" : "no") + "\r\n" +
                 "start_with_windows=" + (StartWithWindows ? "yes" : "no") + "\r\n" +
                 "desktop_shortcuts=" + (DesktopShortcuts ? "yes" : "no") + "\r\n" +
                 "check_updates=" + (CheckUpdates ? "yes" : "no") + "\r\n" +
-                "remote_layout=" + RemoteLayout + "\r\n" +
+                "remote_layout=" + OneLine(RemoteLayout) + "\r\n" +
                 (Paused ? "paused=yes\r\n" : "") +
                 (Port != DefaultPort ? "port=" + Port + "\r\n" : "");
             string temp = FilePath + ".tmp";
             File.WriteAllText(temp, text);
             if (File.Exists(FilePath)) File.Replace(temp, FilePath, null);
             else File.Move(temp, FilePath);
+        }
+
+        // Some values come from the TV's own answers (its serial, its network card, its input
+        // names). A line break in one would start a line of its own in the file and could set
+        // ip=, serial= or port= behind the user's back, so control characters never get written.
+        static string OneLine(string value)
+        {
+            var line = new System.Text.StringBuilder();
+            foreach (char c in value ?? "") if (c >= ' ') line.Append(c);
+            return line.ToString();
         }
 
         static bool IsNo(string value)

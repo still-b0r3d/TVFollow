@@ -25,6 +25,7 @@ namespace TVFollow.Tests
             Run("remote: a paste reaches the TV in order, a busy clipboard sends nothing", RemotePasteIsSent);
             Run("settings: a held file is waited for, then reported, never a crash", SettingsFileHeld);
             Run("settings: an address that isn't one is dropped", SettingsBadAddress);
+            Run("settings: a reply from the TV can't add lines to settings.ini", SettingsStayOneLinePerValue);
             Run("controller: two callers at once take turns", ControllerIsSerialised);
             Run("controller: the quick off at sleep doesn't wait its turn", QuickOffDoesNotWait);
             Run("on: a TV that's already on gets the input press at once", InputPressedAtOnceWhenOn);
@@ -159,6 +160,37 @@ namespace TVFollow.Tests
                 File.WriteAllText(Settings.FilePath, "ip=" + good + "   # the TV\r\nserial=X000000001\r\n");
                 Settings s = Settings.Load();
                 Check(s.Ip == good && s.IsComplete, "a good address was dropped: " + good + " -> [" + s.Ip + "]");
+            }
+            File.Delete(Settings.FilePath);
+        }
+
+        static void SettingsStayOneLinePerValue()
+        {
+            // a value with line breaks in it (here a wake address) is saved as one line, so it
+            // can't set other keys when the file is read back
+            var s = new Settings();
+            s.Ip = "192.168.1.50";
+            s.Serial = "X000000001";
+            s.WakeMac = "aa:bb:cc:dd:ee:ff\r\nip=203.0.113.9\nserial=EVIL\rport=9\npaused=yes";
+            s.Save();
+            Settings back = Settings.Load();
+            Check(back.Ip == "192.168.1.50" && back.Serial == "X000000001", "a line break in a value rewrote the TV: " + back.Ip + " " + back.Serial);
+            Check(back.Port == Settings.DefaultPort && !back.Paused, "a line break in a value set port or paused");
+
+            // and a TV whose answer carries one never gets it saved in the first place
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                Settings t = SettingsFor(tv);
+                t.Save();
+                tv.RawDeviceInfo = "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<device-info>\n" +
+                    "\t<serial-number>" + tv.Serial + "</serial-number>\n\t<network-type>wifi</network-type>\n" +
+                    "\t<wifi-mac>00:11:22:33:44:77&#10;ip=203.0.113.9&#10;serial=EVIL&#10;paused=yes</wifi-mac>\n" +
+                    "\t<power-mode>PowerOn</power-mode>\n</device-info>";
+                Fast(new Controller(t)).TurnOff(false, false);
+                Check(t.WakeMac == "00:11:22:33:44:55", "a wake address that isn't one was taken from the TV: " + t.WakeMac);
+                Settings loaded = Settings.Load();
+                Check(loaded.Ip == tv.Ip && loaded.Serial == tv.Serial && !loaded.Paused, "the TV's answer changed the saved settings");
+                Check(tv.Count("POST /keypress/PowerOff") == 1, "the TV should still have been turned off");
             }
             File.Delete(Settings.FilePath);
         }
