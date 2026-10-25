@@ -10,13 +10,17 @@ Fixes from a second review of 1.0.
   kind of addresses. A laptop on a hotel or office network that happens to use the same
   numbers no longer sends wake packets or looks around for the TV there on its own. TVFollow
   learns the router the first time the TV answers (new `gateway_mac` setting). After a
-  router swap, press TV to PC (or TV on or off) once: a button you press yourself looks for
-  the TV by its serial number, even at a new address, and TVFollow learns the new router.
+  router swap, with the TV on, press TV to PC (or TV on or off) in the tray or on the remote
+  once: a button you press yourself looks for the TV by its serial number, even at a new
+  address, and TVFollow learns the new router. That also means a button pressed on a hotel
+  network that uses your home's addresses looks for your TV there (it only ever acts on your
+  TV's serial number). If the new router uses other numbers altogether, go through
+  Settings… → Change TV… once.
 - Typing an emoji into the remote's search box no longer trips an error dialog (which could
   end TVFollow). It goes to the TV as typed; whether the TV shows it is up to the TV.
 - A dot, slash or backslash typed into the remote's search box now reaches the TV as typed
   (before, the dot was lost and both slashes arrived as /). TVFollow.exe now says which
-  .NET it's built for, so Windows no longer runs it in an old compatibility mode.
+  .NET it's built for, so .NET no longer runs it in its old 4.0 compatibility mode.
 - Text pasted into the remote's search box now reaches the TV too (the first line of it,
   letter by letter). Before, the box showed it but the TV never got it.
 - A settings file that can't be read at sign-in (held open by another program, say) no

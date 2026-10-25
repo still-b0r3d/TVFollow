@@ -60,28 +60,37 @@ is found again.
 
 If the TV later stops answering and the PC is on the TV's network, TVFollow searches that
 network only, at most once every ten minutes, and picks the TV out by its serial number, so
-it never grabs a different Roku in the house. It doesn't search other networks a laptop
-joins, except when you press one of its TV buttons yourself (see the router note below).
+it never grabs a different Roku in the house. On its own it never searches a network behind
+another router; a TV button you press yourself can (see the router note below).
 
 If the TV doesn't answer when it's time to turn it on, TVFollow sends a
 **Wake-on-LAN packet** for the TV's network card (Wi-Fi or cable, whichever the TV uses;
 TVFollow notices if that changes) to the broadcast address of each network the PC is on,
 again every 3 seconds, and gives the TV 20 seconds to wake up. If the PC isn't on the
-TV's network, it only asks the TV's last address whether it's there, and sends no wake packet.
+TV's network, it sends no wake packet: on its own it only asks the TV's last address
+whether it's there.
 
 "The TV's network" means the network behind your home router, not just the same kind of
 addresses: a laptop that joins a hotel or office network which also uses `192.168.1.x` finds
 a different router there, so the automatic following leaves that network alone. TVFollow
 remembers the home router's hardware address the first time the TV answers.
 
-After a router swap the router no longer matches, so the automatic following goes quiet at
-home too until TVFollow finds the TV again. Press one of its TV buttons once: **TV to PC**,
-**TV on** or **TV off** in the tray, the remote's **TV to PC**, or a desktop shortcut. On a
-network with your home's addresses, a button you press yourself searches for the TV by its
-serial number, even if the new router gave it a new address, without a wake packet; once the
-TV answers, TVFollow learns the new router and follows again. The flip side: pressing one of
-those buttons on a hotel network that happens to use your home's addresses makes TVFollow look
-for your TV there. It only ever acts on a TV with your TV's serial number.
+**After a router swap**, TVFollow still finds the TV at its old address if the new router
+gave it the same one, and learns the new router from that. If the TV got a new address, the
+automatic following can't find it and goes quiet. Then press **TV to PC** (or **TV on** /
+**TV off**) in the tray, or **TV to PC** on the remote, once. A button you press yourself, on
+a network with the TV's old addresses, searches for the TV by its serial number (for up to
+20 seconds, each time you press), and once it finds the TV, TVFollow learns the new router and
+follows again. It sends no wake packet there, so if your TV drops off the network when it's
+off (Fast TV start off), turn it on with its own remote first. Use the tray or the remote,
+not a desktop shortcut: a shortcut runs a TVFollow of its own, which doesn't update the copy
+in the taskbar corner. If the new router uses other numbers altogether (`192.168.0.x`
+instead of `192.168.1.x`, say), the button can't search there; go through
+**Settings… → Change TV…** once.
+
+The flip side: pressing one of those buttons on a hotel network that happens to use your
+home's addresses makes TVFollow look for your TV there. It only ever acts on a TV with your
+TV's serial number.
 
 ## Checking for new versions
 
@@ -132,7 +141,7 @@ remote_layout=classic
 | `serial` | The TV's serial number, to tell it apart from other Rokus |
 | `input` | The input your PC is plugged into |
 | `wake_mac` | The TV's network card, for the wake signal (updated by itself) |
-| `gateway_mac` | Your home router, so another network with the same addresses is left alone (learned by itself when the TV answers) |
+| `gateway_mac` | Your home router, so the automatic following leaves another network with the same addresses alone (learned by itself when the TV answers) |
 | `off_with_monitors`, `on_with_monitors` | The two "follow" options |
 | `start_with_windows`, `desktop_shortcuts` | Install options |
 | `check_updates` | Ask GitHub once a week whether there's a newer TVFollow |

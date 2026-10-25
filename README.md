@@ -156,7 +156,8 @@ setup remembers your TV, and finishing replaces the old version.
   switches to your PC. If someone is watching something else on it, it's left alone.
 - **Monitors back on with nobody there** (a notification, a screen being plugged in):
   TVFollow waits for the mouse or keyboard before turning the TV on.
-- **The router gave the TV a new address:** TVFollow finds it again by itself.
+- **The router gave the TV a new address:** TVFollow finds it again by itself. After a
+  router swap, press **TV to PC** in the tray once (details in [How it works](docs/HOW-IT-WORKS.md)).
 
 More detail in [How it works](docs/HOW-IT-WORKS.md).
 

@@ -36,6 +36,7 @@ namespace TVFollow
         public int WakeRepeatMs = 3000;   // the wake packet is sent again this often while waiting
         public int SweepWaitMs = 2000;
         public TimeSpan SearchEvery = TimeSpan.FromMinutes(10);
+        public int PressSearchMs = 20000;  // how long a pressed button may search behind a router TVFollow doesn't know
 
         public Func<string, int> SendWake = Wake.Send;  // returns how many packets went out
         public Func<bool> OnTvNetwork;                  // is the PC on the network the TV was last seen on?
@@ -70,10 +71,11 @@ namespace TVFollow
         {
             string tag = mode == TurnOnMode.Follow ? "on" : mode == TurnOnMode.ToPc ? "pc" : "on (button)";
             TvState s = WaitReachable(ReachMs);
+            bool pressed = false;  // a pressed button's search behind a router TVFollow doesn't know
             if (!s.Reachable)
             {
                 if (OnTvNetwork()) s = WakeUp(tag);
-                else if (mode != TurnOnMode.Follow && SameNumbers()) LookingAfterRouterChange(tag);
+                else if (mode != TurnOnMode.Follow && SameNumbers()) { LookingBehindOtherRouter(tag); pressed = true; }
                 else
                 {
                     // a laptop away from home, say: don't wake or search anything on this network
@@ -81,7 +83,7 @@ namespace TVFollow
                     return;
                 }
             }
-            if (!s.Reachable && Rediscover()) s = Query();
+            if (!s.Reachable && Rediscover(pressed)) s = Query();
             if (!s.Reachable) { Log.Write(tag + ": TV not found"); return; }
 
             if (s.IsOn)
@@ -113,12 +115,13 @@ namespace TVFollow
         }
 
         // Someone pressed a TV button (not the automatic following) on a network that has the TV's
-        // addresses but not the router it was last seen behind. After a router swap the TV may
-        // have a new address, so the search by serial number goes ahead; no wake packet, since
-        // this may not be home. Finding the TV teaches TVFollow the new router.
-        void LookingAfterRouterChange(string tag)
+        // addresses, but the router the TV was last seen behind didn't match or didn't answer.
+        // After a router swap the TV may have a new address, so the search by serial number goes
+        // ahead; no wake packet, since this may not be home. Finding the TV teaches TVFollow the
+        // new router.
+        void LookingBehindOtherRouter(string tag)
         {
-            Log.Write(tag + ": the router isn't the one the TV was last seen behind; looking for the TV by its serial number");
+            Log.Write(tag + ": the home router didn't match or didn't answer; looking for the TV by its serial number");
         }
 
         // The wake packet, sent again every few seconds while waiting for the TV to answer.
@@ -164,12 +167,14 @@ namespace TVFollow
             TvState s = quick ? Query(800) : Query();
             if (!s.Reachable && !quick)
             {
+                bool pressed = false;
                 if (!OnTvNetwork())
                 {
                     if (!force || !SameNumbers()) { Log.Write(tag + ": this PC isn't on the TV's network"); return; }
-                    LookingAfterRouterChange(tag);
+                    LookingBehindOtherRouter(tag);
+                    pressed = true;
                 }
-                if (Rediscover()) s = Query();
+                if (Rediscover(pressed)) s = Query();
             }
             if (!s.Reachable) { Log.Write(tag + ": TV not answering"); return; }
             if (!s.IsOn) { Log.Write(tag + ": already off"); return; }
@@ -230,18 +235,21 @@ namespace TVFollow
             }
         }
 
-        // If the router handed the TV a new address, find it again by its serial number: only
-        // on the TV's own network, and at most once every ten minutes.
-        bool Rediscover()
+        // If the router handed the TV a new address, find it again by its serial number, at most
+        // once every ten minutes. pressed: a button pressed behind a router TVFollow doesn't know
+        // (after a router swap, say). Each such press searches once, so a press that came while
+        // the TV was off doesn't hold up the next one, but only for PressSearchMs, since this may
+        // be a stranger's network.
+        bool Rediscover(bool pressed)
         {
-            if (DateTime.UtcNow - lastSearch < SearchEvery)
+            if (!pressed && DateTime.UtcNow - lastSearch < SearchEvery)
             {
                 Log.Write("looked for the TV a few minutes ago; not searching again yet");
                 return false;
             }
             lastSearch = DateTime.UtcNow;
             Log.Write("looking for the TV on its network");
-            string ip = Discovery.FindBySerial(Candidates(), settings.Port, settings.Serial);
+            string ip = Discovery.FindBySerial(Candidates(), settings.Port, settings.Serial, pressed ? PressSearchMs : Timeout.Infinite);
             if (ip == null) { Log.Write("TV not found on the network"); return false; }
             if (ip != settings.Ip)
             {

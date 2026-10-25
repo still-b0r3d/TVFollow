@@ -13,8 +13,8 @@ explained:
 | `-> 403` | The TV refused: its Network access setting is on Limited (see below) |
 | `TV not answering, sent a wake packet (3 addresses)` | The TV was asleep too deeply to answer, so TVFollow sent the network wake signal |
 | `no network to send a wake packet on` | The PC's own network wasn't up yet (just after sleep, say) |
-| `this PC isn't on the TV's network` | A laptop away from home, say: TVFollow leaves the network alone. At home, after a router swap: press **TV to PC** in the tray once, and TVFollow finds the TV (even at a new address) and learns the new router |
-| `the router isn't the one the TV was last seen behind; looking for the TV by its serial number` | You pressed a TV button after a router swap (or on another network with your home's addresses), so TVFollow searched for the TV |
+| `this PC isn't on the TV's network` | A laptop away from home, say: TVFollow leaves the network alone. At home, after a router swap: with the TV on (use its own remote if it's off), press **TV to PC** in the tray once, and TVFollow finds the TV, even at a new address, and learns the new router. If the line keeps coming, the new router uses other numbers (`192.168.0.x` instead of `192.168.1.x`, say): go through **Settings… → Change TV…** once |
+| `the home router didn't match or didn't answer; looking for the TV by its serial number` | You pressed a TV button and the router the TV was last seen behind didn't match or didn't answer (after a router swap, say, or on another network with your home's addresses), so TVFollow searched for the TV. If it then says `TV not found`, turn the TV on with its own remote and press again |
 | `TV found at 192.168.1.73` | The router gave the TV a new address, and TVFollow found it again |
 
 ## Setup can't find my TV
@@ -86,8 +86,8 @@ TVFollow isn't code-signed, so Windows SmartScreen shows **"Windows protected yo
 the first time. Click **More info → Run anyway**. Some antivirus tools are wary of small
 unsigned programs that look around the local network. TVFollow does that during setup,
 to find the TV, and afterwards only if the TV goes missing: then it looks on the TV's own
-network (on other networks a laptop joins, only when you press one of its TV buttons), at
-most once every ten minutes. If
+network, at most once every ten minutes. On a network behind another router it only looks
+when you press one of its TV buttons, once per press, for up to 20 seconds. If
 you'd rather check it yourself, [build it from the source](../README.md#build-it-yourself).
 The SHA-256 checksum next to each release download is for checking that download.
 

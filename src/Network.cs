@@ -187,11 +187,15 @@ namespace TVFollow
             return open;
         }
 
-        // The TV with this serial number among the addresses, or null.
-        public static string FindBySerial(IEnumerable<string> addresses, int port, string serial)
+        // The TV with this serial number among the addresses, or null. limitMs caps the whole
+        // search (an answer already on its way may still finish), for networks where many
+        // addresses take the connection and never answer.
+        public static string FindBySerial(IEnumerable<string> addresses, int port, string serial, int limitMs = Timeout.Infinite)
         {
+            DateTime until = limitMs == Timeout.Infinite ? DateTime.MaxValue : DateTime.UtcNow.AddMilliseconds(limitMs);
             foreach (string ip in addresses)
             {
+                if (DateTime.UtcNow >= until) return null;
                 DeviceInfo info = new RokuClient(ip, port).GetDeviceInfo(3000);
                 if (info != null && info.Serial == serial) return ip;
             }

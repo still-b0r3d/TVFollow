@@ -20,6 +20,7 @@ namespace TVFollow.Tests
             Run("the TV's network: the same numbers aren't the same network", NetworkGate);
             Run("the TV's router is remembered, kept, and never asked for at sleep", GatewayMacIsRemembered);
             Run("after a router swap a TV button finds the moved TV; the automatic following doesn't look", RouterSwapButtonFindsTv);
+            Run("a pressed button's search behind another router stops after a while", PressedSearchIsCapped);
             Run("remote: an emoji is one letter, half of one throws", RemoteEmojiLetter);
             Run("remote: an emoji typed in halves is one press, a stray half is nothing", RemoteEmojiTyped);
             Run("remote: every typed character reaches the TV as typed, . / and \\ too", EveryCharacterArrivesAsTyped);
@@ -357,10 +358,12 @@ namespace TVFollow.Tests
                 int searches = 0;
                 Func<Settings, Controller> afterSwap = s =>
                 {
-                    Controller c = Fast(new Controller(s)); // Fast: a wake packet would throw
-                    c.OnTvNetwork = () => false;            // not the router the TV was last seen behind
-                    c.SameNumbers = () => true;             // but home's address range
-                    c.GatewayMacFor = ip => "BB:BB:BB:BB:BB:BB";
+                    var c = new Controller(s);
+                    Func<bool> realCheck = c.OnTvNetwork;   // home's numbers and home's router
+                    Fast(c);                                // Fast: a wake packet would throw
+                    c.OnTvNetwork = realCheck;
+                    c.SameNumbers = () => true;             // home's address range...
+                    c.GatewayMacFor = ip => "BB:BB:BB:BB:BB:BB"; // ...but not the router the TV was last seen behind
                     c.Candidates = () => { searches++; return new List<string> { "127.0.0.2" }; };
                     return c;
                 };
@@ -402,7 +405,47 @@ namespace TVFollow.Tests
                 away.TurnOn(TurnOnMode.ToPc);
                 away.TurnOff(true, false);
                 Check(searches == 2 && tv.Count("POST /keypress/PowerOff") == 1, "a button looked for the TV on a network with other numbers");
+
+                // the tray's TV on (and the "on" desktop shortcut) does the same
+                tv.PowerMode = "DisplayOff";
+                Settings onPress = moved();
+                afterSwap(onPress).TurnOn(TurnOnMode.PowerOnly);
+                Check(searches == 3 && tv.IsOn, "TV on didn't find and turn on the moved TV: " + searches + " searches");
+                Check(onPress.GatewayMac == "BB:BB:BB:BB:BB:BB", "TV on didn't learn the new router");
+
+                // a press while the TV is too deeply asleep to answer finds nothing (there's no wake
+                // packet behind a router TVFollow doesn't know); the next press, once the TV is on,
+                // searches again rather than waiting ten minutes
+                Settings asleep = moved();
+                Controller one = afterSwap(asleep);
+                one.SearchEvery = TimeSpan.FromMinutes(10);
+                tv.Down = true;
+                one.TurnOn(TurnOnMode.PowerOnly);
+                Check(searches == 4 && asleep.Ip == "127.0.0.3", "a press should have searched and found nothing");
+                tv.Down = false; // turned on with its own remote
+                tv.App = "12";
+                one.TurnOn(TurnOnMode.ToPc);
+                Check(searches == 5, "the second press didn't search: " + searches + " searches");
+                Check(asleep.Ip == "127.0.0.2" && asleep.GatewayMac == "BB:BB:BB:BB:BB:BB" && tv.App == "tvinput.hdmi1", "the second press didn't find the TV");
                 File.Delete(Settings.FilePath);
+            }
+        }
+
+        // a pressed button's search on a network that isn't home stops after a while, even when
+        // the addresses there take the connection and answer slowly
+        static void PressedSearchIsCapped()
+        {
+            using (var tv = new FakeTv("127.0.0.2", 0))
+            using (var slow = new FakeTv("127.0.0.4", tv.Port))
+            {
+                slow.Serial = "SOMEONE-ELSE";
+                slow.DelayMs = 800;
+                var watch = Stopwatch.StartNew();
+                string found = Discovery.FindBySerial(new[] { "127.0.0.4", "127.0.0.4", "127.0.0.2" }, tv.Port, tv.Serial, 300);
+                watch.Stop();
+                Check(found == null && tv.Count("GET /query/device-info") == 0, "the search went on past its limit");
+                Check(watch.ElapsedMilliseconds < 2500, "the capped search took " + watch.ElapsedMilliseconds + " ms");
+                Check(Discovery.FindBySerial(new[] { "127.0.0.2" }, tv.Port, tv.Serial) == "127.0.0.2", "without a limit the TV is found");
             }
         }
 
