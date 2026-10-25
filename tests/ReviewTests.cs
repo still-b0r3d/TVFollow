@@ -45,6 +45,7 @@ namespace TVFollow.Tests
             Run("setup: a late answer about another TV is ignored", SetupIgnoresStaleCheck);
             Run("setup: choosing portable", SetupChoosesPortable);
             RunRemoteTests();
+            RunSecondReview();
         }
 
         // ---- portable ----

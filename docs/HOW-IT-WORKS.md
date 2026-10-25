@@ -49,8 +49,8 @@ The remote sends its presses one at a time, in order, so typed letters arrive th
 they were typed.
 
 TVFollow treats every reply as untrusted, since anything on the network could answer
-on port 8060: it refuses replies over 256 KB, gives every request a hard deadline, and
-never follows references inside a reply (no DTDs, no outside files).
+on port 8060: it refuses replies over 256 KB, gives every request a hard deadline, never
+follows redirects, and never follows references inside a reply (no DTDs, no outside files).
 
 To find the TV, setup tries port 8060 on every address in your PC's own networks (the
 `192.168.1.1` to `.254` around the PC, for example; on bigger networks, up to 1,022

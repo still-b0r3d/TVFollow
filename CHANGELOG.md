@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1 (not released yet)
+
+Fixes from a second review of 1.0.
+
+- A reply from "the TV" that tries to send TVFollow somewhere else (a redirect) is ignored.
+  TVFollow never follows redirects, so nothing on the network can make the PC request
+  another address.
+
 ## 1.0 (2026-10-24)
 
 The first public release.

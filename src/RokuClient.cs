@@ -157,6 +157,9 @@ namespace TVFollow
             req.ReadWriteTimeout = timeoutMs;
             req.Proxy = null;
             req.KeepAlive = false;
+            // a redirect is an answer, not somewhere to go: nothing on the network gets to point
+            // this PC at another address (a 3xx comes back as a failed request instead)
+            req.AllowAutoRedirect = false;
             return req;
         }
 

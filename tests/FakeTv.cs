@@ -29,6 +29,7 @@ namespace TVFollow.Tests
         public string RawDeviceInfo;              // answer device-info with exactly this
         public bool RefusePowerOn;                // say OK to PowerOn but stay off
         public bool IgnoreInput;                  // say OK to input changes but don't switch
+        public string RedirectTo;                 // answer everything with "302 Found, go here" (no TV does this)
 
         public readonly string Ip;
         public readonly int Port;
@@ -90,10 +91,18 @@ namespace TVFollow.Tests
 
             int status;
             string body;
-            lock (this) Respond(method, path, out status, out body);
+            string extraHeaders = "";
+            if (RedirectTo != null)
+            {
+                status = 302;
+                body = "";
+                extraHeaders = "Location: " + RedirectTo + "\r\n";
+            }
+            else lock (this) Respond(method, path, out status, out body);
 
             byte[] content = Encoding.UTF8.GetBytes(body);
-            string head = "HTTP/1.1 " + status + (status == 200 ? " OK" : status == 403 ? " Forbidden" : " Not Found") + "\r\n" +
+            string reason = status == 200 ? " OK" : status == 302 ? " Found" : status == 403 ? " Forbidden" : " Not Found";
+            string head = "HTTP/1.1 " + status + reason + "\r\n" + extraHeaders +
                 "Content-Type: text/xml; charset=utf-8\r\nContent-Length: " + content.Length + "\r\nConnection: close\r\n\r\n";
             byte[] headBytes = Encoding.ASCII.GetBytes(head);
             stream.Write(headBytes, 0, headBytes.Length);
