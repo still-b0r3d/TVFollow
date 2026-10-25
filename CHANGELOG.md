@@ -29,6 +29,8 @@ Fixes from a second review of 1.0.
   window closes.
 - TV to PC (the button, the shortcut and the `pc` command) presses the input straight away
   when the TV is already on, instead of waiting a second and a half first.
+- An error inside one of TVFollow's windows is written to the log before the error box
+  shows, and a crash from a background thread leaves a line in the log too.
 
 ## 1.0 (2026-10-24)
 

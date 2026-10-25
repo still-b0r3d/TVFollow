@@ -28,6 +28,16 @@ namespace TVFollow
         [STAThread]
         static int Main(string[] args)
         {
+            // an error in a window would otherwise only show a dialog: the log keeps a trace of
+            // it, and of anything that ends the process from another thread
+            Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e)
+            {
+                Log.Write("unhandled: " + e.Exception);
+                MessageBox.Show("TVFollow hit an error: " + e.Exception.Message + "\n\nThe log has the details (right-click the TV icon → Open log).",
+                    "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            };
+            AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e) { Log.Write("crashed: " + e.ExceptionObject); };
+
             string cmd = args.Length > 0 ? args[0].ToLowerInvariant() : "";
             if (cmd == "--version" || cmd == "-v")
             {
