@@ -12,6 +12,8 @@ Fixes from a second review of 1.0.
   numbers no longer sends wake packets or looks around for the TV there. TVFollow learns
   the router the first time the TV answers (new `gateway_mac` setting); after a router
   swap, turn the TV on once with its remote and it learns the new one.
+- Typing an emoji into the remote's search box no longer trips an error dialog (which could
+  end TVFollow). It goes to the TV as one character; whether the TV shows it is up to the TV.
 
 ## 1.0 (2026-10-24)
 

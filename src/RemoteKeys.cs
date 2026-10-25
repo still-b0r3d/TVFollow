@@ -37,10 +37,11 @@ namespace TVFollow
         }
 
         // a typed character for the TV's on-screen keyboard
-        public static string Letter(char c)
-        {
-            return "Lit_" + Uri.EscapeDataString(c.ToString());
-        }
+        public static string Letter(char c) { return Letter(c.ToString()); }
+
+        // one character given as a string: an emoji is two chars (a surrogate pair) but one
+        // character to the TV. Half a pair on its own throws here, so callers pair them up first.
+        public static string Letter(string character) { return "Lit_" + Uri.EscapeDataString(character); }
     }
 
     // Sends the remote's presses one at a time, in order (typing must arrive in order), on a

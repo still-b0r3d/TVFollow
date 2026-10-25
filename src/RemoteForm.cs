@@ -303,9 +303,24 @@ namespace TVFollow
                 ForeColor = Theme.Text
             };
             box.HandleCreated += delegate { SendMessage(box.Handle, 0x1501, (IntPtr)1, "Type to search on the TV"); }; // EM_SETCUEBANNER
+            // an emoji arrives as two key presses (a surrogate pair): the first half waits here for
+            // the second, and a half on its own is dropped, since escaping it would throw
+            char firstHalf = '\0';
             box.KeyPress += (s, e) =>
             {
-                if (e.KeyChar >= ' ') sender.Press(RemoteKeys.Letter(e.KeyChar));
+                char c = e.KeyChar;
+                if (char.IsHighSurrogate(c)) { firstHalf = c; return; }
+                if (char.IsLowSurrogate(c))
+                {
+                    // one press for the pair; the TV may ignore it, the point is not throwing
+                    if (firstHalf != '\0') sender.Press(RemoteKeys.Letter(new string(new[] { firstHalf, c })));
+                    firstHalf = '\0';
+                    return;
+                }
+                firstHalf = '\0';
+                // control characters (Ctrl+V, Ctrl+Backspace's 0x7F) aren't letters; they are left
+                // unhandled so the box still does what they mean
+                if (c >= ' ' && c != (char)0x7F) sender.Press(RemoteKeys.Letter(c));
             };
             box.KeyDown += (s, e) =>
             {
@@ -451,5 +466,7 @@ namespace TVFollow
         }
 
         public Size BoardSize { get { return board.Size; } }
+
+        public TextBox Typing { get { return typing; } }
     }
 }

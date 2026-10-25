@@ -19,6 +19,46 @@ namespace TVFollow.Tests
             Run("a redirect from the TV is not followed", RedirectIsNotFollowed);
             Run("the TV's network: the same numbers aren't the same network", NetworkGate);
             Run("the TV's router is remembered, kept, and never asked for at sleep", GatewayMacIsRemembered);
+            Run("remote: an emoji is one letter, half of one throws", RemoteEmojiLetter);
+            Run("remote: an emoji typed in halves is one press, a stray half is nothing", RemoteEmojiTyped);
+        }
+
+        // ---- the remote's typing box ----
+
+        static void RemoteEmojiLetter()
+        {
+            Check(RemoteKeys.Letter("\U0001F600") == "Lit_%F0%9F%98%80", "an emoji (a surrogate pair) should be one letter: " + RemoteKeys.Letter("\U0001F600"));
+            Check(RemoteKeys.Letter("a") == "Lit_a" && RemoteKeys.Letter('a') == "Lit_a", "plain letters");
+            bool threw = false;
+            try { RemoteKeys.Letter("\uD83D"); }
+            catch (UriFormatException) { threw = true; }
+            Check(threw, "half a pair should throw in the escaping; that is why the typing box pairs them up");
+        }
+
+        static void RemoteEmojiTyped()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                RemoteForm form = OffScreenRemote(SettingsFor(tv), RemoteForm.Classic);
+                try
+                {
+                    foreach (char c in new[] { '\uD83D', '\uDE00', '\uDE00', 'a' }) TypeInto(form.Typing, c);
+                    Pump(() => tv.Count("POST /keypress/Lit_a") == 1, 10);
+                    Check(tv.Count("POST /keypress/Lit_%F0%9F%98%80") == 1, "the emoji should be one press");
+                    Check(tv.Presses == 2, "presses: " + tv.Presses + " (a stray half got sent?)");
+                }
+                finally { form.Close(); form.Dispose(); }
+            }
+        }
+
+        // a key press the way Windows delivers one, without a keyboard
+        static void TypeInto(TextBox box, char c)
+        {
+            try
+            {
+                typeof(Control).GetMethod("OnKeyPress", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(box, new object[] { new KeyPressEventArgs(c) });
+            }
+            catch (TargetInvocationException e) { throw e.InnerException; }
         }
 
         // ---- the TV's network ----
