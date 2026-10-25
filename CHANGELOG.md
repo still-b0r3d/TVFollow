@@ -4,16 +4,16 @@
 
 Fixes from a second review of 1.0.
 
-- A reply from "the TV" that tries to send TVFollow somewhere else (a redirect) is ignored.
-  TVFollow never follows redirects, so nothing on the network can make the PC request
-  another address.
+- A reply from "the TV" that tries to send TVFollow somewhere else (a redirect) is no longer
+  followed, so nothing answering in the TV's place can send the PC on to another address.
 - "The TV's network" now means the network behind your home router, not just the same
   kind of addresses. A laptop on a hotel or office network that happens to use the same
   numbers no longer sends wake packets or looks around for the TV there. TVFollow learns
-  the router the first time the TV answers (new `gateway_mac` setting); after a router
-  swap, turn the TV on once with its remote and it learns the new one.
+  the router the first time the TV answers (new `gateway_mac` setting). After a router
+  swap, turn the TV on once with its remote and it learns the new one; if the new router
+  also gave the TV a new address, go through Settings… → Change TV… once.
 - Typing an emoji into the remote's search box no longer trips an error dialog (which could
-  end TVFollow). It goes to the TV as one character; whether the TV shows it is up to the TV.
+  end TVFollow). It goes to the TV as typed; whether the TV shows it is up to the TV.
 - Text pasted into the remote's search box now reaches the TV too (the first line of it,
   letter by letter). Before, the box showed it but the TV never got it.
 - A settings file that can't be read at sign-in (held open by another program, say) no
@@ -24,15 +24,17 @@ Fixes from a second review of 1.0.
   line named.
 - Nothing a TV says about itself can add lines to settings.ini any more. A reply with a line
   break in it (in its network address, say) could have changed the saved TV address or port.
-- The automatic following and the tray and remote buttons no longer talk to the TV at the
-  same time. A button pressed while a sequence is running (waking the TV, say) waits for
-  it to finish instead of pressing buttons in between. Sleep and shutdown don't wait.
+- The automatic following, the tray's TV buttons and the remote's TV to PC button no longer
+  talk to the TV at the same time. One pressed while a sequence is running (waking the TV,
+  say) waits for it to finish instead of pressing buttons in between. Sleep and shutdown
+  don't wait, and the remote's other buttons work straight away as before.
 - The remote no longer risks ending TVFollow when the TV's answer arrives just as the remote
   window closes.
 - TV to PC (the button, the shortcut and the `pc` command) presses the input straight away
   when the TV is already on, instead of waiting a second and a half first.
-- An error inside one of TVFollow's windows is written to the log before the error box
-  shows, and a crash from a background thread leaves a line in the log too.
+- An error inside one of TVFollow's windows is written to the log, and a short box says
+  where the log is, instead of the long .NET error dialog. A crash from a background thread
+  leaves a line in the log too.
 
 ## 1.0 (2026-10-24)
 

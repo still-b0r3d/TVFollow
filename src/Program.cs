@@ -33,7 +33,9 @@ namespace TVFollow
             Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e)
             {
                 Log.Write("unhandled: " + e.Exception);
-                MessageBox.Show("TVFollow hit an error: " + e.Exception.Message + "\n\nThe log has the details (right-click the TV icon → Open log).",
+                // where the log is, since in the setup window there is no tray icon to open it from
+                // (plain text, not Log.FilePath: building a path can throw, and this runs on an error)
+                MessageBox.Show("TVFollow hit an error: " + e.Exception.Message + "\n\nThe details are in TVFollow.log in " + Settings.Dir + ".",
                     "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Error);
             };
             AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e) { Log.Write("crashed: " + e.ExceptionObject); };

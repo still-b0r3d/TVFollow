@@ -40,13 +40,13 @@ namespace TVFollow
         // a typed character for the TV's on-screen keyboard
         public static string Letter(char c) { return Letter(c.ToString()); }
 
-        // one character given as a string: an emoji is two chars (a surrogate pair) but one
-        // character to the TV. Half a pair on its own throws here, so callers pair them up first.
+        // one character given as a string: a surrogate pair (most emoji) is two chars but one
+        // character to the TV. A first half on its own throws here and a second half alone turns
+        // into a garbage character, so callers pair them up and drop stray halves.
         public static string Letter(string character) { return "Lit_" + Uri.EscapeDataString(character); }
 
-        // Pasted text as presses, in order. Surrogate pairs (emoji) stay whole, stray halves and
-        // control characters are dropped, and only the first line is sent, since that is all a
-        // one-line box takes.
+        // Pasted text as presses, in order. Surrogate pairs stay whole, stray halves and control
+        // characters are dropped, and nothing after the first line break is sent.
         public static List<string> Letters(string text)
         {
             var presses = new List<string>();

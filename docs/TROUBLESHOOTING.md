@@ -13,7 +13,7 @@ explained:
 | `-> 403` | The TV refused: its Network access setting is on Limited (see below) |
 | `TV not answering, sent a wake packet (3 addresses)` | The TV was asleep too deeply to answer, so TVFollow sent the network wake signal |
 | `no network to send a wake packet on` | The PC's own network wasn't up yet (just after sleep, say) |
-| `this PC isn't on the TV's network` | A laptop away from home, say: TVFollow leaves the network alone. At home, right after a router swap: turn the TV on once with its remote and TVFollow learns the new router |
+| `this PC isn't on the TV's network` | A laptop away from home, say: TVFollow leaves the network alone. At home, after a router swap: turn the TV on once with its remote and TVFollow learns the new router. If the line keeps coming, the new router gave the TV a new address too: go through **Settings… → Change TV…** once |
 | `TV found at 192.168.1.73` | The router gave the TV a new address, and TVFollow found it again |
 
 ## Setup can't find my TV

@@ -52,11 +52,13 @@ namespace TVFollow
             Candidates = () => Discovery.SweepAround(this.settings.Ip, this.settings.Port, SweepWaitMs);
         }
 
-        // The follower's worker, the tray and the remote all use this controller from their own
-        // threads. Two sequences at once would press buttons in each other's way (and both
-        // search for the TV at once), so they take turns: a button pressed during a running
-        // sequence waits for it to finish. The lock is this process's own: the desktop shortcuts
-        // run their own TVFollow.exe.
+        // The follower's worker, the tray's TV buttons and the remote's TV to PC button share this
+        // controller from their own threads. Two sequences at once would press buttons in each
+        // other's way (and both search for the TV at once), so they take turns: a button pressed
+        // during a running sequence waits for it to finish. Only these sequences, in this process,
+        // take turns: the remote's other buttons (power, arrows, inputs, typing) and the Settings
+        // window's "Show it on the TV" talk to the TV directly, and the desktop shortcuts run their
+        // own TVFollow.exe.
         public void TurnOn(TurnOnMode mode)
         {
             lock (gate) TurnOnNow(mode);
@@ -135,8 +137,11 @@ namespace TVFollow
         public void TurnOff(bool force, bool quick)
         {
             // quick runs at sleep and shutdown, with a moment to act in, so it doesn't wait behind
-            // a running sequence. The worst it can do is press power off in the middle of one,
-            // which makes that sequence give up; it touches nothing else the sequence uses.
+            // a running sequence (1.0 didn't either): waiting could outlast the moment Windows
+            // gives. The two can cross either way. It can press power off in the middle of a
+            // sequence, or a sequence that had already looked can press power on or the input just
+            // after it, leaving the TV on as the PC sleeps. What they share is safe to share: every
+            // request stands alone, and saving the settings takes turns.
             if (quick) { TurnOffNow(force, true); return; }
             lock (gate) TurnOffNow(force, false);
         }

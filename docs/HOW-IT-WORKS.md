@@ -72,7 +72,8 @@ TV's network, it only asks the TV's last address whether it's there, and sends n
 addresses: a laptop that joins a hotel or office network which also uses `192.168.1.x` finds
 a different router there, so TVFollow leaves that network alone. It remembers the home
 router's hardware address the first time the TV answers, and learns a new one the same way
-(after a router swap, turn the TV on once with its remote).
+(after a router swap, turn the TV on once with its remote; if the new router also gave the TV
+a new address, go through **Settings… → Change TV…** once).
 
 ## Checking for new versions
 
@@ -100,7 +101,8 @@ delete that file to make it check again at the next start.
 | Apps list entry | `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\TVFollow` |
 | Start menu | `TVFollow` |
 
-`settings.ini` is plain text, and setup writes it:
+`settings.ini` is plain text. Setup writes it, and TVFollow fills in `gateway_mac` the first
+time the TV answers:
 
 ```ini
 ip=192.168.1.50
