@@ -80,7 +80,10 @@ namespace TVFollow
         {
             try
             {
-                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; // GitHub needs TLS 1.2
+                // GitHub needs TLS 1.2. The exe now says it's built for .NET 4.8, so Windows picks
+                // (1.2 or 1.3); only an old .NET 4.0 style default lacks 1.2 and gets it added.
+                if (ServicePointManager.SecurityProtocol != SecurityProtocolType.SystemDefault)
+                    ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
                 var req = (HttpWebRequest)WebRequest.Create(LatestUrl);
                 req.UserAgent = "TVFollow/" + Program.Version;
                 req.Accept = "application/vnd.github+json";
