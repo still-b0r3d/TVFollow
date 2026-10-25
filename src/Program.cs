@@ -42,6 +42,14 @@ namespace TVFollow
             if (cmd == "uninstall") return Uninstall(args.Length > 1 && args[1].ToLowerInvariant() == "--quiet");
 
             Settings settings = Settings.Load();
+            if (settings.LoadError != null)
+            {
+                // the file is there but couldn't be read: say so, rather than running with the
+                // wrong settings or offering setup as if there were none
+                MessageBox.Show("TVFollow couldn't read its settings file:\n" + settings.LoadError + "\n\nThe file is settings.ini in " + Settings.Dir +
+                    ". Another program may be holding it open; try again in a moment.", "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 1;
+            }
             // "home" is the install folder, or for a portable copy the folder it runs from
             bool home = Settings.IsPortable || Installer.SamePath(Application.ExecutablePath, InstallPaths.ForThisPC().Exe);
             Opening opening = WhatOpens(cmd, settings.IsComplete, Instance.IsRunning(), home);
@@ -58,7 +66,8 @@ namespace TVFollow
                     if (setup.ShowDialog() != DialogResult.OK) return 0;
                     portable = setup.Portable && !Settings.IsTrial;
                 }
-                return portable ? StartPortable(Settings.Load()) : InstallAndStart(Settings.Load());
+                // setup filled in and saved this very object; no need to read the file back
+                return portable ? StartPortable(settings) : InstallAndStart(settings);
             }
 
             if (!settings.IsComplete)

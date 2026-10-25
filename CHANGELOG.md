@@ -16,6 +16,9 @@ Fixes from a second review of 1.0.
   end TVFollow). It goes to the TV as one character; whether the TV shows it is up to the TV.
 - Text pasted into the remote's search box now reaches the TV too (the first line of it,
   letter by letter). Before, the box showed it but the TV never got it.
+- A settings file that can't be read at sign-in (held open by another program, say) no
+  longer makes TVFollow silently fail to start. It waits a few seconds, then says what's
+  wrong, instead of running with the wrong settings or offering setup as if there were none.
 
 ## 1.0 (2026-10-24)
 

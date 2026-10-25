@@ -23,6 +23,45 @@ namespace TVFollow.Tests
             Run("remote: an emoji typed in halves is one press, a stray half is nothing", RemoteEmojiTyped);
             Run("remote: pasted text becomes presses, first line only", LettersFromText);
             Run("remote: a paste reaches the TV in order, a busy clipboard sends nothing", RemotePasteIsSent);
+            Run("settings: a held file is waited for, then reported, never a crash", SettingsFileHeld);
+        }
+
+        // ---- settings ----
+
+        static void SettingsFileHeld()
+        {
+            var s = new Settings();
+            s.Ip = "192.168.1.50";
+            s.Serial = "X000000001";
+            s.Save();
+            int retryMs = Settings.ReadRetryMs, retries = Settings.ReadRetries;
+            try
+            {
+                Settings.ReadRetryMs = 50;
+                Settings.ReadRetries = 60; // three seconds, plenty for the moment below
+                // held for a moment, then let go: the settings come through
+                var hold = new FileStream(Settings.FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                var release = new Thread(() => { Thread.Sleep(300); hold.Dispose(); });
+                release.Start();
+                Settings loaded = Settings.Load();
+                release.Join();
+                Check(loaded.LoadError == null && loaded.Ip == "192.168.1.50", "a briefly held file should still load: " + loaded.LoadError);
+
+                // held for good: no crash, and not "not set up" either
+                Settings.ReadRetries = 4;
+                using (new FileStream(Settings.FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                    Settings held = Settings.Load();
+                    Check(held.LoadError != null && !held.IsComplete, "a held file should read as unreadable");
+                }
+                Check(LogText().Contains("couldn't read settings.ini"), "not logged");
+            }
+            finally
+            {
+                Settings.ReadRetryMs = retryMs;
+                Settings.ReadRetries = retries;
+                File.Delete(Settings.FilePath);
+            }
         }
 
         // ---- the remote's typing box ----

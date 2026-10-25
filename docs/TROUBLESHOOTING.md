@@ -89,6 +89,13 @@ network (never on other networks a laptop joins), at most once every ten minutes
 you'd rather check it yourself, [build it from the source](../README.md#build-it-yourself).
 The SHA-256 checksum next to each release download is for checking that download.
 
+## TVFollow says it couldn't read its settings file
+
+Another program had `settings.ini` open (an editor, a backup or sync tool), or your account
+can't read it. TVFollow waits a few seconds for the file before giving up. Close whatever has
+it open and start TVFollow again. The file is in `%APPDATA%\TVFollow` (for a portable copy,
+in its `TVFollow data` folder).
+
 ## The remote's buttons do nothing
 
 The remote's status line says why. **"Network access is on Limited"**: on the TV,

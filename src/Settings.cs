@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 
 namespace TVFollow
 {
@@ -72,11 +73,36 @@ namespace TVFollow
         // the app id the TV reports while it shows this PC
         public string PcApp { get { return "tvinput." + Input; } }
 
+        // A file another program is holding (an editor, a sync or backup tool) is tried again for
+        // a few seconds; the tests shorten the waits.
+        public static int ReadRetryMs = 250;
+        public static int ReadRetries = 12;
+
+        // why settings.ini couldn't be read, or null. The settings are then the defaults, and
+        // Program tells that apart from "not set up yet".
+        public string LoadError;
+
         public static Settings Load()
         {
             var s = new Settings();
-            if (!File.Exists(FilePath)) return s;
-            foreach (string raw in File.ReadAllLines(FilePath))
+            string[] lines = null;
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    if (!File.Exists(FilePath)) return s;
+                    lines = File.ReadAllLines(FilePath);
+                    break;
+                }
+                catch (Exception e)
+                {
+                    if (attempt < ReadRetries) { Thread.Sleep(ReadRetryMs); continue; }
+                    Log.Write("couldn't read settings.ini: " + e.Message);
+                    s.LoadError = e.Message;
+                    return s;
+                }
+            }
+            foreach (string raw in lines)
             {
                 string line = raw.Trim();
                 int eq = line.IndexOf('=');
