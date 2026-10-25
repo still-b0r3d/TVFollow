@@ -25,6 +25,52 @@ namespace TVFollow.Tests
             Run("remote: a paste reaches the TV in order, a busy clipboard sends nothing", RemotePasteIsSent);
             Run("settings: a held file is waited for, then reported, never a crash", SettingsFileHeld);
             Run("settings: an address that isn't one is dropped", SettingsBadAddress);
+            Run("controller: two callers at once take turns", ControllerIsSerialised);
+            Run("controller: the quick off at sleep doesn't wait its turn", QuickOffDoesNotWait);
+        }
+
+        // ---- the controller ----
+
+        static void ControllerIsSerialised()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                tv.PowerMode = "DisplayOff";
+                tv.DelayMs = 200;
+                Controller c = Fast(new Controller(SettingsFor(tv)));
+                Exception failure = null;
+                ThreadStart turnOn = () => { try { c.TurnOn(TurnOnMode.ToPc); } catch (Exception e) { failure = e; } };
+                var first = new Thread(turnOn);
+                var second = new Thread(turnOn);
+                first.Start();
+                second.Start();
+                Check(first.Join(30000) && second.Join(30000), "a TurnOn got stuck");
+                Check(failure == null, "TurnOn threw: " + failure);
+                Check(tv.Count("POST /keypress/PowerOn") == 1, "power on pressed " + tv.Count("POST /keypress/PowerOn") + " times");
+                Check(tv.Presses == 1 && tv.IsOn, "presses: " + tv.Presses);
+                Check(LogText().Contains("already showing the PC"), "the second caller should have found the TV on and showing the PC");
+            }
+        }
+
+        static void QuickOffDoesNotWait()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                tv.App = "";           // the Roku home screen
+                tv.IgnoreInput = true; // so the sequence keeps trying for a while
+                tv.DelayMs = 100;
+                Controller c = Fast(new Controller(SettingsFor(tv)));
+                c.RetryMs = 300;
+                var busy = new Thread(() => { try { c.TurnOn(TurnOnMode.ToPc); } catch { } });
+                busy.Start();
+                Thread.Sleep(250);
+                var watch = Stopwatch.StartNew();
+                c.TurnOff(false, true);
+                watch.Stop();
+                Check(watch.ElapsedMilliseconds < 1500, "the quick off waited " + watch.ElapsedMilliseconds + " ms behind a running sequence");
+                Check(LogText().Contains("leaving it on"), "the quick off should have looked at the TV");
+                Check(busy.Join(30000), "the sequence got stuck");
+            }
         }
 
         // ---- settings ----

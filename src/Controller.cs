@@ -25,6 +25,7 @@ namespace TVFollow
         readonly Settings settings;
         readonly RokuClient tv;
         DateTime lastSearch = DateTime.MinValue;
+        readonly object gate = new object();  // one sequence at a time, see TurnOn
 
         // waits in milliseconds; the tests shrink them
         public int FirstCheckMs = 1500;
@@ -51,7 +52,17 @@ namespace TVFollow
             Candidates = () => Discovery.SweepAround(this.settings.Ip, this.settings.Port, SweepWaitMs);
         }
 
+        // The follower's worker, the tray and the remote all use this controller from their own
+        // threads. Two sequences at once would press buttons in each other's way (and both
+        // search for the TV at once), so they take turns: a button pressed during a running
+        // sequence waits for it to finish. The lock is this process's own: the desktop shortcuts
+        // run their own TVFollow.exe.
         public void TurnOn(TurnOnMode mode)
+        {
+            lock (gate) TurnOnNow(mode);
+        }
+
+        void TurnOnNow(TurnOnMode mode)
         {
             string tag = mode == TurnOnMode.Follow ? "on" : mode == TurnOnMode.ToPc ? "pc" : "on (button)";
             TvState s = WaitReachable(ReachMs);
@@ -120,6 +131,15 @@ namespace TVFollow
         // force: turn it off whatever it shows (a button), else only if it shows the PC.
         // quick: sleep and shutdown only give us a moment, so short waits and no searching.
         public void TurnOff(bool force, bool quick)
+        {
+            // quick runs at sleep and shutdown, with a moment to act in, so it doesn't wait behind
+            // a running sequence. The worst it can do is press power off in the middle of one,
+            // which makes that sequence give up; it touches nothing else the sequence uses.
+            if (quick) { TurnOffNow(force, true); return; }
+            lock (gate) TurnOffNow(force, false);
+        }
+
+        void TurnOffNow(bool force, bool quick)
         {
             string tag = force ? "off (button)" : "off";
             TvState s = quick ? Query(800) : Query();
