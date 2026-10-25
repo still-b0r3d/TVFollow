@@ -292,10 +292,11 @@ namespace TVFollow
             AutoSizeMode = AutoSizeMode.GrowAndShrink;
         }
 
-        // the box that types into the TV's search: each letter is sent as it's typed
+        // the box that types into the TV's search: each letter is sent as it's typed, and pasted
+        // text letter by letter
         TextBox TypingBox(int width)
         {
-            var box = new TextBox
+            var box = new PasteBox
             {
                 Width = width,
                 BorderStyle = BorderStyle.FixedSingle,
@@ -327,6 +328,7 @@ namespace TVFollow
                 if (e.KeyCode == Keys.Back) sender.Press("Backspace");
                 else if (e.KeyCode == Keys.Enter) { sender.Press("Enter"); e.SuppressKeyPress = true; }
             };
+            box.Pasted = text => { foreach (string key in RemoteKeys.Letters(text)) sender.Press(key); };
             tips.SetToolTip(box, "What you type here goes into the TV's search boxes");
             return box;
         }
@@ -468,5 +470,27 @@ namespace TVFollow
         public Size BoardSize { get { return board.Size; } }
 
         public TextBox Typing { get { return typing; } }
+    }
+
+    // A text box that says what was pasted into it. Pasting doesn't come through as key presses,
+    // so without this the box would show text the TV never got.
+    class PasteBox : TextBox
+    {
+        const int WM_PASTE = 0x0302;
+
+        public Func<string> ReadClipboard = Clipboard.GetText;  // the tests put their own text here
+        public Action<string> Pasted = delegate { };
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_PASTE)
+            {
+                string text;
+                try { text = ReadClipboard(); }
+                catch { text = null; }  // another program is holding the clipboard: nothing to send
+                if (!string.IsNullOrEmpty(text)) Pasted(text);
+            }
+            base.WndProc(ref m);
+        }
     }
 }

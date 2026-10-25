@@ -42,7 +42,7 @@ TVFollow uses only these:
 | `POST /keypress/PowerOff`, `PowerOn` | Turning it off and on |
 | `POST /keypress/InputHDMI1` (or `/launch/tvinput.hdmi1`) | Switching to your PC |
 | `POST /keypress/Up`, `Down`, `Left`, `Right`, `Select`, `Back`, `Home`, `Info`, `InstantReplay`, `Search`, `Rev`, `Play`, `Fwd`, `VolumeUp`, `VolumeDown`, `VolumeMute` | The remote's buttons |
-| `POST /keypress/Lit_a` (one per letter), `Backspace`, `Enter` | The remote's typing box |
+| `POST /keypress/Lit_a` (one per letter, typed or pasted), `Backspace`, `Enter` | The remote's typing box |
 | `POST /launch/tvinput.hdmi2` (and the other inputs) | The remote's input buttons |
 
 The remote sends its presses one at a time, in order, so typed letters arrive the way

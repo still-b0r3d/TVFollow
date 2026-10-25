@@ -60,6 +60,12 @@ namespace TVFollow.Tests
             get { lock (requests) return requests.FindAll(r => r.StartsWith("POST ")).Count; }
         }
 
+        // every request so far, in the order they came
+        public List<string> Requests()
+        {
+            lock (requests) return new List<string>(requests);
+        }
+
         public void Dispose() { listener.Stop(); }
 
         void Serve()

@@ -14,6 +14,8 @@ Fixes from a second review of 1.0.
   swap, turn the TV on once with its remote and it learns the new one.
 - Typing an emoji into the remote's search box no longer trips an error dialog (which could
   end TVFollow). It goes to the TV as one character; whether the TV shows it is up to the TV.
+- Text pasted into the remote's search box now reaches the TV too (the first line of it,
+  letter by letter). Before, the box showed it but the TV never got it.
 
 ## 1.0 (2026-10-24)
 

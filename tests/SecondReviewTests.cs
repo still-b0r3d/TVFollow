@@ -21,6 +21,8 @@ namespace TVFollow.Tests
             Run("the TV's router is remembered, kept, and never asked for at sleep", GatewayMacIsRemembered);
             Run("remote: an emoji is one letter, half of one throws", RemoteEmojiLetter);
             Run("remote: an emoji typed in halves is one press, a stray half is nothing", RemoteEmojiTyped);
+            Run("remote: pasted text becomes presses, first line only", LettersFromText);
+            Run("remote: a paste reaches the TV in order, a busy clipboard sends nothing", RemotePasteIsSent);
         }
 
         // ---- the remote's typing box ----
@@ -46,6 +48,41 @@ namespace TVFollow.Tests
                     Pump(() => tv.Count("POST /keypress/Lit_a") == 1, 10);
                     Check(tv.Count("POST /keypress/Lit_%F0%9F%98%80") == 1, "the emoji should be one press");
                     Check(tv.Presses == 2, "presses: " + tv.Presses + " (a stray half got sent?)");
+                }
+                finally { form.Close(); form.Dispose(); }
+            }
+        }
+
+        static void LettersFromText()
+        {
+            List<string> presses = RemoteKeys.Letters("hi");
+            Check(presses.Count == 2 && presses[0] == "Lit_h" && presses[1] == "Lit_i", "hi: " + string.Join(",", presses));
+            presses = RemoteKeys.Letters("a\U0001F600b");
+            Check(presses.Count == 3 && presses[1] == "Lit_%F0%9F%98%80", "an emoji in the middle stays one press: " + string.Join(",", presses));
+            Check(RemoteKeys.Letters("\uD83Dx\uDE00").Count == 1, "stray halves of a pair are dropped");
+            Check(RemoteKeys.Letters("a\tb\u0001c\u007F").Count == 3, "control characters are dropped");
+            Check(RemoteKeys.Letters("one\r\ntwo").Count == 3 && RemoteKeys.Letters("\nx").Count == 0, "only the first line is sent");
+            Check(RemoteKeys.Letters("").Count == 0, "nothing from nothing");
+        }
+
+        static void RemotePasteIsSent()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                RemoteForm form = OffScreenRemote(SettingsFor(tv), RemoteForm.Classic);
+                try
+                {
+                    var box = (PasteBox)form.Typing;
+                    box.ReadClipboard = () => "hi";  // never the real clipboard: it belongs to whoever runs the tests
+                    box.Paste();
+                    Pump(() => tv.Count("POST /keypress/Lit_i") == 1, 10);
+                    List<string> presses = tv.Requests().FindAll(r => r.StartsWith("POST "));
+                    Check(presses.Count == 2 && presses[0] == "POST /keypress/Lit_h" && presses[1] == "POST /keypress/Lit_i", "presses: " + string.Join(", ", presses));
+
+                    box.ReadClipboard = () => { throw new System.Runtime.InteropServices.ExternalException("the clipboard is busy"); };
+                    box.Paste(); // must not throw, must not send
+                    Pump(() => true, 1);
+                    Check(tv.Presses == 2, "a busy clipboard should send nothing: " + tv.Presses);
                 }
                 finally { form.Close(); form.Dispose(); }
             }
