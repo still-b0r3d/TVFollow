@@ -496,6 +496,7 @@ namespace TVFollow.Tests
                 tv.App = "tvinput.hdmi2";
                 var s = new Settings();
                 s.Port = tv.Port;
+                s.GatewayMac = "AA:BB:CC:DD:EE:FF"; // the router of the home the TV was in before
                 SetupForm form = OffScreenSetup(s, () => TvScanner.Probe(new[] { "127.0.0.1" }, tv.Port));
                 try
                 {
@@ -517,6 +518,7 @@ namespace TVFollow.Tests
                 Check(saved.Ip == "127.0.0.1" && saved.Serial == tv.Serial, "TV not saved: " + saved.Ip + " " + saved.Serial);
                 Check(saved.Input == "hdmi2", "input not saved: " + saved.Input);
                 Check(saved.WakeMac == "00:11:22:33:44:55", "wake address not saved: " + saved.WakeMac);
+                Check(saved.GatewayMac == "", "a new setup kept the old router: " + saved.GatewayMac);
                 File.Delete(Settings.FilePath);
             }
         }

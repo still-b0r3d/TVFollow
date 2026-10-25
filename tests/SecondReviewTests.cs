@@ -41,8 +41,8 @@ namespace TVFollow.Tests
                 Controller c = Fast(new Controller(SettingsFor(tv)));
                 Exception failure = null;
                 ThreadStart turnOn = () => { try { c.TurnOn(TurnOnMode.ToPc); } catch (Exception e) { failure = e; } };
-                var first = new Thread(turnOn);
-                var second = new Thread(turnOn);
+                var first = new Thread(turnOn) { IsBackground = true };  // a stuck one mustn't keep the test run alive
+                var second = new Thread(turnOn) { IsBackground = true };
                 first.Start();
                 second.Start();
                 Check(first.Join(30000) && second.Join(30000), "a TurnOn got stuck");
@@ -62,14 +62,19 @@ namespace TVFollow.Tests
                 tv.DelayMs = 100;
                 Controller c = Fast(new Controller(SettingsFor(tv)));
                 c.RetryMs = 300;
-                var busy = new Thread(() => { try { c.TurnOn(TurnOnMode.ToPc); } catch { } });
+                var busy = new Thread(() => { try { c.TurnOn(TurnOnMode.ToPc); } catch { } }) { IsBackground = true };
                 busy.Start();
-                Thread.Sleep(250);
+                // the sequence asks the TV only from inside its turn, so its first request means it
+                // holds the turn; a fixed sleep could let the quick off go first on a slow machine
+                var started = Stopwatch.StartNew();
+                while (tv.Requests().Count == 0 && started.ElapsedMilliseconds < 5000) Thread.Sleep(10);
+                Check(tv.Requests().Count > 0, "the sequence never started");
                 var watch = Stopwatch.StartNew();
                 c.TurnOff(false, true);
                 watch.Stop();
                 Check(watch.ElapsedMilliseconds < 1500, "the quick off waited " + watch.ElapsedMilliseconds + " ms behind a running sequence");
                 Check(LogText().Contains("leaving it on"), "the quick off should have looked at the TV");
+                tv.IgnoreInput = false; // let the sequence finish at its next try
                 Check(busy.Join(30000), "the sequence got stuck");
             }
         }
@@ -114,8 +119,9 @@ namespace TVFollow.Tests
                 var hold = new FileStream(Settings.FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
                 var release = new Thread(() => { Thread.Sleep(300); hold.Dispose(); });
                 release.Start();
-                Settings loaded = Settings.Load();
-                release.Join();
+                Settings loaded;
+                try { loaded = Settings.Load(); }
+                finally { release.Join(); } // let go of the file even if Load failed, or the next test can't use it
                 Check(loaded.LoadError == null && loaded.Ip == "192.168.1.50", "a briefly held file should still load: " + loaded.LoadError);
 
                 // held for good: no crash, and not "not set up" either
@@ -244,6 +250,16 @@ namespace TVFollow.Tests
             Check(!Discovery.OnNetworkOf(false, "", ""), "other numbers");
             Check(!Discovery.OnNetworkOf(false, "aa:bb:cc:dd:ee:ff", "aa:bb:cc:dd:ee:ff"), "other numbers, even behind the same router");
             Check(Discovery.GatewayMacFor("127.0.0.1") == "", "loopback has no router");
+
+            // the controller's own check: an address on none of the PC's networks is answered
+            // without looking up any router (the other tests replace this check)
+            var s = new Settings();
+            s.Ip = "127.0.0.1";
+            s.Serial = "X000000001";
+            s.GatewayMac = "AA:BB:CC:DD:EE:FF";
+            var c = new Controller(s);
+            c.GatewayMacFor = ip => { throw new Exception("looked up a router for an address on none of the PC's networks"); };
+            Check(!c.OnTvNetwork(), "loopback isn't the TV's network");
         }
 
         static void GatewayMacIsRemembered()
