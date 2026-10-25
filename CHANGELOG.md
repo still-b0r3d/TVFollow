@@ -25,6 +25,8 @@ Fixes from a second review of 1.0.
 - The automatic following and the tray and remote buttons no longer talk to the TV at the
   same time. A button pressed while a sequence is running (waking the TV, say) waits for
   it to finish instead of pressing buttons in between. Sleep and shutdown don't wait.
+- The remote no longer risks ending TVFollow when the TV's answer arrives just as the remote
+  window closes.
 
 ## 1.0 (2026-10-24)
 

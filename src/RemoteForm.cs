@@ -39,7 +39,13 @@ namespace TVFollow
             this.controller = controller;
             this.layout = layout == Compact || layout == Strip ? layout : Classic;
             sender = new RemoteSender(() => new RokuClient(this.settings.Ip, this.settings.Port));
-            sender.Answered += code => { if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(() => ShowAnswer(code))); };
+            sender.Answered += code =>
+            {
+                // an answer can arrive after the window has gone, even between the check and the
+                // call; then there's nobody to tell
+                try { if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(() => ShowAnswer(code))); }
+                catch (InvalidOperationException) { }
+            };
 
             SuspendLayout();
             Text = "TV remote";
