@@ -348,12 +348,16 @@ namespace TVFollow.Tests
             }
         }
 
-        // The router was replaced and the new one gave the TV a new address: the old address has
-        // nothing on it, the TV answers at another one, and the router isn't the remembered one.
+        // The router was replaced and the new one gave the TV a new address: another device has
+        // the TV's old address, the TV answers at another one, and the router isn't the remembered
+        // one. (Something answers at the old address because a connection to an empty loopback
+        // address takes Windows two seconds to give up on.)
         static void RouterSwapButtonFindsTv()
         {
             using (var tv = new FakeTv("127.0.0.2", 0))
+            using (var other = new FakeTv("127.0.0.3", tv.Port))
             {
+                other.Serial = "SOMEONE-ELSE";
                 tv.App = "12"; // on, showing a channel
                 int searches = 0;
                 Func<Settings, Controller> afterSwap = s =>
