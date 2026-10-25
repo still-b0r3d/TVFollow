@@ -21,6 +21,7 @@ namespace TVFollow.Tests
             Run("the TV's router is remembered, kept, and never asked for at sleep", GatewayMacIsRemembered);
             Run("remote: an emoji is one letter, half of one throws", RemoteEmojiLetter);
             Run("remote: an emoji typed in halves is one press, a stray half is nothing", RemoteEmojiTyped);
+            Run("remote: every typed character reaches the TV as typed, . / and \\ too", EveryCharacterArrivesAsTyped);
             Run("remote: pasted text becomes presses, first line only", LettersFromText);
             Run("remote: a paste reaches the TV in order, a busy clipboard sends nothing", RemotePasteIsSent);
             Run("settings: a held file is waited for, then reported, never a crash", SettingsFileHeld);
@@ -220,6 +221,29 @@ namespace TVFollow.Tests
                     Check(tv.Presses == 2, "presses: " + tv.Presses + " (a stray half got sent?)");
                 }
                 finally { form.Close(); form.Dispose(); }
+            }
+        }
+
+        // .NET's 4.0 compatibility mode "cleaned up" the address on the way out: Lit_. lost its dot
+        // and Lit_%2F / Lit_%5C became Lit_/. Every printable character goes through the real client
+        // here and has to arrive exactly as escaped.
+        static void EveryCharacterArrivesAsTyped()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                var client = new RokuClient(tv.Ip, tv.Port);
+                var typed = new List<string>();
+                for (char c = ' '; c <= '~'; c++) typed.Add(RemoteKeys.Letter(c));
+                typed.Add(RemoteKeys.Letter("\U0001F600"));
+                var wrong = new List<string>();
+                foreach (string key in typed)
+                {
+                    int code = client.Keypress(key, 3000);
+                    if (code != 200 || tv.Count("POST /keypress/" + key) != 1) wrong.Add(key + " (" + code + ")");
+                }
+                List<string> expected = typed.ConvertAll(key => "POST /keypress/" + key);
+                Check(wrong.Count == 0, "not sent as typed: " + string.Join(" ", wrong) +
+                    "; the TV saw instead: " + string.Join(" ", tv.Requests().FindAll(r => !expected.Contains(r))));
             }
         }
 

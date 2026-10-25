@@ -14,6 +14,9 @@ Fixes from a second review of 1.0.
   also gave the TV a new address, go through Settings… → Change TV… once.
 - Typing an emoji into the remote's search box no longer trips an error dialog (which could
   end TVFollow). It goes to the TV as typed; whether the TV shows it is up to the TV.
+- A dot, slash or backslash typed into the remote's search box now reaches the TV as typed
+  (before, the dot was lost and both slashes arrived as /). TVFollow.exe now says which
+  .NET it's built for, so Windows no longer runs it in an old compatibility mode.
 - Text pasted into the remote's search box now reaches the TV too (the first line of it,
   letter by letter). Before, the box showed it but the TV never got it.
 - A settings file that can't be read at sign-in (held open by another program, say) no
