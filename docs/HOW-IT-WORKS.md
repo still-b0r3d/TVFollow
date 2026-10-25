@@ -66,7 +66,13 @@ If the TV doesn't answer when it's time to turn it on, TVFollow sends a
 **Wake-on-LAN packet** for the TV's network card (Wi-Fi or cable, whichever the TV uses;
 TVFollow notices if that changes) to the broadcast address of each network the PC is on,
 again every 3 seconds, and gives the TV 20 seconds to wake up. If the PC isn't on the
-TV's network, it sends nothing.
+TV's network, it only asks the TV's last address whether it's there, and sends nothing else.
+
+"The TV's network" means the network behind your home router, not just the same kind of
+addresses: a laptop that joins a hotel or office network which also uses `192.168.1.x` finds
+a different router there, so TVFollow leaves that network alone. It remembers the home
+router's hardware address the first time the TV answers, and learns a new one the same way
+(after a router swap, turn the TV on once with its remote).
 
 ## Checking for new versions
 
@@ -101,6 +107,7 @@ ip=192.168.1.50
 serial=X000000000
 input=hdmi1
 wake_mac=00:11:22:33:44:55
+gateway_mac=AA:BB:CC:DD:EE:01
 off_with_monitors=yes
 on_with_monitors=yes
 start_with_windows=yes
@@ -115,6 +122,7 @@ remote_layout=classic
 | `serial` | The TV's serial number, to tell it apart from other Rokus |
 | `input` | The input your PC is plugged into |
 | `wake_mac` | The TV's network card, for the wake signal (updated by itself) |
+| `gateway_mac` | Your home router, so another network with the same addresses is left alone (learned by itself when the TV answers) |
 | `off_with_monitors`, `on_with_monitors` | The two "follow" options |
 | `start_with_windows`, `desktop_shortcuts` | Install options |
 | `check_updates` | Ask GitHub once a week whether there's a newer TVFollow |

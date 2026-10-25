@@ -7,6 +7,11 @@ Fixes from a second review of 1.0.
 - A reply from "the TV" that tries to send TVFollow somewhere else (a redirect) is ignored.
   TVFollow never follows redirects, so nothing on the network can make the PC request
   another address.
+- "The TV's network" now means the network behind your home router, not just the same
+  kind of addresses. A laptop on a hotel or office network that happens to use the same
+  numbers no longer sends wake packets or looks around for the TV there. TVFollow learns
+  the router the first time the TV answers (new `gateway_mac` setting); after a router
+  swap, turn the TV on once with its remote and it learns the new one.
 
 ## 1.0 (2026-10-24)
 

@@ -17,6 +17,49 @@ namespace TVFollow.Tests
         static void RunSecondReview()
         {
             Run("a redirect from the TV is not followed", RedirectIsNotFollowed);
+            Run("the TV's network: the same numbers aren't the same network", NetworkGate);
+            Run("the TV's router is remembered, kept, and never asked for at sleep", GatewayMacIsRemembered);
+        }
+
+        // ---- the TV's network ----
+
+        static void NetworkGate()
+        {
+            Check(Discovery.OnNetworkOf(true, "aa:bb:cc:dd:ee:ff", "AA:BB:CC:DD:EE:FF"), "same numbers, same router");
+            Check(!Discovery.OnNetworkOf(true, "aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66"), "same numbers, another router");
+            Check(Discovery.OnNetworkOf(true, "", "11:22:33:44:55:66"), "no router remembered yet: the numbers decide");
+            Check(!Discovery.OnNetworkOf(true, "aa:bb:cc:dd:ee:ff", ""), "a router remembered, none found");
+            Check(!Discovery.OnNetworkOf(false, "", ""), "other numbers");
+            Check(!Discovery.OnNetworkOf(false, "aa:bb:cc:dd:ee:ff", "aa:bb:cc:dd:ee:ff"), "other numbers, even behind the same router");
+            Check(Discovery.GatewayMacFor("127.0.0.1") == "", "loopback has no router");
+        }
+
+        static void GatewayMacIsRemembered()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                Settings s = SettingsFor(tv);
+                s.Save();
+                Controller c = Fast(new Controller(s));
+                c.GatewayMacFor = ip => "AA:BB:CC:DD:EE:FF";
+                c.TurnOff(false, false);
+                Check(s.GatewayMac == "AA:BB:CC:DD:EE:FF", "router not remembered: [" + s.GatewayMac + "]");
+                Check(Settings.Load().GatewayMac == "AA:BB:CC:DD:EE:FF", "router not saved");
+                Check(LogText().Contains("remembered the TV's network") && !LogText().Contains("AA:BB"), "no log line, or the log shows the address");
+
+                // a router that doesn't answer for a moment doesn't erase the one remembered
+                c.GatewayMacFor = ip => "";
+                tv.PowerMode = "PowerOn";
+                c.TurnOff(false, false);
+                Check(s.GatewayMac == "AA:BB:CC:DD:EE:FF", "an unanswered router lookup erased the remembered one");
+
+                // sleep and shutdown have no time for the network: the quick path never asks
+                c.GatewayMacFor = ip => { throw new Exception("asked for the router on the quick path"); };
+                tv.PowerMode = "PowerOn";
+                c.TurnOff(false, true);
+                Check(tv.Count("POST /keypress/PowerOff") == 3, "power off pressed " + tv.Count("POST /keypress/PowerOff") + " times, expected 3");
+                File.Delete(Settings.FilePath);
+            }
         }
 
         // ---- the TV client ----

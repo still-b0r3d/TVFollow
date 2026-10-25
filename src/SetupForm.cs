@@ -222,6 +222,7 @@ namespace TVFollow
             Settings.Ip = Tv.Ip;
             Settings.Serial = Tv.Info.Serial;
             Settings.WakeMac = Tv.Info.WakeMac;
+            Settings.GatewayMac = ""; // this may be a new home: the router is learned again once the TV answers
             // the settings go where the chosen mode keeps them (a trial copy keeps its own folder)
             if (!TVFollow.Settings.IsTrial) TVFollow.Settings.Dir = Portable ? TVFollow.Settings.PortableDir : TVFollow.Settings.DefaultDir;
             try { Settings.Save(); }

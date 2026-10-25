@@ -57,6 +57,7 @@ namespace TVFollow
         public string Serial = "";
         public string Input = "hdmi1";
         public string WakeMac = "";
+        public string GatewayMac = "";  // the home router the TV was last seen behind, to tell its network from a look-alike
         public int Port = DefaultPort;
         public bool OffWithMonitors = true;
         public bool OnWithMonitors = true;
@@ -93,6 +94,7 @@ namespace TVFollow
                     case "input": s.Input = value.ToLowerInvariant(); break;
                     case "wake_mac":
                     case "mac": s.WakeMac = value; break;
+                    case "gateway_mac": s.GatewayMac = value; break;
                     case "port":
                         int port;
                         if (int.TryParse(value, out port) && port > 0 && port < 65536) s.Port = port;
@@ -129,6 +131,7 @@ namespace TVFollow
                 "serial=" + Serial + "\r\n" +
                 "input=" + Input + "\r\n" +
                 "wake_mac=" + WakeMac + "\r\n" +
+                "gateway_mac=" + GatewayMac + "\r\n" +
                 "off_with_monitors=" + (OffWithMonitors ? "yes" : "no") + "\r\n" +
                 "on_with_monitors=" + (OnWithMonitors ? "yes" : "no") + "\r\n" +
                 "start_with_windows=" + (StartWithWindows ? "yes" : "no") + "\r\n" +

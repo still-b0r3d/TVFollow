@@ -39,12 +39,15 @@ namespace TVFollow
         public Func<string, int> SendWake = Wake.Send;  // returns how many packets went out
         public Func<bool> OnTvNetwork;                  // is the PC on the network the TV was last seen on?
         public Func<List<string>> Candidates;           // where to look if the TV moved
+        public Func<string, string> GatewayMacFor = Discovery.GatewayMacFor;  // the router of the network an address is on
 
         public Controller(Settings settings)
         {
             this.settings = settings;
             tv = new RokuClient(settings.Ip, settings.Port);
-            OnTvNetwork = () => Discovery.IsLocal(this.settings.Ip);
+            // the same address range isn't the same network: the router has to match too, once known
+            OnTvNetwork = () => Discovery.IsLocal(this.settings.Ip) &&
+                Discovery.OnNetworkOf(true, this.settings.GatewayMac, GatewayMacFor(this.settings.Ip));
             Candidates = () => Discovery.SweepAround(this.settings.Ip, this.settings.Port, SweepWaitMs);
         }
 
@@ -119,7 +122,7 @@ namespace TVFollow
         public void TurnOff(bool force, bool quick)
         {
             string tag = force ? "off (button)" : "off";
-            TvState s = Query(quick ? 800 : 3000);
+            TvState s = quick ? Query(800) : Query();
             if (!s.Reachable && !quick)
             {
                 if (!OnTvNetwork()) { Log.Write(tag + ": this PC isn't on the TV's network"); return; }
@@ -132,7 +135,26 @@ namespace TVFollow
             Log.Write(tag + ": power off -> " + tv.Keypress("PowerOff", quick ? 800 : 4000));
         }
 
-        TvState Query() { return Query(3000); }
+        // the usual query; the quick path at sleep and shutdown calls Query(800) directly, so it
+        // never stops to look at the network
+        TvState Query()
+        {
+            TvState s = Query(3000);
+            if (s.Reachable) RememberNetwork();
+            return s;
+        }
+
+        // The TV answered, so this is its network: remember the router, so that a laptop on
+        // another network with the same addresses can be told apart later. A router that
+        // doesn't answer right now doesn't make TVFollow forget the one it knows.
+        void RememberNetwork()
+        {
+            string gateway = GatewayMacFor(settings.Ip);
+            if (gateway.Length == 0 || string.Equals(gateway, settings.GatewayMac, StringComparison.OrdinalIgnoreCase)) return;
+            settings.GatewayMac = gateway;
+            Log.Write("remembered the TV's network");
+            Save();
+        }
 
         TvState Query(int timeoutMs)
         {

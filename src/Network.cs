@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -69,16 +70,25 @@ namespace TVFollow
             foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
             {
                 if (nic.OperationalStatus != OperationalStatus.Up) continue;
-                foreach (var addr in nic.GetIPProperties().UnicastAddresses)
-                {
-                    if (addr.Address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(addr.Address)) continue;
-                    var net = new LocalNetwork();
-                    LocalNetwork.TryParse(addr.Address.ToString(), out net.Address);
-                    if ((net.Address >> 16) == 0xA9FE) continue; // 169.254.x.x
-                    uint mask;
-                    net.Mask = addr.IPv4Mask != null && LocalNetwork.TryParse(addr.IPv4Mask.ToString(), out mask) && mask != 0 ? mask : 0xFFFFFF00;
+                foreach (LocalNetwork net in NetworksOf(nic.GetIPProperties()))
                     if (!networks.Exists(n => (n.Address & n.Mask) == (net.Address & net.Mask) && n.Mask == net.Mask)) networks.Add(net);
-                }
+            }
+            return networks;
+        }
+
+        // the IPv4 networks of one adapter (not loopback or self-assigned 169.254)
+        static List<LocalNetwork> NetworksOf(IPInterfaceProperties adapter)
+        {
+            var networks = new List<LocalNetwork>();
+            foreach (var addr in adapter.UnicastAddresses)
+            {
+                if (addr.Address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(addr.Address)) continue;
+                var net = new LocalNetwork();
+                LocalNetwork.TryParse(addr.Address.ToString(), out net.Address);
+                if ((net.Address >> 16) == 0xA9FE) continue; // 169.254.x.x
+                uint mask;
+                net.Mask = addr.IPv4Mask != null && LocalNetwork.TryParse(addr.IPv4Mask.ToString(), out mask) && mask != 0 ? mask : 0xFFFFFF00;
+                networks.Add(net);
             }
             return networks;
         }
@@ -87,6 +97,54 @@ namespace TVFollow
         public static bool IsLocal(string ip)
         {
             return LocalNetworks().Exists(n => n.Contains(ip));
+        }
+
+        // Is the PC on the network the TV was last seen on? The same numbers aren't enough: a
+        // laptop can join a hotel's or an office's network that also uses 192.168.1.x. Once the
+        // home router is known it has to be the same router; before that, the numbers are all
+        // there is to go on.
+        public static bool OnNetworkOf(bool sameNumbers, string savedGatewayMac, string gatewayMac)
+        {
+            if (!sameNumbers) return false;
+            if (string.IsNullOrEmpty(savedGatewayMac)) return true;
+            return string.Equals(savedGatewayMac, gatewayMac, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // The hardware address of the router (default gateway) of the network this address is
+        // on, like "AA:BB:CC:DD:EE:FF", or "" when there is no router or it doesn't answer.
+        public static string GatewayMacFor(string ip)
+        {
+            try
+            {
+                foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.OperationalStatus != OperationalStatus.Up) continue;
+                    IPInterfaceProperties adapter = nic.GetIPProperties();
+                    if (!NetworksOf(adapter).Exists(n => n.Contains(ip))) continue;
+                    foreach (GatewayIPAddressInformation gateway in adapter.GatewayAddresses)
+                    {
+                        if (gateway.Address.AddressFamily != AddressFamily.InterNetwork || gateway.Address.Equals(IPAddress.Any)) continue;
+                        string mac = MacOf(gateway.Address);
+                        if (mac.Length > 0) return mac;
+                    }
+                }
+            }
+            catch { } // an adapter going away mid-walk
+            return "";
+        }
+
+        [DllImport("iphlpapi.dll", ExactSpelling = true)]
+        static extern int SendARP(uint destination, uint source, byte[] mac, ref uint macLength);
+
+        static string MacOf(IPAddress address)
+        {
+            var mac = new byte[6];
+            uint length = 6;
+            // the address bytes as they are on the wire, not the number LocalNetwork uses
+            uint destination = BitConverter.ToUInt32(address.GetAddressBytes(), 0);
+            // a failed lookup can come back as "no error" with no address, so the length counts too
+            if (SendARP(destination, 0, mac, ref length) != 0 || length != 6) return "";
+            return BitConverter.ToString(mac).Replace('-', ':');
         }
 
         // Every address on the PC's own networks that accepts a connection on the port

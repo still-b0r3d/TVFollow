@@ -96,6 +96,7 @@ namespace TVFollow.Tests
             c.SendWake = mac => { throw new Exception("unexpected wake packet"); };
             c.Candidates = () => new List<string>();
             c.OnTvNetwork = () => true;
+            c.GatewayMacFor = ip => "";
             c.SearchEvery = TimeSpan.Zero;
             c.WakeRepeatMs = 1000000;
             return c;
@@ -121,6 +122,7 @@ namespace TVFollow.Tests
             s.Serial = "X000000001";
             s.Input = "hdmi2";
             s.WakeMac = "00:11:22:33:44:55";
+            s.GatewayMac = "AA:BB:CC:DD:EE:01";
             s.Port = 18060;
             s.OnWithMonitors = false;
             s.StartWithWindows = false;
@@ -129,7 +131,7 @@ namespace TVFollow.Tests
             s.Save();
             s.Save(); // second save replaces the file
             Settings t = Settings.Load();
-            Check(t.Ip == s.Ip && t.Serial == s.Serial && t.Input == "hdmi2" && t.WakeMac == s.WakeMac, "fields lost");
+            Check(t.Ip == s.Ip && t.Serial == s.Serial && t.Input == "hdmi2" && t.WakeMac == s.WakeMac && t.GatewayMac == s.GatewayMac, "fields lost");
             Check(t.Port == 18060, "port lost");
             Check(!t.OnWithMonitors && t.OffWithMonitors, "options lost");
             Check(!t.StartWithWindows && t.DesktopShortcuts && !t.CheckUpdates, "install options lost");
