@@ -212,9 +212,12 @@ namespace TVFollow.Tests
                     Check(presses.Count == 2 && presses[0] == "POST /keypress/Lit_h" && presses[1] == "POST /keypress/Lit_i", "presses: " + string.Join(", ", presses));
 
                     box.ReadClipboard = () => { throw new System.Runtime.InteropServices.ExternalException("the clipboard is busy"); };
-                    box.Paste(); // must not throw, must not send
-                    Pump(() => true, 1);
-                    Check(tv.Presses == 2, "a busy clipboard should send nothing: " + tv.Presses);
+                    box.Paste(); // must not throw (Run fails the test if the window did) and must not send
+                    // presses go out in order, so once a letter typed afterwards has arrived, anything
+                    // the busy paste had sent would have arrived before it
+                    TypeInto(box, 'z');
+                    Pump(() => tv.Count("POST /keypress/Lit_z") == 1, 10);
+                    Check(tv.Presses == 3, "a busy clipboard should send nothing: " + tv.Presses + " presses");
                 }
                 finally { form.Close(); form.Dispose(); }
             }

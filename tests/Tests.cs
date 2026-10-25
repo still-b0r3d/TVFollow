@@ -9,6 +9,7 @@ namespace TVFollow.Tests
     static partial class TestMain
     {
         static int passed, failed;
+        static Exception windowError;  // what a window's message handler threw during the running test
 
         [STAThread]
         static int Main(string[] args)
@@ -16,6 +17,11 @@ namespace TVFollow.Tests
             if (args.Length == 2 && args[0] == "--shots") return Shots.Run(args[1], false);
             if (args.Length == 2 && args[0] == "--screenshots") return Shots.Run(args[1], true);
             if (args.Length == 1 && args[0] == "--probe") return Shots.Probe();
+
+            // an exception inside a window's message handler never reaches Run on its own: WinForms
+            // catches it and shows its error dialog (or, with nobody there, drops it). Caught here, it
+            // fails the test that was running instead, and no dialog stops the run.
+            System.Windows.Forms.Application.ThreadException += (s, e) => { windowError = e.Exception; };
 
             string home = Path.Combine(Path.GetTempPath(), "TVFollowTests-" + Guid.NewGuid().ToString("N"));
             Settings.Dir = home;
@@ -64,7 +70,9 @@ namespace TVFollow.Tests
             try
             {
                 if (File.Exists(Log.FilePath)) File.Delete(Log.FilePath);
+                windowError = null;
                 test();
+                if (windowError != null) throw new Exception("a window threw: " + windowError.Message);
                 passed++;
                 Console.WriteLine("PASS  " + name);
             }
