@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1 (not released yet)
+## 1.1 (2026-10-25)
 
 Fixes from a second review of 1.0.
 
