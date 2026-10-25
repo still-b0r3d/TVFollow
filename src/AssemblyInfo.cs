@@ -5,9 +5,9 @@ using System.Reflection;
 [assembly: AssemblyCompany("still b0r3d")]
 [assembly: AssemblyProduct("TVFollow")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 still b0r3d. MIT License with the Commons Clause: free, not for sale.")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("1.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyInformationalVersion("1.1")]
 
 // the compiler that comes with Windows leaves this out, and without it .NET runs the exe in its
 // .NET 4.0 compatibility mode: web addresses get "cleaned up" (a typed . / or \ never reached the

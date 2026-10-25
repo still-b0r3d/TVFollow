@@ -20,7 +20,7 @@ namespace TVFollow
 {
     static class Program
     {
-        public const string Version = "1.0";
+        public const string Version = "1.1";
 
         [DllImport("kernel32.dll")]
         static extern bool AttachConsole(int processId);
