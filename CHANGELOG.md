@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2 (not released yet)
+## 1.2 (2026-10-30)
 
 More than one TV.
 
