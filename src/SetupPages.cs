@@ -89,15 +89,23 @@ namespace TVFollow
             Body.Controls.Add(redo);
         }
 
-        // the ticked TVs, in the list's order
+        // the ticked TVs, in the list's order (each TV once)
         public List<FoundTv> Ticked
         {
             get
             {
                 var tvs = new List<FoundTv>();
-                foreach (FoundTv tv in list.Items) if (ticked.Contains(tv.Info.Serial)) tvs.Add(tv);
+                foreach (FoundTv tv in list.Items)
+                    if (ticked.Contains(tv.Info.Serial) && !tvs.Exists(t => t.Info.Serial == tv.Info.Serial)) tvs.Add(tv);
                 return tvs;
             }
+        }
+
+        // the TV with this serial on the list, or null
+        FoundTv Listed(string serial)
+        {
+            foreach (FoundTv tv in list.Items) if (tv.Info.Serial == serial) return tv;
+            return null;
         }
 
         // for the tests and the screenshot tool: exactly these TVs ticked (added to the end of
@@ -152,39 +160,40 @@ namespace TVFollow
             catch { found = new List<FoundTv>(); }
             if (IsDisposed) return;
 
+            scanning = false;
+            again.Enabled = true;
+            spinner.Visible = false;
+            // an address typed in while the search ran is on the list already, and stays there:
+            // the search may not reach it (another subnet is the usual reason to type one in)
+            foreach (FoundTv tv in found)
+                if (Listed(tv.Info.Serial) == null) list.Items.Add(tv);
             // a TV set up before that didn't answer stays on the list, ticked, so finishing setup
             // doesn't drop it unseen: it keeps its settings unless it's unticked
             foreach (TvSettings saved in Setup.Settings.Tvs)
             {
-                if (found.Exists(f => f.Info.Serial == saved.Serial)) continue;
+                if (Listed(saved.Serial) != null) continue;
                 var info = new DeviceInfo { Serial = saved.Serial, Name = saved.Name, IsTv = true };
-                found.Add(new FoundTv { Ip = saved.Ip, Info = info, Answering = false });
+                list.Items.Add(new FoundTv { Ip = saved.Ip, Info = info, Answering = false });
             }
-
-            scanning = false;
-            again.Enabled = true;
-            spinner.Visible = false;
             int tvs = 0;
-            foreach (FoundTv tv in found)
-            {
-                list.Items.Add(tv);
-                if (tv.Info.IsTv) tvs++;
-            }
+            foreach (FoundTv tv in list.Items) if (tv.Info.IsTv) tvs++;
             // the first time: the TVs set up before, or the only TV there is. After that, what was
             // ticked stays ticked, if it's still listed.
             if (!searched)
             {
-                foreach (FoundTv tv in found)
+                foreach (FoundTv tv in list.Items)
                     if (tv.Info.IsTv && (Setup.IsSetUp(tv.Info.Serial) || (tvs == 1 && Setup.Settings.Tvs.Count == 0))) ticked.Add(tv.Info.Serial);
                 searched = true;
             }
-            ticked.RemoveWhere(serial => !found.Exists(f => f.Info.IsTv && f.Info.Serial == serial));
+            ticked.RemoveWhere(serial => { FoundTv tv = Listed(serial); return tv == null || !tv.Info.IsTv; });
 
             hint.Visible = tvs == 0;
-            redo.Visible = found.Exists(f => Setup.IsSetUp(f.Info.Serial));
+            bool setUpListed = false;
+            foreach (FoundTv tv in list.Items) if (Setup.IsSetUp(tv.Info.Serial)) setUpListed = true;
+            redo.Visible = setUpListed;
             list.Invalidate();
             if (tvs == 0)
-                SetStatus(status, false, found.Count == 0 ? "No TVs found." : "Found a Roku, but no TV with Roku built in.");
+                SetStatus(status, false, list.Items.Count == 0 ? "No TVs found." : "Found a Roku, but no TV with Roku built in.");
             else if (ticked.Count > 0)
             {
                 Picked();
@@ -417,7 +426,7 @@ namespace TVFollow
             note.Text = "";
             foreach (KeyValuePair<string, string> input in inputs)
             {
-                var radio = new RadioButton { Text = InputLabel(input.Key, input.Value), Tag = input, AutoSize = true, Margin = new Padding(0, 2, 0, 4) };
+                var radio = new RadioButton { Text = InputLabel(input.Key, input.Value), Tag = input, AutoSize = true, Margin = new Padding(0, 2, 0, 4), UseMnemonic = false };
                 radio.CheckedChanged += delegate { if (radio.Checked) Chose(radio); };
                 choices.Controls.Add(radio);
                 if (input.Key == pick) radio.Checked = true;
@@ -582,7 +591,6 @@ namespace TVFollow
         public FinishPage(SetupForm setup) : base(setup)
         {
             summary = Para("");
-            summary.UseMnemonic = false; // the TVs' own names
             off = Option("Turn the TV off when this PC's monitors turn off", 4, 0);
             on = Option("Turn the TV on and switch it to this PC when you come back", 4, 0);
             updates = Option("Tell me when there's a new version (checks GitHub once a week)", 14, 0);

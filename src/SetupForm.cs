@@ -258,7 +258,8 @@ namespace TVFollow
 
         // Leaving step 1: the ticked TVs in the order they're saved (the ones set up before first,
         // in their old order, then the new ones), and the ones steps 2 to 4 go through: the new
-        // ones, and the others too if asked.
+        // ones, and the others too if asked. Never a TV set up before that didn't answer: its old
+        // address may belong to another Roku by now, and the test would turn that one off.
         void Plan()
         {
             List<FoundTv> ticked = find.Ticked;
@@ -270,7 +271,7 @@ namespace TVFollow
             }
             foreach (FoundTv found in ticked)
                 if (!IsSetUp(found.Info.Serial)) chosen.Add(Remember(found, null));
-            walk = chosen.FindAll(t => !t.SetUpBefore || Redo);
+            walk = chosen.FindAll(t => t.Found.Answering && (!t.SetUpBefore || Redo));
             step = 0;
         }
 
@@ -313,6 +314,7 @@ namespace TVFollow
 
         void Finish()
         {
+            var before = new List<TvSettings>(Settings.Tvs);
             Settings.Tvs.Clear();
             foreach (SetupTv t in chosen)
             {
@@ -329,10 +331,16 @@ namespace TVFollow
                 Settings.Tvs.Add(tv);
             }
             // the settings go where the chosen mode keeps them (a trial copy keeps its own folder)
+            string dirBefore = TVFollow.Settings.Dir;
             if (!TVFollow.Settings.IsTrial) TVFollow.Settings.Dir = Portable ? TVFollow.Settings.PortableDir : TVFollow.Settings.DefaultDir;
             try { Settings.Save(); }
             catch (Exception e)
             {
+                // as it was, so going back to step 1 still knows which TVs were set up before
+                // (the kept TVs' changes were made on copies)
+                Settings.Tvs.Clear();
+                Settings.Tvs.AddRange(before);
+                TVFollow.Settings.Dir = dirBefore;
                 MessageBox.Show(this, "Couldn't save the settings: " + e.Message, "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
@@ -403,7 +411,8 @@ namespace TVFollow
 
         protected Label Para(string text)
         {
-            var label = new Label { AutoSize = true, Text = text, Margin = new Padding(0, 0, 0, 12) };
+            // UseMnemonic off: TVs' and inputs' own names show up in these, and an & stays an &
+            var label = new Label { AutoSize = true, Text = text, Margin = new Padding(0, 0, 0, 12), UseMnemonic = false };
             Body.Controls.Add(label);
             return label;
         }

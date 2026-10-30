@@ -28,6 +28,8 @@ namespace TVFollow.Tests
             Run("setup: adding a TV keeps the one set up before as it was", SetupAddsTv);
             Run("setup: a TV set up before that doesn't answer stays, until unticked", SetupKeepsSilentTv);
             Run("setup: the box sends TVs set up before through the steps again", SetupRedoesTv);
+            Run("setup: the box never sends a TV that isn't answering through the steps", SetupNeverWalksSilentTv);
+            Run("setup: an address typed during the search counts once, and stays when the search misses it", SetupTypedDuringSearch);
         }
 
         // two pretend TVs on loopback, the second at .2 on the same port
@@ -185,6 +187,13 @@ namespace TVFollow.Tests
             Check(Program.Pick(tvs, "Living Room TV").Count == 2, "a name two TVs share: both");
             Check(Program.Pick(tvs, "Living Room TV (3)")[0] == tvs[2], "by the name the menus show");
             Check(Program.Pick(tvs, "Kitchen") == null, "a name no TV has");
+
+            // one TV: 1.1 took nothing after the command, so whatever is there still means that TV
+            var one = new Settings();
+            one.Tvs.Add(new TvSettings { Name = "Living Room TV" });
+            List<Controller> single = Controller.For(one);
+            Check(Program.Pick(single, "now").Count == 1 && Program.Pick(single, "2").Count == 1 && Program.Pick(single, "1").Count == 1,
+                "with one TV, something extra after the command should still do that TV");
         }
 
         // ---- the windows ----
@@ -514,6 +523,91 @@ namespace TVFollow.Tests
                 }
                 finally { form.Dispose(); }
             }
+        }
+
+        // A TV set up before is off the network, and its old address now belongs to another Roku
+        // TV. Going through the steps again must leave that other TV alone: the test would turn it off.
+        static void SetupNeverWalksSilentTv()
+        {
+            using (var a = new FakeTv("127.0.0.1", 0))
+            using (var stranger = new FakeTv("127.0.0.3", a.Port))
+            {
+                stranger.Serial = "SOMEONE-ELSE";
+                var s = new Settings();
+                s.Port = a.Port;
+                s.Tvs.Add(new TvSettings { Ip = "127.0.0.1", Serial = a.Serial, Input = "hdmi1", Name = "Test TV" });
+                s.Tvs.Add(new TvSettings { Ip = "127.0.0.3", Serial = "X000000003", Input = "hdmi2", Name = "Garage TV" });
+                // the search finds the first TV only (the stranger isn't the TV that was set up)
+                SetupForm form = OffScreenSetup(s, () => TvScanner.Probe(new[] { "127.0.0.1" }, a.Port));
+                try
+                {
+                    Pump(() => !form.CurrentPage.Busy && form.CurrentPage.CanGoNext, 15);
+                    FindBox(form.CurrentPage, "Go through the next steps again").Checked = true;
+                    form.GoNext();
+                    Check(form.CurrentPage is ControlPage && form.Tv.Ip == "127.0.0.1", "expected the answering TV's steps");
+                    Check(!AllText(form).Contains("TV 1 of"), "the silent TV was counted for the steps: " + AllText(form));
+                    WalkOneTv(form);
+                    form.GoNext();
+                    Check(form.CurrentPage is FinishPage, "the silent TV went through the steps: " + form.CurrentPage.Title);
+                    form.GoNext();
+                    Check(form.DialogResult == DialogResult.OK, "Finish didn't close with OK");
+                }
+                finally { form.Dispose(); }
+                Check(stranger.Presses == 0, "a button was pressed on the Roku that took the silent TV's address");
+                Settings saved = Settings.Load();
+                Check(saved.Tvs.Count == 2 && saved.Tvs[1].Ip == "127.0.0.3" && saved.Tvs[1].Input == "hdmi2", "the silent TV didn't keep its settings");
+                File.Delete(Settings.FilePath);
+            }
+        }
+
+        // The person types the TV's address before the search is done. The TV is listed once,
+        // and if the search doesn't see it (another subnet), it stays listed and ticked.
+        static void SetupTypedDuringSearch()
+        {
+            using (var a = new FakeTv("127.0.0.1", 0))
+            {
+                a.Name = "Tom &amp; Jerry"; // the pretend TV writes its name into the XML as it is
+                foreach (bool searchSeesIt in new[] { true, false })
+                {
+                    var s = new Settings();
+                    s.Port = a.Port;
+                    var searching = new ManualResetEvent(false);
+                    SetupForm form = OffScreenSetup(s, () =>
+                    {
+                        searching.WaitOne(15000);
+                        return searchSeesIt ? TvScanner.Probe(new[] { "127.0.0.1" }, a.Port) : new List<FoundTv>();
+                    });
+                    try
+                    {
+                        Pump(() => form.CurrentPage.Busy, 5);
+                        FindControl<TextBox>(form.CurrentPage, t => true).Text = "127.0.0.1";
+                        InvokeClick(FindControl<Button>(form.CurrentPage, b => b.Text == "Add"));
+                        Pump(() => AllText(form.CurrentPage).Contains("it is."), 10);
+                        searching.Set();
+                        Pump(() => !form.CurrentPage.Busy, 15);
+                        Pump(() => true, 1);
+                        var find = (FindPage)form.CurrentPage;
+                        Check(find.Ticked.Count == 1, (searchSeesIt ? "found by both: " : "missed by the search: ") + find.Ticked.Count + " ticked");
+                        Label status = FindControl<Label>(find, l => l.Text.Contains("it is."));
+                        Check(status != null && status.Text.Contains("Tom & Jerry it is.") && !status.UseMnemonic, "the & in the TV's name is eaten");
+                        form.GoNext();
+                        Check(form.CurrentPage is ControlPage && !AllText(form).Contains("TV 1 of 2"), "the same TV went through the steps twice");
+                    }
+                    finally { searching.Set(); form.Dispose(); }
+                }
+            }
+        }
+
+        static T FindControl<T>(Control root, Func<T, bool> match) where T : Control
+        {
+            foreach (Control c in root.Controls)
+            {
+                var hit = c as T;
+                if (hit != null && match(hit)) return hit;
+                T inner = FindControl<T>(c, match);
+                if (inner != null) return inner;
+            }
+            return null;
         }
     }
 }

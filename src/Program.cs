@@ -100,9 +100,9 @@ namespace TVFollow
                 List<Controller> which = Pick(tvs, name);
                 if (which == null)
                 {
-                    MessageBox.Show("TVFollow has no TV called " + name + ". After " + cmd + ", put a TV's number (" +
-                        (tvs.Count == 1 ? "1" : "1 to " + tvs.Count) + ", in the order the Settings window lists them) or its name, " +
-                        "or nothing for every TV.", "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show("TVFollow has no TV called " + name + ". After " + cmd + ", put a TV's number (1 to " + tvs.Count +
+                        ", in the order the Settings window lists them) or its name, or nothing for every TV.",
+                        "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return 2;
                 }
                 bool ok;
@@ -121,10 +121,12 @@ namespace TVFollow
         }
 
         // The TVs a command is for: every TV, or the one named after the command, by its number
-        // (as the Settings window lists them) or its name. Null when no TV goes by that.
+        // (as the Settings window lists them) or its name. Null when no TV goes by that. With one
+        // TV, whatever follows the command means that TV, as in 1.1, which took nothing there:
+        // a hotkey or a script with something extra on the line keeps working.
         public static List<Controller> Pick(List<Controller> tvs, string which)
         {
-            if (string.IsNullOrEmpty(which)) return tvs;
+            if (string.IsNullOrEmpty(which) || tvs.Count == 1) return tvs;
             int number;
             if (int.TryParse(which, NumberStyles.None, CultureInfo.InvariantCulture, out number))
                 return number >= 1 && number <= tvs.Count ? new List<Controller> { tvs[number - 1] } : null;
