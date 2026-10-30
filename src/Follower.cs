@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace TVFollow
@@ -92,7 +94,8 @@ namespace TVFollow
     }
 
     // A hidden window that hears the monitors turn on and off, sleep and shutdown, and a worker
-    // thread that does what the rules want so the window never waits on the TV.
+    // thread for each TV that does what the rules want, so the window never waits on a TV and
+    // the TVs never wait on each other.
     class Follower : NativeWindow
     {
         const int WM_QUERYENDSESSION = 0x11, WM_ENDSESSION = 0x16, WM_POWERBROADCAST = 0x218;
@@ -106,17 +109,22 @@ namespace TVFollow
 
         public Settings Settings { get { return settings; } }
 
+        // the TVs, in the settings' order
+        public readonly List<Controller> Controllers;
+
+        // how long sleep and shutdown wait for the TVs to be told, at most
+        public int QuickOffWaitMs = 5000;
+
         readonly Settings settings;
-        readonly Controller controller;
-        readonly AutoResetEvent kick = new AutoResetEvent(false);
-        int wanted = -1;
+        readonly List<Worker> workers;
         System.Windows.Forms.Timer tick;
         EventWaitHandle quit;
 
-        public Follower(Settings settings, Controller controller)
+        public Follower(Settings settings, List<Controller> controllers)
         {
             this.settings = settings;
-            this.controller = controller;
+            Controllers = controllers;
+            workers = controllers.ConvertAll(c => new Worker(c));
             Rules.OnWithMonitors = settings.OnWithMonitors;
             Rules.OffWithMonitors = settings.OffWithMonitors;
             Rules.Paused = settings.Paused;
@@ -125,9 +133,7 @@ namespace TVFollow
 
         public void Start()
         {
-            var worker = new Thread(Work);
-            worker.IsBackground = true;
-            worker.Start();
+            StartWorkers();
 
             var cp = new CreateParams();
             cp.Caption = "TVFollow";
@@ -158,25 +164,55 @@ namespace TVFollow
         public event Action SettingsRequested = delegate { };
         EventWaitHandle showSettings;
 
-        void Want(bool on)
+        // the TVs' threads; Start starts them, and the tests start them alone to drive the rules
+        // without the window
+        public void StartWorkers()
         {
-            Interlocked.Exchange(ref wanted, on ? 1 : 0);
-            kick.Set();
+            foreach (Worker w in workers) w.Start();
         }
 
-        void Work()
+        void Want(bool on)
         {
-            while (true)
+            foreach (Worker w in workers) w.Want(on);
+        }
+
+        // One TV's thread: it does the latest thing the rules want for that TV, once the TV is
+        // done with whatever it was doing.
+        class Worker
+        {
+            readonly Controller controller;
+            readonly AutoResetEvent kick = new AutoResetEvent(false);
+            int wanted = -1;
+
+            public Worker(Controller controller) { this.controller = controller; }
+
+            public void Start()
             {
-                kick.WaitOne();
-                Thread.Sleep(1000); // let quick off/on flickers settle
-                try
+                var thread = new Thread(Work);
+                thread.IsBackground = true;
+                thread.Start();
+            }
+
+            public void Want(bool on)
+            {
+                Interlocked.Exchange(ref wanted, on ? 1 : 0);
+                kick.Set();
+            }
+
+            void Work()
+            {
+                while (true)
                 {
-                    int state = Thread.VolatileRead(ref wanted);
-                    if (state == 1) controller.TurnOn(TurnOnMode.Follow);
-                    else if (state == 0) controller.TurnOff(false, false);
+                    kick.WaitOne();
+                    Thread.Sleep(1000); // let quick off/on flickers settle
+                    try
+                    {
+                        int state = Thread.VolatileRead(ref wanted);
+                        if (state == 1) controller.TurnOn(TurnOnMode.Follow);
+                        else if (state == 0) controller.TurnOff(false, false);
+                    }
+                    catch (Exception e) { controller.Say("error: " + e.Message); }
                 }
-                catch (Exception e) { Log.Write("error: " + e.Message); }
             }
         }
 
@@ -208,11 +244,18 @@ namespace TVFollow
             base.WndProc(ref m);
         }
 
-        void QuickOff()
+        // Every TV at once: sleep and shutdown only give a moment, and each TV's quick off has
+        // short waits of its own. The window waits for them (up to QuickOffWaitMs), or Windows
+        // could stop the PC before the requests go out.
+        public void QuickOff()
         {
             if (Rules.Paused || !settings.OffWithMonitors) return;
-            try { controller.TurnOff(false, true); }
-            catch (Exception e) { Log.Write("error: " + e.Message); }
+            Task[] offs = Controllers.ConvertAll(c => Task.Run(() =>
+            {
+                try { c.TurnOff(false, true); }
+                catch (Exception e) { c.Say("error: " + e.Message); }
+            })).ToArray();
+            Task.WaitAll(offs, QuickOffWaitMs);
         }
     }
 }

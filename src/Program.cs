@@ -1,16 +1,20 @@
-// TVFollow: turns a TV with Roku built in on and off along with this PC's monitors.
+// TVFollow: turns TVs with Roku built in on and off along with this PC's monitors.
 //
 //   TVFollow.exe            set up on first run, then follow the monitors from the taskbar
-//                           corner; opened again while running, it shows the setup window
+//                           corner; opened again while running, it shows the Settings window
 //   TVFollow.exe setup      show the setup window
-//   TVFollow.exe on         turn the TV on (whatever it shows)
-//   TVFollow.exe pc         turn the TV on and switch it to this PC
-//   TVFollow.exe off        turn the TV off
+//   TVFollow.exe on         turn the TVs on (whatever they show)
+//   TVFollow.exe pc         turn the TVs on and switch them to this PC
+//   TVFollow.exe off        turn the TVs off
+//   TVFollow.exe on 2       on, pc and off take a TV's number in Settings, or its name, to
+//                           do it to that TV alone
 //   TVFollow.exe uninstall  remove TVFollow from this PC (--quiet: don't ask)
 //   TVFollow.exe --version  print the version
 // Used by TVFollow itself: --startup (at sign-in, quietly) and follow (after setup).
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -20,7 +24,7 @@ namespace TVFollow
 {
     static class Program
     {
-        public const string Version = "1.1";
+        public const string Version = "1.2";
 
         [DllImport("kernel32.dll")]
         static extern bool AttachConsole(int processId);
@@ -88,21 +92,46 @@ namespace TVFollow
                 return 1;
             }
 
-            var controller = new Controller(settings);
-            try
+            List<Controller> tvs = Controller.For(settings);
+            if (cmd == "on" || cmd == "pc" || cmd == "off")
             {
-                if (cmd == "on") { controller.TurnOn(TurnOnMode.PowerOnly); return 0; }
-                if (cmd == "pc") { controller.TurnOn(TurnOnMode.ToPc); return 0; }
-                if (cmd == "off") { controller.TurnOff(true, false); return 0; }
+                // a name with spaces works without quotes too: "on Office TV"
+                string name = args.Length > 1 ? string.Join(" ", args, 1, args.Length - 1) : null;
+                List<Controller> which = Pick(tvs, name);
+                if (which == null)
+                {
+                    MessageBox.Show("TVFollow has no TV called " + name + ". After " + cmd + ", put a TV's number (" +
+                        (tvs.Count == 1 ? "1" : "1 to " + tvs.Count) + ", in the order the Settings window lists them) or its name, " +
+                        "or nothing for every TV.", "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return 2;
+                }
+                bool ok;
+                if (cmd == "on") ok = Controller.Each(which, cmd, c => c.TurnOn(TurnOnMode.PowerOnly));
+                else if (cmd == "pc") ok = Controller.Each(which, cmd, c => c.TurnOn(TurnOnMode.ToPc));
+                else ok = Controller.Each(which, cmd, c => c.TurnOff(true, false));
+                return ok ? 0 : 1;
             }
-            catch (Exception e) { Log.Write(cmd + ": error: " + e.Message); return 1; }
 
-            if (cmd == "--startup") return Follow(settings, controller, false, false);
-            if (cmd == "follow") return Follow(settings, controller, true, true);
-            if (cmd.Length == 0) return Follow(settings, controller, false, true);
+            if (cmd == "--startup") return Follow(settings, tvs, false, false);
+            if (cmd == "follow") return Follow(settings, tvs, true, true);
+            if (cmd.Length == 0) return Follow(settings, tvs, false, true);
 
             MessageBox.Show("Unknown command: " + args[0] + "\n\nUse setup, on, off, pc, uninstall or --version.", "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return 2;
+        }
+
+        // The TVs a command is for: every TV, or the one named after the command, by its number
+        // (as the Settings window lists them) or its name. Null when no TV goes by that.
+        public static List<Controller> Pick(List<Controller> tvs, string which)
+        {
+            if (string.IsNullOrEmpty(which)) return tvs;
+            int number;
+            if (int.TryParse(which, NumberStyles.None, CultureInfo.InvariantCulture, out number))
+                return number >= 1 && number <= tvs.Count ? new List<Controller> { tvs[number - 1] } : null;
+            List<Controller> named = tvs.FindAll(c =>
+                string.Equals(c.Tv.Name.Trim(), which.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(c.Label, which.Trim(), StringComparison.OrdinalIgnoreCase));
+            return named.Count > 0 ? named : null;
         }
 
         public enum Opening { Follow, Setup, Settings }
@@ -138,7 +167,7 @@ namespace TVFollow
                 catch (Exception e) { Log.Write("couldn't remove the installed copy: " + e.Message); }
             }
             Log.Write("running portable from " + Settings.ExeDir);
-            return Follow(settings, new Controller(settings), true, true);
+            return Follow(settings, Controller.For(settings), true, true);
         }
 
         // After setup: put the exe in its folder (replacing an older one), then follow from there.
@@ -168,7 +197,7 @@ namespace TVFollow
             // a portable copy that's been installed: its folder's settings would make it start
             // portable again next time, so they go
             if (!Settings.IsTrial && !fromInstalled && Directory.Exists(Settings.PortableDir)) Installer.RemoveSettings(Settings.PortableDir);
-            if (fromInstalled) return Follow(settings, new Controller(settings), true, true);
+            if (fromInstalled) return Follow(settings, Controller.For(settings), true, true);
             StartFollowing(paths);
             return 0;
         }
@@ -224,7 +253,7 @@ namespace TVFollow
             return !Instance.IsRunning();
         }
 
-        static int Follow(Settings settings, Controller controller, bool takeOver, bool greet)
+        static int Follow(Settings settings, List<Controller> tvs, bool takeOver, bool greet)
         {
             using (var mutex = new Mutex(false, Instance.MutexName))
             {
@@ -241,10 +270,10 @@ namespace TVFollow
                 }
                 try
                 {
-                    Log.Write("started " + Version + ", following the monitors");
-                    var follower = new Follower(settings, controller);
+                    Log.Write("started " + Version + ", following the monitors" + (tvs.Count > 1 ? " with " + tvs.Count + " TVs" : ""));
+                    var follower = new Follower(settings, tvs);
                     follower.Start();
-                    using (var tray = new Tray(follower, controller))
+                    using (var tray = new Tray(follower))
                     {
                         follower.SettingsRequested += tray.ShowSettings;
                         if (greet) tray.Greet();

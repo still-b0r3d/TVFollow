@@ -54,16 +54,14 @@ namespace TVFollow
     static class Installer
     {
         public const string RunValue = "TVFollow";
-        // The Apps list's publisher line: a nod to b0r3d.org. Everywhere else says still b0r3d.
-        public const string Publisher = "b0r3d.org";
         static readonly string[] IconNames = { "tv.ico", "tv-paused.ico", "tv-on.ico", "tv-off.ico", "tv-pc.ico" };
 
-        // the optional desktop shortcuts: file name, command, icon
+        // the optional desktop shortcuts: file name, command, icon, what it does (one TV, several)
         static readonly string[][] DesktopLinks =
         {
-            new[] { "TV on.lnk", "on", "tv-on.ico", "Turn the TV on" },
-            new[] { "TV off.lnk", "off", "tv-off.ico", "Turn the TV off" },
-            new[] { "TV to PC.lnk", "pc", "tv-pc.ico", "Turn the TV on and switch it to this PC" }
+            new[] { "TV on.lnk", "on", "tv-on.ico", "Turn the TV on", "Turn the TVs on" },
+            new[] { "TV off.lnk", "off", "tv-off.ico", "Turn the TV off", "Turn the TVs off" },
+            new[] { "TV to PC.lnk", "pc", "tv-pc.ico", "Turn the TV on and switch it to this PC", "Turn the TVs on and switch them to this PC" }
         };
 
         public static bool SamePath(string a, string b)
@@ -91,7 +89,7 @@ namespace TVFollow
                 if (s.DesktopShortcuts)
                 {
                     Directory.CreateDirectory(p.DesktopDir);
-                    Shortcut.Create(path, p.Exe, link[1], Path.Combine(p.IconDir, link[2]), link[3]);
+                    Shortcut.Create(path, p.Exe, link[1], Path.Combine(p.IconDir, link[2]), s.SeveralTvs ? link[4] : link[3]);
                 }
                 else DeleteFile(path);
             }
@@ -106,7 +104,7 @@ namespace TVFollow
             {
                 app.SetValue("DisplayName", "TVFollow");
                 app.SetValue("DisplayVersion", Program.Version);
-                app.SetValue("Publisher", Publisher);
+                app.SetValue("Publisher", SetupForm.Maker);
                 app.SetValue("DisplayIcon", Path.Combine(p.IconDir, "tv.ico"));
                 app.SetValue("InstallLocation", p.Dir);
                 app.SetValue("UninstallString", "\"" + p.Exe + "\" uninstall");

@@ -6,25 +6,39 @@ using System.Windows.Forms;
 
 namespace TVFollow
 {
-    // The setup window: find the TV, let this PC control it, pick the input, test, finish.
-    // Opens on first run, and any time TVFollow is opened while it's already running.
+    // One ticked TV in this run of setup: what was found, and what's saved for it on Finish.
+    class SetupTv
+    {
+        public FoundTv Found;
+        public TvSettings Tv;           // for a TV set up before, a copy of its settings
+        public bool SetUpBefore;        // it keeps its settings unless it goes through steps 2 to 4 again
+        public string InputName = "";   // what the TV calls the picked input, for the last page
+        public string Tested;           // serial|input the test passed or was skipped for
+    }
+
+    // The setup window: find the TVs, then for each new one let this PC control it, pick the
+    // input and test; finish. Opens on first run, for a new download, and from Settings.
     class SetupForm : Form
     {
         public const string HelpUrl = "https://github.com/still-b0r3d/TVFollow";
-        public const string MakerUrl = "https://github.com/still-b0r3d";
-        public const string Maker = "still b0r3d";
+        public const string MakerUrl = "https://b0r3d.org";
+        public const string Maker = "b0r3d.org";
 
         public readonly Settings Settings;  // filled in step by step, saved on Finish
-        public FoundTv Tv;                   // picked on the first page
-        public string InputName = "";        // what the TV calls the picked input, for the last page
+        public bool Redo;                    // chosen on the first page: TVs set up before go through the steps again too
         public bool Portable;                // chosen on the last page: run from this folder, install nothing
         public Func<List<FoundTv>> Scan;     // how the first page looks for TVs (tests swap it)
         public PowerTest Test = new PowerTest();
 
         readonly List<SetupPage> pages = new List<SetupPage>();
+        readonly FindPage find;
         int current = -1;
-        readonly Label title = new Label();
-        readonly Label stepText = new Label();
+        readonly Dictionary<string, SetupTv> known = new Dictionary<string, SetupTv>(); // by serial: choices survive going back
+        List<SetupTv> chosen = new List<SetupTv>();  // the ticked TVs, in the order they're saved
+        List<SetupTv> walk = new List<SetupTv>();    // the ones steps 2 to 4 go through
+        int step;                                     // which of those the steps are on
+        readonly Label title = new Label { UseMnemonic = false };
+        readonly Label stepText = new Label { UseMnemonic = false };
         readonly Button back = new Button();
         readonly Button next = new Button();
         readonly Button cancel = new Button();
@@ -32,7 +46,7 @@ namespace TVFollow
         public SetupForm(Settings settings)
         {
             Settings = settings;
-            Scan = () => TvScanner.FindAll(Settings.Port, Settings.Ip);
+            Scan = () => TvScanner.FindAll(Settings.Port, Settings.Tvs.ConvertAll(t => t.Ip));
 
             SuspendLayout();
             Text = "TVFollow setup";
@@ -47,7 +61,8 @@ namespace TVFollow
             try { Icon = AppIcons.Load("tv.ico", SystemInformation.IconSize); } catch { }
 
             var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(28, 16, 28, 8), BackColor = SystemColors.Window };
-            pages.Add(new FindPage(this));
+            find = new FindPage(this);
+            pages.Add(find);
             pages.Add(new ControlPage(this));
             pages.Add(new InputPage(this));
             pages.Add(new TestPage(this));
@@ -85,7 +100,27 @@ namespace TVFollow
 
         public SetupPage CurrentPage { get { return current >= 0 ? pages[current] : null; } }
 
+        // the ticked TVs, in the order they're saved
+        public List<SetupTv> Chosen { get { return chosen; } }
+
+        // the TV steps 2 to 4 are on
+        public SetupTv Current { get { return step < walk.Count ? walk[step] : null; } }
+
+        public FoundTv Tv { get { return Current == null ? null : Current.Found; } }
+
         public RokuClient Client { get { return new RokuClient(Tv.Ip, Settings.Port); } }
+
+        // is this TV in the settings already?
+        public bool IsSetUp(string serial) { return Settings.Tvs.Exists(t => t.Serial == serial); }
+
+        // for the tests: tick exactly these TVs on the first page, as clicking them would
+        public void Pick(params FoundTv[] tvs) { find.TickOnly(tvs); }
+
+        // "hdmi2" as the windows show it
+        public static string InputText(string input)
+        {
+            return input.StartsWith("hdmi") ? "HDMI " + input.Substring("hdmi".Length) : input;
+        }
 
         Control BuildHeader()
         {
@@ -171,7 +206,7 @@ namespace TVFollow
             current = index;
             SetupPage page = pages[current];
             title.Text = page.Title;
-            stepText.Text = "Step " + (current + 1) + " of " + pages.Count;
+            stepText.Text = "Step " + (current + 1) + " of " + pages.Count + WhichTv();
             page.Visible = true;
             page.Entered();
             UpdateButtons();
@@ -180,11 +215,31 @@ namespace TVFollow
             if (!page.SelectNextControl(null, true, true, true, false)) FocusNext();
         }
 
+        // which TV steps 2 to 4 are on, once more than one TV is in play
+        string WhichTv()
+        {
+            if (current < 1 || current > 3 || chosen.Count < 2 || Current == null) return "";
+            return "  ·  " + (walk.Count > 1 ? "TV " + (step + 1) + " of " + walk.Count + ": " : "") + Current.Found.Title;
+        }
+
+        // Steps 2 to 4 go round once for each TV that goes through them; with none (only TVs set
+        // up before, say after a new download), Next on step 1 goes straight to the last page.
         public void GoNext()
         {
             SetupPage page = CurrentPage;
             if (page == null || !page.CanGoNext || page.Busy) return;
-            if (current < pages.Count - 1) ShowPage(current + 1);
+            if (page is FindPage)
+            {
+                Plan();
+                ShowPage(walk.Count > 0 ? 1 : pages.Count - 1);
+            }
+            else if (page is TestPage && step < walk.Count - 1)
+            {
+                step++;
+                ShowPage(1);
+            }
+            else if (page is TestPage) ShowPage(pages.Count - 1);
+            else if (current < pages.Count - 1) ShowPage(current + 1);
             else Finish();
         }
 
@@ -192,7 +247,46 @@ namespace TVFollow
         {
             SetupPage page = CurrentPage;
             if (page == null || current == 0 || page.Busy) return;
-            ShowPage(current - 1);
+            if (page is ControlPage && step > 0)
+            {
+                step--;
+                ShowPage(3); // the previous TV's test
+            }
+            else if (page is FinishPage) ShowPage(walk.Count > 0 ? 3 : 0);
+            else ShowPage(current - 1);
+        }
+
+        // Leaving step 1: the ticked TVs in the order they're saved (the ones set up before first,
+        // in their old order, then the new ones), and the ones steps 2 to 4 go through: the new
+        // ones, and the others too if asked.
+        void Plan()
+        {
+            List<FoundTv> ticked = find.Ticked;
+            chosen = new List<SetupTv>();
+            foreach (TvSettings saved in Settings.Tvs)
+            {
+                FoundTv found = ticked.Find(f => f.Info.Serial == saved.Serial);
+                if (found != null) chosen.Add(Remember(found, saved));
+            }
+            foreach (FoundTv found in ticked)
+                if (!IsSetUp(found.Info.Serial)) chosen.Add(Remember(found, null));
+            walk = chosen.FindAll(t => !t.SetUpBefore || Redo);
+            step = 0;
+        }
+
+        SetupTv Remember(FoundTv found, TvSettings saved)
+        {
+            SetupTv t;
+            if (!known.TryGetValue(found.Info.Serial, out t))
+            {
+                t = new SetupTv { SetUpBefore = saved != null };
+                // a new TV has no input yet; the input page picks one
+                t.Tv = saved != null ? saved.Copy() : new TvSettings { Input = "" };
+                t.InputName = saved != null ? InputText(saved.Input) : "";
+                known[found.Info.Serial] = t;
+            }
+            t.Found = found;
+            return t;
         }
 
         public void UpdateButtons()
@@ -219,10 +313,21 @@ namespace TVFollow
 
         void Finish()
         {
-            Settings.Ip = Tv.Ip;
-            Settings.Serial = Tv.Info.Serial;
-            Settings.WakeMac = Tv.Info.WakeMac;
-            Settings.GatewayMac = ""; // this may be a new home: the router is learned again once the TV answers
+            Settings.Tvs.Clear();
+            foreach (SetupTv t in chosen)
+            {
+                TvSettings tv = t.Tv;
+                if (t.Found.Answering)
+                {
+                    tv.Ip = t.Found.Ip;
+                    tv.Serial = t.Found.Info.Serial;
+                    tv.WakeMac = t.Found.Info.WakeMac;
+                    tv.Name = t.Found.Info.Name;
+                    tv.GatewayMac = ""; // this may be a new home: the router is learned again once the TV answers
+                }
+                // a TV set up before that didn't answer keeps what it had
+                Settings.Tvs.Add(tv);
+            }
             // the settings go where the chosen mode keeps them (a trial copy keeps its own folder)
             if (!TVFollow.Settings.IsTrial) TVFollow.Settings.Dir = Portable ? TVFollow.Settings.PortableDir : TVFollow.Settings.DefaultDir;
             try { Settings.Save(); }
@@ -231,7 +336,9 @@ namespace TVFollow
                 MessageBox.Show(this, "Couldn't save the settings: " + e.Message, "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            Log.Write("setup saved: input " + Settings.Input);
+            Log.Write(Settings.SeveralTvs
+                ? "setup saved: " + Settings.Tvs.Count + " TVs, inputs " + string.Join(", ", Settings.Tvs.ConvertAll(t => t.Input))
+                : "setup saved: input " + Settings.Tvs[0].Input);
             DialogResult = DialogResult.OK;
             Close();
         }

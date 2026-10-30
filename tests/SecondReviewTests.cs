@@ -42,7 +42,7 @@ namespace TVFollow.Tests
             {
                 tv.PowerMode = "DisplayOff";
                 tv.DelayMs = 200;
-                Controller c = Fast(new Controller(SettingsFor(tv)));
+                Controller c = Fast(FirstTv(SettingsFor(tv)));
                 Exception failure = null;
                 ThreadStart turnOn = () => { try { c.TurnOn(TurnOnMode.ToPc); } catch (Exception e) { failure = e; } };
                 var first = new Thread(turnOn) { IsBackground = true };  // a stuck one mustn't keep the test run alive
@@ -64,7 +64,7 @@ namespace TVFollow.Tests
                 tv.App = "";           // the Roku home screen
                 tv.IgnoreInput = true; // so the sequence keeps trying for a while
                 tv.DelayMs = 100;
-                Controller c = Fast(new Controller(SettingsFor(tv)));
+                Controller c = Fast(FirstTv(SettingsFor(tv)));
                 c.RetryMs = 300;
                 var busy = new Thread(() => { try { c.TurnOn(TurnOnMode.ToPc); } catch { } }) { IsBackground = true };
                 busy.Start();
@@ -88,7 +88,7 @@ namespace TVFollow.Tests
             using (var tv = new FakeTv("127.0.0.1", 0))
             {
                 tv.App = "12"; // on, watching some channel
-                Controller c = Fast(new Controller(SettingsFor(tv)));
+                Controller c = Fast(FirstTv(SettingsFor(tv)));
                 c.FirstCheckMs = 5000; // would be waited out before the first press if the TV had been off
                 var watch = Stopwatch.StartNew();
                 c.TurnOn(TurnOnMode.ToPc);
@@ -111,8 +111,8 @@ namespace TVFollow.Tests
         static void SettingsFileHeld()
         {
             var s = new Settings();
-            s.Ip = "192.168.1.50";
-            s.Serial = "X000000001";
+            Tv(s).Ip = "192.168.1.50";
+            Tv(s).Serial = "X000000001";
             s.Save();
             int retryMs = Settings.ReadRetryMs, retries = Settings.ReadRetries;
             try
@@ -126,7 +126,7 @@ namespace TVFollow.Tests
                 Settings loaded;
                 try { loaded = Settings.Load(); }
                 finally { release.Join(); } // let go of the file even if Load failed, or the next test can't use it
-                Check(loaded.LoadError == null && loaded.Ip == "192.168.1.50", "a briefly held file should still load: " + loaded.LoadError);
+                Check(loaded.LoadError == null && Tv(loaded).Ip == "192.168.1.50", "a briefly held file should still load: " + loaded.LoadError);
 
                 // held for good: no crash, and not "not set up" either
                 Settings.ReadRetries = 4;
@@ -150,19 +150,19 @@ namespace TVFollow.Tests
             Directory.CreateDirectory(Settings.Dir);
             // an empty line is what an unfinished setup leaves, not junk: no log line for it
             File.WriteAllText(Settings.FilePath, "ip=\r\n");
-            Check(Settings.Load().Ip == "" && !LogText().Contains("isn't an IPv4"), "an empty address isn't junk");
+            Check(Tv(Settings.Load()).Ip == "" && !LogText().Contains("isn't an IPv4"), "an empty address isn't junk");
             foreach (string bad in new[] { "example.com/x?", "fe80::1", "192.168.1.50:8060", "my.tv.home" })
             {
                 File.WriteAllText(Settings.FilePath, "ip=" + bad + "\r\nserial=X000000001\r\n");
                 Settings s = Settings.Load();
-                Check(s.Ip == "" && !s.IsComplete, "a bad address was kept: [" + s.Ip + "]");
+                Check(Tv(s).Ip == "" && !s.IsComplete, "a bad address was kept: [" + Tv(s).Ip + "]");
                 Check(LogText().Contains("ip=" + bad), "the bad address wasn't logged: " + bad);
             }
             foreach (string good in new[] { "192.168.1.50", "10.0.0.7", "0x7F.0.0.1" })
             {
                 File.WriteAllText(Settings.FilePath, "ip=" + good + "   # the TV\r\nserial=X000000001\r\n");
                 Settings s = Settings.Load();
-                Check(s.Ip == good && s.IsComplete, "a good address was dropped: " + good + " -> [" + s.Ip + "]");
+                Check(Tv(s).Ip == good && s.IsComplete, "a good address was dropped: " + good + " -> [" + Tv(s).Ip + "]");
             }
             File.Delete(Settings.FilePath);
         }
@@ -172,12 +172,12 @@ namespace TVFollow.Tests
             // a value with line breaks in it (here a wake address) is saved as one line, so it
             // can't set other keys when the file is read back
             var s = new Settings();
-            s.Ip = "192.168.1.50";
-            s.Serial = "X000000001";
-            s.WakeMac = "aa:bb:cc:dd:ee:ff\r\nip=203.0.113.9\nserial=EVIL\rport=9\npaused=yes";
+            Tv(s).Ip = "192.168.1.50";
+            Tv(s).Serial = "X000000001";
+            Tv(s).WakeMac = "aa:bb:cc:dd:ee:ff\r\nip=203.0.113.9\nserial=EVIL\rport=9\npaused=yes";
             s.Save();
             Settings back = Settings.Load();
-            Check(back.Ip == "192.168.1.50" && back.Serial == "X000000001", "a line break in a value rewrote the TV: " + back.Ip + " " + back.Serial);
+            Check(Tv(back).Ip == "192.168.1.50" && Tv(back).Serial == "X000000001", "a line break in a value rewrote the TV: " + Tv(back).Ip + " " + Tv(back).Serial);
             Check(back.Port == Settings.DefaultPort && !back.Paused, "a line break in a value set port or paused");
 
             // and a TV whose answer carries one never gets it saved in the first place
@@ -189,10 +189,10 @@ namespace TVFollow.Tests
                     "\t<serial-number>" + tv.Serial + "</serial-number>\n\t<network-type>wifi</network-type>\n" +
                     "\t<wifi-mac>00:11:22:33:44:77&#10;ip=203.0.113.9&#10;serial=EVIL&#10;paused=yes</wifi-mac>\n" +
                     "\t<power-mode>PowerOn</power-mode>\n</device-info>";
-                Fast(new Controller(t)).TurnOff(false, false);
-                Check(t.WakeMac == "00:11:22:33:44:55", "a wake address that isn't one was taken from the TV: " + t.WakeMac);
+                Fast(FirstTv(t)).TurnOff(false, false);
+                Check(Tv(t).WakeMac == "00:11:22:33:44:55", "a wake address that isn't one was taken from the TV: " + Tv(t).WakeMac);
                 Settings loaded = Settings.Load();
-                Check(loaded.Ip == tv.Ip && loaded.Serial == tv.Serial && !loaded.Paused, "the TV's answer changed the saved settings");
+                Check(Tv(loaded).Ip == tv.Ip && Tv(loaded).Serial == tv.Serial && !loaded.Paused, "the TV's answer changed the saved settings");
                 Check(tv.Count("POST /keypress/PowerOff") == 1, "the TV should still have been turned off");
             }
             File.Delete(Settings.FilePath);
@@ -312,10 +312,10 @@ namespace TVFollow.Tests
             // the controller's own check: an address on none of the PC's networks is answered
             // without looking up any router (the other tests replace this check)
             var s = new Settings();
-            s.Ip = "127.0.0.1";
-            s.Serial = "X000000001";
-            s.GatewayMac = "AA:BB:CC:DD:EE:FF";
-            var c = new Controller(s);
+            Tv(s).Ip = "127.0.0.1";
+            Tv(s).Serial = "X000000001";
+            Tv(s).GatewayMac = "AA:BB:CC:DD:EE:FF";
+            var c = FirstTv(s);
             c.GatewayMacFor = ip => { throw new Exception("looked up a router for an address on none of the PC's networks"); };
             Check(!c.OnTvNetwork(), "loopback isn't the TV's network");
         }
@@ -326,18 +326,18 @@ namespace TVFollow.Tests
             {
                 Settings s = SettingsFor(tv);
                 s.Save();
-                Controller c = Fast(new Controller(s));
+                Controller c = Fast(FirstTv(s));
                 c.GatewayMacFor = ip => "AA:BB:CC:DD:EE:FF";
                 c.TurnOff(false, false);
-                Check(s.GatewayMac == "AA:BB:CC:DD:EE:FF", "router not remembered: [" + s.GatewayMac + "]");
-                Check(Settings.Load().GatewayMac == "AA:BB:CC:DD:EE:FF", "router not saved");
+                Check(Tv(s).GatewayMac == "AA:BB:CC:DD:EE:FF", "router not remembered: [" + Tv(s).GatewayMac + "]");
+                Check(Tv(Settings.Load()).GatewayMac == "AA:BB:CC:DD:EE:FF", "router not saved");
                 Check(LogText().Contains("remembered the TV's network") && !LogText().Contains("AA:BB"), "no log line, or the log shows the address");
 
                 // a router that doesn't answer for a moment doesn't erase the one remembered
                 c.GatewayMacFor = ip => "";
                 tv.PowerMode = "PowerOn";
                 c.TurnOff(false, false);
-                Check(s.GatewayMac == "AA:BB:CC:DD:EE:FF", "an unanswered router lookup erased the remembered one");
+                Check(Tv(s).GatewayMac == "AA:BB:CC:DD:EE:FF", "an unanswered router lookup erased the remembered one");
 
                 // sleep and shutdown have no time for the network: the quick path never asks
                 c.GatewayMacFor = ip => { throw new Exception("asked for the router on the quick path"); };
@@ -362,7 +362,7 @@ namespace TVFollow.Tests
                 int searches = 0;
                 Func<Settings, Controller> afterSwap = s =>
                 {
-                    var c = new Controller(s);
+                    var c = FirstTv(s);
                     Func<bool> realCheck = c.OnTvNetwork;   // home's numbers and home's router
                     Fast(c);                                // Fast: a wake packet would throw
                     c.OnTvNetwork = realCheck;
@@ -374,8 +374,8 @@ namespace TVFollow.Tests
                 Func<Settings> moved = () =>
                 {
                     Settings s = SettingsFor(tv);
-                    s.Ip = "127.0.0.3"; // where the TV used to be
-                    s.GatewayMac = "AA:AA:AA:AA:AA:AA";
+                    Tv(s).Ip = "127.0.0.3"; // where the TV used to be
+                    Tv(s).GatewayMac = "AA:AA:AA:AA:AA:AA";
                     s.Save();
                     return s;
                 };
@@ -391,8 +391,8 @@ namespace TVFollow.Tests
                 Controller button = afterSwap(home);
                 button.TurnOn(TurnOnMode.ToPc);
                 Check(searches == 1, "TV to PC didn't look for the TV: " + searches + " searches");
-                Check(home.Ip == "127.0.0.2" && Settings.Load().Ip == "127.0.0.2", "the TV's new address wasn't saved: " + home.Ip);
-                Check(home.GatewayMac == "BB:BB:BB:BB:BB:BB" && Settings.Load().GatewayMac == "BB:BB:BB:BB:BB:BB", "the new router wasn't learned");
+                Check(Tv(home).Ip == "127.0.0.2" && Tv(Settings.Load()).Ip == "127.0.0.2", "the TV's new address wasn't saved: " + Tv(home).Ip);
+                Check(Tv(home).GatewayMac == "BB:BB:BB:BB:BB:BB" && Tv(Settings.Load()).GatewayMac == "BB:BB:BB:BB:BB:BB", "the new router wasn't learned");
                 Check(tv.App == "tvinput.hdmi1", "the TV wasn't switched to the PC");
                 Check(LogText().Contains("looking for the TV by its serial number"), "the log doesn't say why it looked");
 
@@ -415,7 +415,7 @@ namespace TVFollow.Tests
                 Settings onPress = moved();
                 afterSwap(onPress).TurnOn(TurnOnMode.PowerOnly);
                 Check(searches == 3 && tv.IsOn, "TV on didn't find and turn on the moved TV: " + searches + " searches");
-                Check(onPress.GatewayMac == "BB:BB:BB:BB:BB:BB", "TV on didn't learn the new router");
+                Check(Tv(onPress).GatewayMac == "BB:BB:BB:BB:BB:BB", "TV on didn't learn the new router");
 
                 // a press while the TV is too deeply asleep to answer finds nothing (there's no wake
                 // packet behind a router TVFollow doesn't know); the next press, once the TV is on,
@@ -425,12 +425,12 @@ namespace TVFollow.Tests
                 one.SearchEvery = TimeSpan.FromMinutes(10);
                 tv.Down = true;
                 one.TurnOn(TurnOnMode.PowerOnly);
-                Check(searches == 4 && asleep.Ip == "127.0.0.3", "a press should have searched and found nothing");
+                Check(searches == 4 && Tv(asleep).Ip == "127.0.0.3", "a press should have searched and found nothing");
                 tv.Down = false; // turned on with its own remote
                 tv.App = "12";
                 one.TurnOn(TurnOnMode.ToPc);
                 Check(searches == 5, "the second press didn't search: " + searches + " searches");
-                Check(asleep.Ip == "127.0.0.2" && asleep.GatewayMac == "BB:BB:BB:BB:BB:BB" && tv.App == "tvinput.hdmi1", "the second press didn't find the TV");
+                Check(Tv(asleep).Ip == "127.0.0.2" && Tv(asleep).GatewayMac == "BB:BB:BB:BB:BB:BB" && tv.App == "tvinput.hdmi1", "the second press didn't find the TV");
                 File.Delete(Settings.FilePath);
             }
         }

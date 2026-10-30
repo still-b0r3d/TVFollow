@@ -13,9 +13,12 @@ explained:
 | `-> 403` | The TV refused: its Network access setting is on Limited (see below) |
 | `TV not answering, sent a wake packet (3 addresses)` | The TV was asleep too deeply to answer, so TVFollow sent the network wake signal |
 | `no network to send a wake packet on` | The PC's own network wasn't up yet (just after sleep, say) |
-| `this PC isn't on the TV's network` | A laptop away from home, say: TVFollow leaves the network alone. At home, after a router swap: with the TV on (use its own remote if it's off), press **TV to PC** in the tray once, and TVFollow finds the TV, even at a new address, and learns the new router. If the line keeps coming, the new router uses other numbers (`192.168.0.x` instead of `192.168.1.x`, say): go through **Settings… → Change TV…** once |
+| `this PC isn't on the TV's network` | A laptop away from home, say: TVFollow leaves the network alone. At home, after a router swap: with the TV on (use its own remote if it's off), press **TV to PC** in the tray once, and TVFollow finds the TV, even at a new address, and learns the new router. If the line keeps coming, the new router uses other numbers (`192.168.0.x` instead of `192.168.1.x`, say): go through **Settings… → Add or change TVs…** once |
 | `the home router didn't match or didn't answer; looking for the TV by its serial number` | You pressed a TV button and the router the TV was last seen behind didn't match or didn't answer (after a router swap, say, or on another network with your home's addresses), so TVFollow searched for the TV. If it then says `TV not found`, turn the TV on with its own remote and press again |
 | `TV found at 192.168.1.73` | The router gave the TV a new address, and TVFollow found it again |
+
+With two or more TVs, each line about a TV starts with its name, like
+`Office TV: on: power on (was DisplayOff) -> 200`.
 
 ## Setup can't find my TV
 
@@ -43,7 +46,8 @@ notices the change by itself within a few seconds.
 The TV probably switches its network off along with the screen.
 
 1. On the TV: **Settings → System → Power → Fast TV start**, and turn it on.
-2. Run the test again: right-click the TV icon → **Settings…** → go to **Test it**.
+2. Run the test again: right-click the TV icon → **Settings…** → **Add or change TVs…**,
+   tick **Go through the next steps again for TVs set up already**, and go on to **Test it**.
 
 TVFollow also sends a network wake signal when the TV doesn't answer, again every few
 seconds for 20 seconds, which wakes many TVs even from deep standby. If the log shows
@@ -51,8 +55,8 @@ seconds for 20 seconds, which wakes many TVs even from deep standby. If the log 
 
 ## The TV comes on but shows the Roku home screen instead of my PC
 
-Open **Settings…** and check the input on the **Which input is this PC on?** page.
-**Show it on the TV** confirms it. TVFollow keeps pressing the input button for about
+Open **Settings…** and check **Input this PC is on** (with several TVs, each TV has its
+own). **Show it on the TV** confirms it. TVFollow keeps pressing the input button for about
 20 seconds while the TV wakes up; if your TV takes longer, the log says
 `gave up waiting for the PC input`.
 
@@ -61,7 +65,7 @@ Open **Settings…** and check the input on the **Which input is this PC on?** p
 - TVFollow only turns the TV off while it's **showing your PC**. If it's on another
   input or app, the log says `leaving it on`.
 - Check the option **Turn the TV off when this PC's monitors turn off** under
-  **Settings…** → **All set**.
+  **Settings…** → **Following**.
 - It follows *Windows'* screen timeout (**Settings → System → Power**; on Windows 10,
   **Settings → System → Power & sleep**), not the monitors' own power buttons. Turning a
   monitor off by its button doesn't tell Windows anything.
@@ -119,9 +123,25 @@ Program Files.
 Both can run TVFollow. Each one only turns the TV off while it's showing *that* PC's
 input, so they don't fight over it.
 
+## One PC, two or more TVs
+
+Tick each TV on setup's first step. To add a TV later: **Settings… → Add or change
+TVs…**, tick the new one, and only it goes through the steps; the TVs already set up keep
+their settings. Untick a TV there to stop using it.
+
+- **A TV I set up isn't answering in setup:** it stays listed, ticked, and keeps its
+  settings when you finish. Turn it on and click **Search again** to check it.
+- **The tray shows "Roku TV (1)" and "Roku TV (2)":** both TVs have the same name. Give
+  them names of their own (your Roku account at my.roku.com can rename each linked device),
+  then open **Settings…** once so TVFollow picks the new names up.
+- **One TV's button for scripts:** `TVFollow.exe on 2` does TV 2 alone, numbered as the
+  Settings window lists them, and so do `off` and `pc`. A TV's name works too.
+
 ## Start over
 
-Right-click the TV icon → **Settings…** and go through setup again, or uninstall
+Right-click the TV icon → **Settings…** → **Add or change TVs…** and go through setup
+again (tick **Go through the next steps again for TVs set up already** to redo every
+step), or uninstall
 (**Settings → Apps → Installed apps → TVFollow**; on Windows 10, **Settings → Apps →
 Apps & features**) and run TVFollow.exe again.
 

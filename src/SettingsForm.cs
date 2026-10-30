@@ -8,19 +8,28 @@ using System.Windows.Forms;
 namespace TVFollow
 {
     // The Settings window of the running TVFollow (tray → Settings…, or opening TVFollow again).
-    // Every change applies and saves right away. Changing the TV, or switching between installed
-    // and portable, runs the setup wizard.
+    // Every change applies and saves right away. Adding, removing or changing TVs, or switching
+    // between installed and portable, runs the setup wizard.
     class SettingsForm : Form
     {
         readonly Settings settings;
         readonly Follower follower;
         readonly Tray tray;
         readonly Column body = new Column();
-        readonly Label tvName, tvState, mode, updateResult;
-        readonly ComboBox input;
+        readonly List<TvLines> tvs = new List<TvLines>();
+        readonly Label mode, updateResult;
         readonly CheckBox off, on, paused, startup, shortcuts, updates;
         readonly RadioButton classic, compact, strip;
         bool loading = true;
+
+        // one TV's part of the window: its name and address, how it is right now, and its input
+        class TvLines
+        {
+            public TvSettings Tv;
+            public string Number = "";  // "2.  " in front of its name when there are several
+            public Label Name, State;
+            public ComboBox Input;
+        }
 
         // how the TV's address is shown (the screenshot tool shows a home-network one)
         public static Func<string, string> ShownAddress = ip => ip;
@@ -42,28 +51,25 @@ namespace TVFollow
             try { Icon = AppIcons.Load("tv.ico", SystemInformation.IconSize); } catch { }
             body.Padding = new Padding(24, 16, 24, 8);
 
-            Heading("TV");
-            tvName = Line("");
-            tvState = Line("");
-            FlowLayoutPanel inputRow = Row();
-            inputRow.Controls.Add(new Label { Text = "Input this PC is on:", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
-            input = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200, Margin = new Padding(0, 2, 8, 0) };
-            input.SelectedIndexChanged += delegate { InputChanged(); };
-            inputRow.Controls.Add(input);
-            inputRow.Controls.Add(MakeButton("Show it on the TV", delegate { ShowOnTv(); }));
-            Row().Controls.Add(MakeButton("Change TV…", delegate { RunSetup(); }));
+            bool several = settings.SeveralTvs;
+            Heading(several ? "TVs" : "TV");
+            for (int i = 0; i < settings.Tvs.Count; i++) tvs.Add(AddTv(settings.Tvs[i], several ? (i + 1) + ".  " : ""));
+            Row().Controls.Add(MakeButton("Add or change TVs…", delegate { RunSetup(); }));
 
             Heading("Following");
-            off = Check("Turn the TV off when this PC's monitors turn off", delegate { settings.OffWithMonitors = off.Checked; follower.Rules.OffWithMonitors = off.Checked; Save(); });
-            on = Check("Turn the TV on and switch it to this PC when you come back", delegate { settings.OnWithMonitors = on.Checked; follower.Rules.OnWithMonitors = on.Checked; Save(); });
-            paused = Check("Paused (leave the TV alone until resumed)", delegate { if (paused.Checked != follower.Rules.Paused) tray.SetPaused(paused.Checked); });
+            off = Check(several ? "Turn the TVs off when this PC's monitors turn off" : "Turn the TV off when this PC's monitors turn off",
+                delegate { settings.OffWithMonitors = off.Checked; follower.Rules.OffWithMonitors = off.Checked; Save(); });
+            on = Check(several ? "Turn the TVs on and switch them to this PC when you come back" : "Turn the TV on and switch it to this PC when you come back",
+                delegate { settings.OnWithMonitors = on.Checked; follower.Rules.OnWithMonitors = on.Checked; Save(); });
+            paused = Check(several ? "Paused (leave the TVs alone until resumed)" : "Paused (leave the TV alone until resumed)",
+                delegate { if (paused.Checked != follower.Rules.Paused) tray.SetPaused(paused.Checked); });
 
             Heading("Remote");
             FlowLayoutPanel layouts = Row();
             classic = Choice(layouts, "Classic (tall)", RemoteForm.Classic);
             compact = Choice(layouts, "Compact (square)", RemoteForm.Compact);
             strip = Choice(layouts, "Wide strip", RemoteForm.Strip);
-            Row().Controls.Add(MakeButton("Open remote", delegate { tray.ShowRemote(); }));
+            Row().Controls.Add(MakeButton("Open remote", delegate { tray.ShowRemote(null); }));
 
             Heading("This PC");
             mode = Line("");
@@ -91,10 +97,41 @@ namespace TVFollow
             Fill();
             tray.PausedChanged += SyncPause;
             FormClosed += delegate { tray.PausedChanged -= SyncPause; };
-            Load += delegate { LoadTv(); };
+            Load += delegate
+            {
+                FitTvs();
+                foreach (TvLines tv in tvs) LoadTv(tv);
+            };
         }
 
         // ---- building ----
+
+        TvLines AddTv(TvSettings tv, string number)
+        {
+            var lines = new TvLines { Tv = tv, Number = number };
+            lines.Name = Line("");
+            lines.State = Line("");
+            FlowLayoutPanel inputRow = Row();
+            inputRow.Controls.Add(new Label { Text = "Input this PC is on:", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+            lines.Input = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200, Margin = new Padding(0, 2, 8, 0) };
+            lines.Input.SelectedIndexChanged += delegate { InputChanged(lines); };
+            inputRow.Controls.Add(lines.Input);
+            inputRow.Controls.Add(MakeButton("Show it on the TV", delegate { ShowOnTv(lines.Tv); }));
+            if (number.Length > 0) inputRow.Margin = new Padding(0, 0, 0, 14); // a gap before the next TV
+            return lines;
+        }
+
+        // With several TVs the window grows to show them all, as far as the screen allows; what
+        // doesn't fit scrolls.
+        void FitTvs()
+        {
+            if (!settings.SeveralTvs) return;
+            int footer = ClientSize.Height - body.Height;
+            int wanted = body.GetPreferredSize(new Size(body.ClientSize.Width, 0)).Height + footer;
+            int most = Screen.FromControl(this).WorkingArea.Height - (Height - ClientSize.Height) - 20;
+            ClientSize = new Size(ClientSize.Width, Math.Max(ClientSize.Height, Math.Min(wanted, most)));
+            if (StartPosition == FormStartPosition.CenterScreen) CenterToScreen();
+        }
 
         void Heading(string text)
         {
@@ -104,7 +141,8 @@ namespace TVFollow
 
         Label Line(string text)
         {
-            var label = new Label { Text = text, AutoSize = true, Margin = new Padding(0, 0, 0, 6) };
+            // UseMnemonic off: a TV named "Tom & Jerry" keeps its &
+            var label = new Label { Text = text, AutoSize = true, Margin = new Padding(0, 0, 0, 6), UseMnemonic = false };
             body.Controls.Add(label);
             return label;
         }
@@ -181,9 +219,13 @@ namespace TVFollow
         void Fill()
         {
             loading = true;
-            tvName.Text = "TV at " + ShownAddress(settings.Ip);
-            tvState.Text = "Asking the TV…";
-            tvState.ForeColor = SetupPage.Muted;
+            foreach (TvLines tv in tvs)
+            {
+                tv.Name.Text = tv.Number + (tv.Tv.Name.Length > 0 ? tv.Tv.Name + "  ·  " : "TV at ") + ShownAddress(tv.Tv.Ip);
+                tv.State.Text = "Asking the TV…";
+                tv.State.ForeColor = SetupPage.Muted;
+                SetInputs(tv, null, tv.Tv.PcApp);
+            }
             off.Checked = settings.OffWithMonitors;
             on.Checked = settings.OnWithMonitors;
             paused.Checked = follower.Rules.Paused;
@@ -199,7 +241,6 @@ namespace TVFollow
                 ? "Portable: settings are in the \"" + Settings.PortableFolderName + "\" folder next to TVFollow.exe."
                 : "Installed for this Windows account.";
             startup.Enabled = shortcuts.Enabled = !portable;
-            SetInputs(null, "tvinput." + settings.Input);
             loading = false;
         }
 
@@ -210,9 +251,9 @@ namespace TVFollow
             loading = false;
         }
 
-        async void LoadTv()
+        async void LoadTv(TvLines tv)
         {
-            var client = new RokuClient(settings.Ip, settings.Port);
+            var client = new RokuClient(tv.Tv.Ip, settings.Port);
             DeviceInfo info = null;
             List<KeyValuePair<string, string>> inputs = null;
             string showing = null;
@@ -228,29 +269,42 @@ namespace TVFollow
             if (IsDisposed) return;
             if (info == null)
             {
-                SetState(false, "Not answering right now. Is it on, and on this network?");
+                SetState(tv, false, "Not answering right now. Is it on, and on this network?");
                 return;
             }
+            if (info.Serial != tv.Tv.Serial)
+            {
+                // the router gave the TV's address to something else: the TV gets looked for when
+                // TVFollow next needs it, and its name stays as it was
+                SetState(tv, false, "Another Roku answers at this address right now. TVFollow looks for your TV by itself when it needs it.");
+                return;
+            }
+            if (info.Name.Length > 0 && info.Name != tv.Tv.Name)
+            {
+                // renamed on the TV: the menus and the log call it by its new name from now on
+                tv.Tv.Name = info.Name;
+                Save();
+            }
             string where = info.Location.Length > 0 ? "  ·  " + info.Location : "";
-            tvName.Text = (info.Name.Length > 0 ? info.Name : "TV") + where + "  ·  " + ShownAddress(settings.Ip);
+            tv.Name.Text = tv.Number + (info.Name.Length > 0 ? info.Name : "TV") + where + "  ·  " + ShownAddress(tv.Tv.Ip);
             if (!info.AllowsControl)
-                SetState(false, "Network access is on Limited, so TVFollow can't press its buttons. On the TV: Settings → System → " +
+                SetState(tv, false, "Network access is on Limited, so TVFollow can't press its buttons. On the TV: Settings → System → " +
                     "Advanced system settings → Control by mobile apps → Network access → Enabled.");
-            else if (!info.IsOn) SetState(null, "Off right now.");
-            else if (showing == settings.PcApp) SetState(true, "On, showing this PC.");
-            else SetState(null, "On, showing something else.");
+            else if (!info.IsOn) SetState(tv, null, "Off right now.");
+            else if (showing == tv.Tv.PcApp) SetState(tv, true, "On, showing this PC.");
+            else SetState(tv, null, "On, showing something else.");
             if (inputs != null && inputs.Count > 0)
             {
                 loading = true;
-                SetInputs(inputs, settings.PcApp);
+                SetInputs(tv, inputs, tv.Tv.PcApp);
                 loading = false;
             }
         }
 
-        void SetState(bool? ok, string text)
+        static void SetState(TvLines tv, bool? ok, string text)
         {
-            tvState.Text = (ok == null ? "" : ok.Value ? "✔  " : "⚠  ") + text;
-            tvState.ForeColor = ok == null ? SystemColors.ControlText : ok.Value ? SetupPage.Good : SetupPage.Warn;
+            tv.State.Text = (ok == null ? "" : ok.Value ? "✔  " : "⚠  ") + text;
+            tv.State.ForeColor = ok == null ? SystemColors.ControlText : ok.Value ? SetupPage.Good : SetupPage.Warn;
         }
 
         class InputItem
@@ -259,8 +313,9 @@ namespace TVFollow
             public override string ToString() { return Text; }
         }
 
-        void SetInputs(List<KeyValuePair<string, string>> inputs, string selected)
+        static void SetInputs(TvLines tv, List<KeyValuePair<string, string>> inputs, string selected)
         {
+            ComboBox input = tv.Input;
             input.Items.Clear();
             if (inputs == null)
             {
@@ -285,19 +340,19 @@ namespace TVFollow
             catch (Exception e) { Log.Write("couldn't save the settings: " + e.Message); }
         }
 
-        void InputChanged()
+        void InputChanged(TvLines tv)
         {
-            var item = input.SelectedItem as InputItem;
+            var item = tv.Input.SelectedItem as InputItem;
             if (loading || item == null) return;
-            settings.Input = item.Id.Substring("tvinput.".Length);
-            Log.Write("settings: input " + settings.Input);
+            tv.Tv.Input = item.Id.Substring("tvinput.".Length);
+            Log.Write("settings: " + (settings.SeveralTvs ? settings.LabelOf(tv.Tv) + "'s " : "") + "input " + tv.Tv.Input);
             Save();
         }
 
-        void ShowOnTv()
+        void ShowOnTv(TvSettings tv)
         {
-            var client = new RokuClient(settings.Ip, settings.Port);
-            string id = settings.PcApp;
+            var client = new RokuClient(tv.Ip, settings.Port);
+            string id = tv.PcApp;
             Task.Run(() => client.Launch(id, 3000));
         }
 

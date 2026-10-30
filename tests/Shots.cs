@@ -19,11 +19,19 @@ namespace TVFollow.Tests
     //                                             (only reads)
     class ShownTv : FoundTv
     {
-        public override string Address { get { return Ip == "127.0.0.2" ? "192.168.1.50" : "192.168.1.62"; } }
+        public override string Address { get { return Shown(Ip); } }
+
+        // home-network addresses for the pretend TVs' loopback ones
+        public static string Shown(string ip)
+        {
+            return ip == "127.0.0.2" ? "192.168.1.50" : ip == "127.0.0.3" ? "192.168.1.51" : ip.StartsWith("127.") ? "192.168.1.62" : ip;
+        }
     }
 
     static class Shots
     {
+        static TvSettings Tv(Settings s) { return TestMain.Tv(s); }
+
         static readonly Color Backdrop = Color.FromArgb(232, 234, 237);
         static bool onScreen;
         static Form backdrop;
@@ -119,6 +127,7 @@ namespace TVFollow.Tests
                 {
                     SaveRemotesAndSettings(folder, tv);
                     SaveTrayMenu(folder, settings);
+                    SaveTwoTvs(folder, tv);
                 }
             }
             if (backdrop != null) backdrop.Close();
@@ -131,18 +140,19 @@ namespace TVFollow.Tests
         static void SaveRemotesAndSettings(string folder, FakeTv tv)
         {
             var s = new Settings();
-            s.Ip = tv.Ip;
+            Tv(s).Ip = tv.Ip;
             s.Port = tv.Port;
-            s.Serial = tv.Serial;
-            s.Input = "hdmi1";
+            Tv(s).Serial = tv.Serial;
+            Tv(s).Input = "hdmi1";
             tv.App = "tvinput.hdmi1";
             tv.PowerMode = "PowerOn";
-            SettingsForm.ShownAddress = ip => ip == "127.0.0.2" ? "192.168.1.50" : ip;
+            SettingsForm.ShownAddress = ShownTv.Shown;
 
             string[] layouts = { RemoteForm.Classic, RemoteForm.Compact, RemoteForm.Strip };
             for (int i = 0; i < layouts.Length; i++)
             {
-                var remote = new RemoteForm(s, new Controller(s), layouts[i]);
+                List<Controller> tvs = Controller.For(s);
+                var remote = new RemoteForm(s, tvs, tvs[0], layouts[i]);
                 remote.Show();
                 DateTime until = DateTime.UtcNow.AddSeconds(2);
                 while (DateTime.UtcNow < until) { Application.DoEvents(); Thread.Sleep(30); } // inputs arrive
@@ -153,9 +163,8 @@ namespace TVFollow.Tests
                 remote.Dispose();
             }
 
-            var controller = new Controller(s);
-            var follower = new Follower(s, controller); // not started
-            using (var tray = new Tray(follower, controller))
+            var follower = new Follower(s, Controller.For(s)); // not started
+            using (var tray = new Tray(follower))
             using (var window = new SettingsForm(s, follower, tray))
             {
                 Rectangle area = Screen.PrimaryScreen.WorkingArea;
@@ -172,16 +181,81 @@ namespace TVFollow.Tests
 
         static void SaveTrayMenu(string folder, Settings settings)
         {
-            settings.Ip = "127.0.0.9";
-            settings.Serial = "X000000001";
-            var controller = new Controller(settings);
-            var follower = new Follower(settings, controller); // not started: only its rules are read
-            using (var tray = new Tray(follower, controller))
+            Tv(settings).Ip = "127.0.0.9";
+            Tv(settings).Serial = "X000000001";
+            var follower = new Follower(settings, Controller.For(settings)); // not started: only its rules are read
+            using (var tray = new Tray(follower))
             {
                 tray.Menu.Show(backdrop, new Point(200, 140));
                 WaitFor(() => tray.Menu.Visible);
                 Capture(Rectangle.Inflate(tray.Menu.Bounds, 18, 18), Path.Combine(folder, "6-tray-menu.png"));
                 tray.Menu.Close();
+            }
+        }
+
+        // Two TVs, the living-room one and an office one: setup's first step with both ticked,
+        // the tray menu, the Settings window and the remote with its TV picker.
+        static void SaveTwoTvs(string folder, FakeTv tv)
+        {
+            using (var office = new FakeTv("127.0.0.3", tv.Port))
+            {
+                office.Name = "Office TV";
+                office.Location = "Office";
+                office.Serial = "X000000003";
+                office.App = "tvinput.hdmi2";
+                tv.ControlMode = "enabled";
+                tv.PowerMode = office.PowerMode = "PowerOn";
+                tv.App = "tvinput.hdmi1";
+                Rectangle area = Screen.PrimaryScreen.WorkingArea;
+
+                var form = new SetupForm(new Settings { Port = tv.Port });
+                form.Scan = () => TvScanner.Probe(new[] { "127.0.0.1", "127.0.0.2", "127.0.0.3" }, tv.Port)
+                    .ConvertAll(f => (FoundTv)new ShownTv { Ip = f.Ip, Info = f.Info });
+                form.StartPosition = FormStartPosition.Manual;
+                form.TopMost = true;
+                form.Location = new Point(area.Left + 80, area.Top + 80);
+                form.Show();
+                WaitFor(() => !form.CurrentPage.Busy && Text(form).Contains("Found 2 TVs"));
+                var both = new List<FoundTv>();
+                foreach (FoundTv f in TvScanner.Probe(new[] { "127.0.0.2", "127.0.0.3" }, tv.Port)) both.Add(f);
+                form.Pick(both.ToArray());
+                Save(form, folder, "11-find-two-tvs");
+                form.Close();
+
+                var s = new Settings { Port = tv.Port };
+                s.Tvs.Add(new TvSettings { Ip = tv.Ip, Serial = tv.Serial, Input = "hdmi1", Name = tv.Name });
+                s.Tvs.Add(new TvSettings { Ip = office.Ip, Serial = office.Serial, Input = "hdmi2", Name = office.Name });
+                List<Controller> tvs = Controller.For(s);
+                var follower = new Follower(s, tvs); // not started
+                using (var tray = new Tray(follower))
+                {
+                    tray.Menu.Show(backdrop, new Point(200, 140));
+                    WaitFor(() => tray.Menu.Visible);
+                    Capture(Rectangle.Inflate(tray.Menu.Bounds, 18, 18), Path.Combine(folder, "12-tray-menu-two-tvs.png"));
+                    tray.Menu.Close();
+
+                    using (var window = new SettingsForm(s, follower, tray))
+                    {
+                        window.StartPosition = FormStartPosition.Manual;
+                        window.Location = new Point(area.Left + 80, area.Top + 20);
+                        window.TopMost = true;
+                        window.Show();
+                        WaitFor(() => Text(window).Contains("1.  Living Room TV  ·  Living room") && Text(window).Contains("2.  Office TV  ·  Office"));
+                        Thread.Sleep(250);
+                        Capture(Rectangle.Inflate(VisibleBounds(window), 24, 24), Path.Combine(folder, "13-settings-two-tvs.png"));
+                        window.Close();
+                    }
+                }
+
+                var remote = new RemoteForm(s, tvs, tvs[1], RemoteForm.Classic);
+                remote.Show();
+                DateTime until = DateTime.UtcNow.AddSeconds(2);
+                while (DateTime.UtcNow < until) { Application.DoEvents(); Thread.Sleep(30); } // inputs arrive
+                WaitFor(() => true);
+                Thread.Sleep(250);
+                Capture(Rectangle.Inflate(VisibleBounds(remote), 24, 24), Path.Combine(folder, "14-remote-two-tvs.png"));
+                remote.Close();
+                remote.Dispose();
             }
         }
 

@@ -82,7 +82,8 @@ namespace TVFollow.Tests
 
         static RemoteForm OffScreenRemote(Settings s, string layout)
         {
-            var form = new RemoteForm(s, new Controller(s), layout);
+            List<Controller> tvs = Controller.For(s);
+            var form = new RemoteForm(s, tvs, tvs[0], layout);
             form.Show();
             form.Location = new Point(-20000, -20000); // after Load put it by the tray
             Pump(() => true, 1);
@@ -170,8 +171,8 @@ namespace TVFollow.Tests
         static void RemoteLayoutSetting()
         {
             var s = new Settings();
-            s.Ip = "192.168.1.50";
-            s.Serial = "X000000001";
+            Tv(s).Ip = "192.168.1.50";
+            Tv(s).Serial = "X000000001";
             Check(s.RemoteLayout == RemoteForm.Classic, "classic should be the default");
             s.RemoteLayout = RemoteForm.Strip;
             s.Save();
@@ -187,9 +188,8 @@ namespace TVFollow.Tests
             {
                 Settings s = SettingsFor(tv);
                 s.Save();
-                var controller = new Controller(s);
-                var follower = new Follower(s, controller); // not started: no window, no worker
-                using (var tray = new Tray(follower, controller))
+                var follower = new Follower(s, Controller.For(s)); // not started: no window, no worker
+                using (var tray = new Tray(follower))
                 using (var window = new SettingsForm(s, follower, tray))
                 {
                     window.StartPosition = FormStartPosition.Manual;

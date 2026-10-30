@@ -4,10 +4,12 @@ using System.Drawing;
 using System.Net;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Windows.Forms.VisualStyles;
 
 namespace TVFollow
 {
-    // Step 1: find the TVs on this PC's network and pick one.
+    // Step 1: find the TVs on this PC's network and tick the ones it's plugged into. TVs set up
+    // before come ticked, and stay listed even when they don't answer.
     class FindPage : SetupPage
     {
         readonly Label status;
@@ -18,13 +20,16 @@ namespace TVFollow
         readonly TextBox address;
         readonly Button add;
         readonly Label hint;
+        readonly CheckBox redo;
         readonly Font bold;
-        bool scanning;
+        readonly HashSet<string> ticked = new HashSet<string>(); // by serial, so a search again keeps them
+        bool scanning, searched;
 
         public FindPage(SetupForm setup) : base(setup)
         {
             Para("TVFollow works like the Roku phone app: it sends your TV's remote presses over your home network. " +
-                "It works with TVs that have Roku built in. Turn the TV on and make sure it's on the same network as this PC.");
+                "It works with TVs that have Roku built in. Turn the TV on and make sure it's on the same network as this PC. " +
+                "Plugged into more than one? Tick each of them.");
 
             status = Para("");
             status.Margin = new Padding(0, 0, 0, 6);
@@ -45,8 +50,18 @@ namespace TVFollow
             bold = new Font(setup.Font, FontStyle.Bold);
             list.ItemHeight = Math.Max(list.Font.Height, bold.Height) * 2 + 16;
             list.DrawItem += DrawTv;
-            list.SelectedIndexChanged += delegate { Picked(); };
-            list.DoubleClick += delegate { Setup.GoNext(); };
+            // a click anywhere on a TV ticks or unticks it; Space does the same for the one with focus
+            list.MouseUp += (s, e) =>
+            {
+                int i = list.IndexFromPoint(e.Location);
+                if (e.Button == MouseButtons.Left && i >= 0 && list.GetItemRectangle(i).Contains(e.Location)) Toggle(i);
+            };
+            list.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode != Keys.Space || list.SelectedIndex < 0) return;
+                Toggle(list.SelectedIndex);
+                e.Handled = e.SuppressKeyPress = true;
+            };
             Body.Controls.Add(list);
 
             FlowLayoutPanel buttons = Row();
@@ -68,6 +83,37 @@ namespace TVFollow
             hint = Note("Not listed? Check that the TV is on and that this PC isn't on a guest network or a VPN. " +
                 "The TV's address is under Settings → Network → About on the TV.");
             hint.Visible = false;
+
+            redo = new CheckBox { Text = "Go through the next steps again for TVs set up already", AutoSize = true, Margin = new Padding(0, 0, 0, 8), Visible = false };
+            redo.CheckedChanged += delegate { Setup.Redo = redo.Checked; };
+            Body.Controls.Add(redo);
+        }
+
+        // the ticked TVs, in the list's order
+        public List<FoundTv> Ticked
+        {
+            get
+            {
+                var tvs = new List<FoundTv>();
+                foreach (FoundTv tv in list.Items) if (ticked.Contains(tv.Info.Serial)) tvs.Add(tv);
+                return tvs;
+            }
+        }
+
+        // for the tests and the screenshot tool: exactly these TVs ticked (added to the end of
+        // the list if they aren't on it)
+        public void TickOnly(FoundTv[] tvs)
+        {
+            ticked.Clear();
+            foreach (FoundTv tv in tvs)
+            {
+                bool listed = false;
+                foreach (FoundTv f in list.Items) if (f.Info.Serial == tv.Info.Serial) listed = true;
+                if (!listed) list.Items.Add(tv);
+                ticked.Add(tv.Info.Serial);
+            }
+            list.Invalidate();
+            Picked();
         }
 
         // Enter in the address box adds that address. Without this the window's Next button
@@ -84,7 +130,7 @@ namespace TVFollow
 
         public override string Title { get { return "Find your TV"; } }
         public override bool Busy { get { return scanning; } }
-        public override bool CanGoNext { get { return Setup.Tv != null && Setup.Tv.Info.IsTv; } }
+        public override bool CanGoNext { get { return !scanning && Ticked.Count > 0; } }
 
         public override void Entered()
         {
@@ -96,7 +142,6 @@ namespace TVFollow
             scanning = true;
             again.Enabled = false;
             list.Items.Clear();
-            Setup.Tv = null;
             SetStatus(status, null, "Looking for TVs on your network…");
             spinner.Visible = true;
             hint.Visible = false;
@@ -107,6 +152,15 @@ namespace TVFollow
             catch { found = new List<FoundTv>(); }
             if (IsDisposed) return;
 
+            // a TV set up before that didn't answer stays on the list, ticked, so finishing setup
+            // doesn't drop it unseen: it keeps its settings unless it's unticked
+            foreach (TvSettings saved in Setup.Settings.Tvs)
+            {
+                if (found.Exists(f => f.Info.Serial == saved.Serial)) continue;
+                var info = new DeviceInfo { Serial = saved.Serial, Name = saved.Name, IsTv = true };
+                found.Add(new FoundTv { Ip = saved.Ip, Info = info, Answering = false });
+            }
+
             scanning = false;
             again.Enabled = true;
             spinner.Visible = false;
@@ -116,17 +170,28 @@ namespace TVFollow
                 list.Items.Add(tv);
                 if (tv.Info.IsTv) tvs++;
             }
+            // the first time: the TVs set up before, or the only TV there is. After that, what was
+            // ticked stays ticked, if it's still listed.
+            if (!searched)
+            {
+                foreach (FoundTv tv in found)
+                    if (tv.Info.IsTv && (Setup.IsSetUp(tv.Info.Serial) || (tvs == 1 && Setup.Settings.Tvs.Count == 0))) ticked.Add(tv.Info.Serial);
+                searched = true;
+            }
+            ticked.RemoveWhere(serial => !found.Exists(f => f.Info.IsTv && f.Info.Serial == serial));
+
+            hint.Visible = tvs == 0;
+            redo.Visible = found.Exists(f => Setup.IsSetUp(f.Info.Serial));
+            list.Invalidate();
             if (tvs == 0)
                 SetStatus(status, false, found.Count == 0 ? "No TVs found." : "Found a Roku, but no TV with Roku built in.");
-            else
-                SetStatus(status, null, tvs == 1 ? "Found your TV." : "Found " + tvs + " TVs. Pick the one this PC is plugged into.");
-            hint.Visible = tvs == 0;
-
-            // pick the TV from the saved settings, or the only TV there is
-            foreach (FoundTv tv in found)
+            else if (ticked.Count > 0)
             {
-                if (tv.Info.IsTv && (tv.Info.Serial == Setup.Settings.Serial || tvs == 1)) { list.SelectedItem = tv; break; }
+                Picked();
+                return;
             }
+            else
+                SetStatus(status, null, tvs == 1 ? "Found your TV. Tick it to use it." : "Found " + tvs + " TVs. Tick every TV this PC is plugged into.");
             NextChanged();
         }
 
@@ -153,37 +218,59 @@ namespace TVFollow
             for (int i = list.Items.Count - 1; i >= 0; i--)
                 if (((FoundTv)list.Items[i]).Info.Serial == tv.Info.Serial) list.Items.RemoveAt(i);
             list.Items.Add(tv);
-            list.SelectedItem = tv;
+            if (tv.Info.IsTv) ticked.Add(tv.Info.Serial); // typed in: that's the TV wanted
             manualRow.Visible = false;
+            list.Invalidate();
+            Picked(tv);
         }
 
-        void Picked()
+        void Toggle(int index)
         {
-            var tv = list.SelectedItem as FoundTv;
-            Setup.Tv = tv;
-            if (tv != null && !tv.Info.IsTv)
-                SetStatus(status, false, "That's a Roku stick or box. It can't turn the TV on or off, so pick a TV with Roku built in.");
-            else if (tv != null)
-                SetStatus(status, true, tv.Title + " it is.");
+            var tv = (FoundTv)list.Items[index];
+            if (tv.Info.IsTv && !ticked.Remove(tv.Info.Serial)) ticked.Add(tv.Info.Serial);
+            list.Invalidate(list.GetItemRectangle(index));
+            Picked(tv);
+        }
+
+        // what the ticks add up to, after this TV was clicked (null: no click, just a new list)
+        void Picked(FoundTv clicked = null)
+        {
+            List<FoundTv> tvs = Ticked;
+            if (clicked != null && !clicked.Info.IsTv)
+                SetStatus(status, false, "That's a Roku stick or box. It can't turn the TV on or off, so tick a TV with Roku built in.");
+            else if (tvs.Count == 1)
+                SetStatus(status, true, tvs[0].Title + " it is.");
+            else if (tvs.Count > 1)
+                SetStatus(status, true, tvs.Count + " TVs: " + string.Join(", ", tvs.ConvertAll(t => t.Title)) + ".");
+            else if (list.Items.Count > 0)
+                SetStatus(status, null, "Tick the TV this PC is plugged into.");
             NextChanged();
         }
 
         void DrawTv(object sender, DrawItemEventArgs e)
         {
-            e.DrawBackground();
+            // no highlight for the item with focus: the tick is what counts
+            using (var back = new SolidBrush(list.BackColor)) e.Graphics.FillRectangle(back, e.Bounds);
             if (e.Index < 0) return;
             var tv = (FoundTv)list.Items[e.Index];
-            bool selected = (e.State & DrawItemState.Selected) != 0;
-            Color main = selected ? SystemColors.HighlightText : tv.Info.IsTv ? SystemColors.ControlText : Muted;
-            Color sub = selected ? SystemColors.HighlightText : Muted;
+            CheckBoxState box = !tv.Info.IsTv ? CheckBoxState.UncheckedDisabled
+                : ticked.Contains(tv.Info.Serial) ? CheckBoxState.CheckedNormal : CheckBoxState.UncheckedNormal;
+            Size glyph = CheckBoxRenderer.GetGlyphSize(e.Graphics, box);
+            CheckBoxRenderer.DrawCheckBox(e.Graphics, new Point(e.Bounds.X + 10, e.Bounds.Y + (e.Bounds.Height - glyph.Height) / 2), box);
+
+            Color main = tv.Info.IsTv ? SystemColors.ControlText : Muted;
             int line = list.Font.Height;
-            var top = new Rectangle(e.Bounds.X + 10, e.Bounds.Y + 6, e.Bounds.Width - 20, line + 2);
+            int left = 10 + glyph.Width + 10;
+            var top = new Rectangle(e.Bounds.X + left, e.Bounds.Y + 6, e.Bounds.Width - left - 10, line + 2);
             var bottom = new Rectangle(top.X, top.Bottom + 1, top.Width, line + 2);
             TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix;
             TextRenderer.DrawText(e.Graphics, tv.Title, bold, top, main, flags);
-            string details = tv.Info.IsTv ? tv.Details : "Roku stick or box (can't turn a TV on or off)  ·  " + tv.Address;
-            TextRenderer.DrawText(e.Graphics, details, list.Font, bottom, sub, flags);
-            e.DrawFocusRectangle();
+            string details;
+            if (!tv.Info.IsTv) details = "Roku stick or box (can't turn a TV on or off)  ·  " + tv.Address;
+            else if (!tv.Answering) details = "Set up already  ·  not answering right now  ·  " + tv.Address;
+            else details = (Setup.IsSetUp(tv.Info.Serial) ? "Set up already  ·  " : "") + tv.Details;
+            TextRenderer.DrawText(e.Graphics, details, list.Font, bottom, Muted, flags);
+            if ((e.State & DrawItemState.Focus) != 0 && list.Focused) ControlPaint.DrawFocusRectangle(e.Graphics, e.Bounds);
         }
     }
 
@@ -323,8 +410,8 @@ namespace TVFollow
                 for (int i = 1; i <= 4; i++) inputs.Add(new KeyValuePair<string, string>("tvinput.hdmi" + i, ""));
             }
 
-            // pick: the saved input for this TV, else the one the TV is showing, else the first
-            string pick = Setup.Tv.Info.Serial == Setup.Settings.Serial ? "tvinput." + Setup.Settings.Input : null;
+            // pick: the input this TV has (saved, or picked earlier), else the one it's showing, else the first
+            string pick = Setup.Current.Tv.Input.Length > 0 ? "tvinput." + Setup.Current.Tv.Input : null;
             if (pick == null || !inputs.Exists(p => p.Key == pick)) pick = active != null && inputs.Exists(p => p.Key == active) ? active : inputs[0].Key;
 
             note.Text = "";
@@ -360,8 +447,8 @@ namespace TVFollow
         void Chose(RadioButton radio)
         {
             var input = (KeyValuePair<string, string>)radio.Tag;
-            Setup.Settings.Input = input.Key.Substring("tvinput.".Length);
-            Setup.InputName = InputLabel(input.Key, input.Value);
+            Setup.Current.Tv.Input = input.Key.Substring("tvinput.".Length);
+            Setup.Current.InputName = InputLabel(input.Key, input.Value);
             shown.Text = "";
             NextChanged();
         }
@@ -372,7 +459,7 @@ namespace TVFollow
             if (radio == null) return;
             show.Enabled = false;
             RokuClient client = Setup.Client;
-            string input = Setup.Settings.Input;
+            string input = Setup.Current.Tv.Input;
             int code = await Task.Run(() =>
             {
                 int c = client.Keypress("Input" + input.ToUpperInvariant(), 4000);
@@ -387,14 +474,15 @@ namespace TVFollow
         }
     }
 
-    // Step 4: turn the TV off and back on, the way TVFollow will.
+    // Step 4: turn the TV off and back on, the way TVFollow will. Each TV is tested (or skipped)
+    // on its own.
     class TestPage : SetupPage
     {
         readonly Button run;
         readonly FlowLayoutPanel results;
         readonly LinkLabel skip;
-        bool running, passed, skipped;
-        string testedFor;
+        bool running;
+        string shownFor;  // the TV and input the results on the page are about
 
         public TestPage(SetupForm setup) : base(setup)
         {
@@ -404,7 +492,7 @@ namespace TVFollow
             run = MakeButton("Run the test");
             run.Click += delegate { StartTest(); };
             skip = new LinkLabel { Text = "Skip the test", AutoSize = true, Margin = new Padding(4, 8, 0, 0) };
-            skip.LinkClicked += delegate { skipped = true; NextChanged(); Setup.GoNext(); };
+            skip.LinkClicked += delegate { Setup.Current.Tested = Key; NextChanged(); Setup.GoNext(); };
             row.Controls.Add(run);
             row.Controls.Add(skip);
             results = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Tag = "stretch", Margin = new Padding(0) };
@@ -413,34 +501,37 @@ namespace TVFollow
 
         public override string Title { get { return "Test it"; } }
         public override bool Busy { get { return running; } }
-        public override bool CanGoNext { get { return passed || skipped; } }
+        public override bool CanGoNext { get { return Setup.Current != null && Setup.Current.Tested == Key; } }
 
-        string Key { get { return Setup.Tv.Info.Serial + "|" + Setup.Settings.Input; } }
+        string Key { get { return Setup.Tv.Info.Serial + "|" + Setup.Current.Tv.Input; } }
 
         public override void Entered()
         {
-            if (testedFor != Key)
+            if (shownFor != Key)
             {
-                passed = skipped = false;
                 results.Controls.Clear();
-                run.Text = "Run the test";
+                shownFor = null;
             }
+            run.Text = Setup.Current.Tested == Key && shownFor != null ? "Run it again" : "Run the test";
         }
 
         public async void StartTest()
         {
             if (running) return;
             running = true;
-            passed = false;
+            SetupTv current = Setup.Current;
+            current.Tested = null;
             results.Controls.Clear();
+            shownFor = Key;
             run.Enabled = skip.Enabled = false;
             NextChanged();
 
             var progress = new Progress<Tuple<bool?, string>>(line => AddLine(line.Item1, line.Item2));
             IProgress<Tuple<bool?, string>> report = progress;
             RokuClient tv = Setup.Client;
-            string input = Setup.Settings.Input;
+            string input = current.Tv.Input;
             string mac = Setup.Tv.Info.WakeMac;
+            string key = Key;
             PowerTest test = Setup.Test;
             Log.Write("setup test started (input " + input + ")");
             bool ok = await Task.Run(() => test.Run(tv, input, mac, (o, t) =>
@@ -452,8 +543,7 @@ namespace TVFollow
             if (IsDisposed) return;
 
             running = false;
-            passed = ok;
-            testedFor = Key;
+            if (ok) current.Tested = key;
             run.Enabled = skip.Enabled = true;
             run.Text = ok ? "Run it again" : "Test again";
             NextChanged();
@@ -484,7 +574,7 @@ namespace TVFollow
     // Step 5: what TVFollow will do, how it runs (installed or portable), and Finish.
     class FinishPage : SetupPage
     {
-        readonly Label summary, portableNote;
+        readonly Label summary, portableNote, note;
         readonly CheckBox off, on, updates, startup, shortcuts;
         readonly RadioButton install, portable;
         string blocker;
@@ -492,6 +582,7 @@ namespace TVFollow
         public FinishPage(SetupForm setup) : base(setup)
         {
             summary = Para("");
+            summary.UseMnemonic = false; // the TVs' own names
             off = Option("Turn the TV off when this PC's monitors turn off", 4, 0);
             on = Option("Turn the TV on and switch it to this PC when you come back", 4, 0);
             updates = Option("Tell me when there's a new version (checks GitHub once a week)", 14, 0);
@@ -514,8 +605,7 @@ namespace TVFollow
             install.CheckedChanged += delegate { ShowMode(); };
             portable.CheckedChanged += delegate { ShowMode(); };
 
-            Note("TVFollow only turns the TV off while it's showing this PC, so it won't interrupt anyone watching something else. " +
-                "It runs from the TV icon in the taskbar corner: right-click it for the remote, TV buttons, Pause and Settings.");
+            note = Note("");
         }
 
         CheckBox Option(string text, int gap, int indent)
@@ -536,8 +626,18 @@ namespace TVFollow
 
         public override void Entered()
         {
-            string where = Setup.Tv.Info.Location.Length > 0 ? " (" + Setup.Tv.Info.Location + ")" : "";
-            summary.Text = "TV: " + Setup.Tv.Title + where + "\r\nInput: " + Setup.InputName;
+            List<SetupTv> tvs = Setup.Chosen;
+            bool several = tvs.Count > 1;
+            if (!several)
+                summary.Text = "TV: " + Where(tvs[0]) + "\r\nInput: " + tvs[0].InputName;
+            else
+                summary.Text = "TVs:\r\n" + string.Join("\r\n", tvs.ConvertAll(t => "    " + Where(t) + ":  " + t.InputName));
+            off.Text = several ? "Turn the TVs off when this PC's monitors turn off" : "Turn the TV off when this PC's monitors turn off";
+            on.Text = several ? "Turn the TVs on and switch them to this PC when you come back" : "Turn the TV on and switch it to this PC when you come back";
+            note.Text = (several
+                ? "TVFollow only turns a TV off while it's showing this PC, so it won't interrupt anyone watching something else. "
+                : "TVFollow only turns the TV off while it's showing this PC, so it won't interrupt anyone watching something else. ") +
+                "It runs from the TV icon in the taskbar corner: right-click it for the remote, TV buttons, Pause and Settings.";
             off.Checked = Setup.Settings.OffWithMonitors;
             on.Checked = Setup.Settings.OnWithMonitors;
             updates.Checked = Setup.Settings.CheckUpdates;
@@ -549,6 +649,13 @@ namespace TVFollow
             if (portable.Enabled && Settings.IsPortable) portable.Checked = true; // already portable: stay that way
             else install.Checked = true;
             ShowMode();
+        }
+
+        // "Living Room TV (Living room)"
+        static string Where(SetupTv tv)
+        {
+            string location = tv.Found.Info.Location;
+            return tv.Found.Title + (location.Length > 0 ? " (" + location + ")" : "");
         }
 
         void ShowMode()

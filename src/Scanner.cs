@@ -9,6 +9,9 @@ namespace TVFollow
     {
         public string Ip;
         public DeviceInfo Info;
+        // false for a TV set up before that didn't answer this time: setup lists it from the
+        // settings (Info then holds only its serial and name), so finishing doesn't drop it unseen
+        public bool Answering = true;
 
         // the address as shown in the setup window (the screenshot tool shows a home-network one)
         public virtual string Address { get { return Ip; } }
@@ -31,17 +34,19 @@ namespace TVFollow
 
     static class TvScanner
     {
-        // Every Roku on the PC's networks, TVs first, plus the saved address: a TV that had to be
+        // Every Roku on the PC's networks, TVs first, plus the saved addresses: a TV that had to be
         // typed in (on another subnet, say) is found again when setup is reopened.
-        public static List<FoundTv> FindAll(int port, string savedIp)
+        public static List<FoundTv> FindAll(int port, IEnumerable<string> savedIps)
         {
-            return Probe(WithSaved(Discovery.SweepAll(port, 2000), savedIp), port);
+            return Probe(WithSaved(Discovery.SweepAll(port, 2000), savedIps), port);
         }
 
-        public static List<string> WithSaved(List<string> swept, string savedIp)
+        public static List<string> WithSaved(List<string> swept, IEnumerable<string> savedIps)
         {
             var all = new List<string>(swept);
-            if (!string.IsNullOrEmpty(savedIp) && !all.Contains(savedIp)) all.Add(savedIp);
+            if (savedIps != null)
+                foreach (string ip in savedIps)
+                    if (!string.IsNullOrEmpty(ip) && !all.Contains(ip)) all.Add(ip);
             return all;
         }
 

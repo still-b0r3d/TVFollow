@@ -12,13 +12,17 @@ namespace TVFollow
     //   compact  square, volume beside the arrow pad, inputs in a drop-down
     //   strip    one wide row
     // While it has focus the keyboard works too: arrows, Enter (OK), Backspace (Back), Space
-    // (play/pause), Home, + and -. The box at the bottom types into the TV's search.
+    // (play/pause), Home, + and -. The box at the bottom types into the TV's search. With several
+    // TVs, a drop-down at the top picks the TV it works.
     class RemoteForm : Form
     {
         public const string Classic = "classic", Compact = "compact", Strip = "strip";
 
         readonly Settings settings;
-        readonly Controller controller;
+        readonly List<Controller> tvs;
+        Controller current;             // the TV the buttons go to
+        PadButton tvMenu;               // picks it, when there are several
+        int inputsAsked;                // which TV's inputs are wanted: an answer for an earlier pick is dropped
         readonly RemoteSender sender;
         readonly ToolTip tips = new ToolTip();
         readonly Panel board = new Panel();
@@ -33,12 +37,13 @@ namespace TVFollow
         List<KeyValuePair<string, string>> inputs = new List<KeyValuePair<string, string>>();
         string showing = "";
 
-        public RemoteForm(Settings settings, Controller controller, string layout)
+        public RemoteForm(Settings settings, List<Controller> tvs, Controller tv, string layout)
         {
             this.settings = settings;
-            this.controller = controller;
+            this.tvs = tvs;
+            current = tv;
             this.layout = layout == Compact || layout == Strip ? layout : Classic;
-            sender = new RemoteSender(() => new RokuClient(this.settings.Ip, this.settings.Port));
+            sender = new RemoteSender(() => new RokuClient(current.Tv.Ip, this.settings.Port));
             sender.Answered += code =>
             {
                 // an answer can arrive after the window has gone, even between the check and the
@@ -77,6 +82,26 @@ namespace TVFollow
         }
 
         public string LayoutName { get { return layout; } }
+
+        // the TV the remote is on
+        public Controller Tv { get { return current; } }
+
+        // Puts the remote on another TV: its inputs, and the buttons from now on. Presses already
+        // waiting to go out still go to the TV they were pressed for.
+        public void ShowTv(Controller tv)
+        {
+            if (tv == current || !tvs.Contains(tv)) return;
+            current = tv;
+            if (tvMenu != null)
+            {
+                tvMenu.Label = current.Label;
+                tvMenu.Invalidate();
+            }
+            showing = "";
+            ShowInputs();
+            SetStatus(null, "");
+            LoadInputs();
+        }
 
         protected override void OnHandleCreated(EventArgs e)
         {
@@ -216,7 +241,7 @@ namespace TVFollow
             toPc.GlyphPoints = 11f;
             toPc.Click += delegate
             {
-                Controller c = controller;
+                Controller c = current;
                 Task.Run(() =>
                 {
                     try { c.TurnOn(TurnOnMode.ToPc); }
@@ -244,7 +269,8 @@ namespace TVFollow
             return b;
         }
 
-        // the board, then the input buttons (classic), the typing box and the status line, stacked
+        // the TV picker (several TVs only), the board, then the input buttons (classic), the
+        // typing box and the status line, stacked
         void Stack(int width, bool inputButtons)
         {
             var column = new FlowLayoutPanel
@@ -257,6 +283,16 @@ namespace TVFollow
                 BackColor = Theme.Window,
                 Padding = new Padding(0, 0, 0, 10)
             };
+            if (tvs.Count > 1)
+            {
+                var row = new Panel { Size = new Size(width, 44), Margin = Padding.Empty, BackColor = Theme.Window };
+                tvMenu = new PadButton { Glyph = Glyphs.Down, Label = current.Label, GlyphPoints = 9f, Location = new Point(12, 12), Size = new Size(width - 24, 32) };
+                tvMenu.AccessibleName = "Pick the TV";
+                tips.SetToolTip(tvMenu, "Which TV the remote works");
+                tvMenu.Click += delegate { ShowTvMenu(); };
+                row.Controls.Add(tvMenu);
+                column.Controls.Add(row);
+            }
             board.Margin = Padding.Empty;
             column.Controls.Add(board);
             if (inputButtons)
@@ -348,7 +384,8 @@ namespace TVFollow
 
         async void LoadInputs()
         {
-            var client = new RokuClient(settings.Ip, settings.Port);
+            int asked = ++inputsAsked;
+            var client = new RokuClient(current.Tv.Ip, settings.Port);
             List<KeyValuePair<string, string>> found = null;
             string active = null;
             await Task.Run(() =>
@@ -356,7 +393,7 @@ namespace TVFollow
                 found = client.GetTvInputs(2500);
                 active = client.GetActiveApp(2500);
             });
-            if (IsDisposed) return;
+            if (IsDisposed || asked != inputsAsked) return; // closed, or another TV picked meanwhile
             if (found == null || found.Count == 0)
             {
                 // a TV on Limited doesn't list them; these are the usual ones
@@ -402,7 +439,7 @@ namespace TVFollow
                 if (layout == Strip) chip.Width = Math.Max(chip.Width, 126);
                 chip.AccessibleName = "Switch the TV to " + label;
                 tips.SetToolTip(chip, chip.AccessibleName);
-                chip.Click += delegate { SwitchTo(id); };
+                chip.Click += delegate { SwitchInput(id); };
                 chips.Controls.Add(chip);
             }
             chips.ResumeLayout();
@@ -414,18 +451,31 @@ namespace TVFollow
             foreach (KeyValuePair<string, string> input in inputs)
             {
                 string id = input.Key;
-                var item = new ToolStripMenuItem(InputName(input)) { Checked = id == showing };
-                item.Click += delegate { SwitchTo(id); };
+                var item = new ToolStripMenuItem(Tray.MenuText(InputName(input))) { Checked = id == showing };
+                item.Click += delegate { SwitchInput(id); };
                 menu.Items.Add(item);
             }
             menu.Show(inputMenu, new Point(0, inputMenu.Height));
         }
 
-        void SwitchTo(string id)
+        void SwitchInput(string id)
         {
             sender.Launch(id);
             showing = id;
             ShowInputs();
+        }
+
+        void ShowTvMenu()
+        {
+            var menu = new ContextMenuStrip { ShowImageMargin = false, ShowCheckMargin = true };
+            foreach (Controller tv in tvs)
+            {
+                Controller pick = tv;
+                var item = new ToolStripMenuItem(Tray.MenuText(tv.Label)) { Checked = tv == current };
+                item.Click += delegate { ShowTv(pick); };
+                menu.Items.Add(item);
+            }
+            menu.Show(tvMenu, new Point(0, tvMenu.Height));
         }
 
         // ---- keyboard, pin, status ----

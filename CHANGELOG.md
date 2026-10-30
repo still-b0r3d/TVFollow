@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.2 (not released yet)
+
+More than one TV.
+
+- TVFollow can follow the monitors with several TVs, each with its own input. Setup's
+  first step lists the TVs on the network with tick boxes: tick every TV the PC is plugged
+  into, and each new one goes through the next steps (control, input, test) in turn.
+- TVs already set up keep their settings when setup opens again, so adding a second TV
+  later is quick: **Settings… → Add or change TVs…**, tick it, and only the new TV goes
+  through the steps. Untick a TV to stop using it. A TV set up before that doesn't answer
+  at the time stays listed and keeps its settings. To check a TV already set up again
+  (its control setting, input or the test), tick **Go through the next steps again for
+  TVs set up already**.
+- Updating from a new download is quicker for the same reason: the TVs already set up
+  stay as they are, so it's step 1, Next, then Finish.
+- Each TV follows on its own and at the same time: a TV that's slow to wake doesn't hold
+  up the others, and sleep and shutdown tell every TV at once.
+- With two or more TVs the tray menu has **All TVs on / off / to PC** and a menu for each
+  TV with its own buttons and remote. The remote gets a drop-down at the top to pick the
+  TV it works, the Settings window shows each TV with its own input, and the log says
+  which TV each line is about.
+- The `on`, `off` and `pc` commands (and the desktop shortcuts) do every TV. Add a TV's
+  number from the Settings window, or its name, to do one: `TVFollow.exe on 2`.
+- settings.ini keeps the first TV in the keys 1.1 uses; the others are `tv2.ip=`,
+  `tv2.input=` and so on. A new `name=` keeps each TV's name for the menus.
+- The setup and Settings windows say "made by b0r3d.org" again, linking to b0r3d.org.
+- A TV's name with an & in it shows as it is in the menus and windows.
+
 ## 1.1 (2026-10-25)
 
 Fixes from a second review of 1.0.

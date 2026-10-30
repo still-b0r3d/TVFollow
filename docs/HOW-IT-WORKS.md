@@ -27,6 +27,10 @@ about twice a second.
 TVFollow waits a second after the screens change before acting, so a quick flicker
 doesn't switch the TV off and on.
 
+With several TVs, each TV goes by these rules on its own, all at the same time: each is
+turned off only while it shows this PC, and a TV that takes a while to wake doesn't hold
+up the others. At sleep and shutdown every TV is told at once.
+
 ## Talking to the TV
 
 TVs with Roku built in answer simple web requests on your home network, on port 8060.
@@ -86,7 +90,7 @@ off (Fast TV start off), turn it on with its own remote first. Use the tray or t
 not a desktop shortcut: a shortcut runs a TVFollow of its own, which doesn't update the copy
 in the taskbar corner. If the new router uses other numbers altogether (`192.168.0.x`
 instead of `192.168.1.x`, say), the button can't search there; go through
-**Settings… → Change TV…** once.
+**Settings… → Add or change TVs…** once.
 
 The flip side: pressing one of those buttons on a hotel network that happens to use your
 home's addresses makes TVFollow look for your TV there. It only ever acts on a TV with your
@@ -127,6 +131,7 @@ serial=X000000000
 input=hdmi1
 wake_mac=00:11:22:33:44:55
 gateway_mac=AA:BB:CC:DD:EE:01
+name=Living Room TV
 off_with_monitors=yes
 on_with_monitors=yes
 start_with_windows=yes
@@ -142,11 +147,28 @@ remote_layout=classic
 | `input` | The input your PC is plugged into |
 | `wake_mac` | The TV's network card, for the wake signal (updated by itself) |
 | `gateway_mac` | Your home router, so the automatic following leaves another network with the same addresses alone (learned by itself when the TV answers) |
+| `name` | What the TV calls itself, for the menus and the log (updated when the Settings window sees a new one) |
 | `off_with_monitors`, `on_with_monitors` | The two "follow" options |
 | `start_with_windows`, `desktop_shortcuts` | Install options |
 | `check_updates` | Ask GitHub once a week whether there's a newer TVFollow |
 | `remote_layout` | `classic` (the default), `compact` or `strip` |
 | `paused` | Only there while paused from the tray (`paused=yes`) |
+
+**Several TVs:** the first TV uses the keys above, the way TVFollow 1.1 wrote them, so an
+older TVFollow reading the file still finds that one. Each other TV has the same six keys
+with its number in front, listed after the rest:
+
+```ini
+tv2.ip=192.168.1.51
+tv2.serial=X000000001
+tv2.input=hdmi2
+tv2.wake_mac=00:11:22:33:44:66
+tv2.gateway_mac=AA:BB:CC:DD:EE:01
+tv2.name=Office TV
+```
+
+The numbers are the order the Settings window lists the TVs in, and the ones the `on`,
+`off` and `pc` commands take.
 
 Everything is per user, so TVFollow never needs admin rights. Uninstalling removes all
 of it.

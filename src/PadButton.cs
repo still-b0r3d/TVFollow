@@ -132,9 +132,14 @@ namespace TVFollow
                 {
                     Size gs = TextRenderer.MeasureText(g, Glyph, icons, Size.Empty, TextFormatFlags.NoPadding);
                     Size ls = TextRenderer.MeasureText(g, Label, Font, Size.Empty, TextFormatFlags.NoPadding);
-                    int gap = 5, x = (Width - gs.Width - gap - ls.Width) / 2;
+                    int gap = 5;
+                    // a label too long for the button (a TV's or an input's own name) ends in "…"
+                    int room = Math.Max(10, Width - 4 - gs.Width - gap);
+                    if (ls.Width > room) ls.Width = room;
+                    int x = (Width - gs.Width - gap - ls.Width) / 2;
                     TextRenderer.DrawText(g, Glyph, icons, new Rectangle(x, 0, gs.Width, Height), text, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-                    TextRenderer.DrawText(g, Label, Font, new Rectangle(x + gs.Width + gap, 0, ls.Width + 2, Height), text, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+                    TextRenderer.DrawText(g, Label, Font, new Rectangle(x + gs.Width + gap, 0, ls.Width + 2, Height), text,
+                        TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
                 }
             }
             else if (Glyph.Length > 0)

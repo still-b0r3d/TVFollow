@@ -46,6 +46,7 @@ namespace TVFollow.Tests
             Run("setup: choosing portable", SetupChoosesPortable);
             RunRemoteTests();
             RunSecondReview();
+            RunMultiTv();
         }
 
         // ---- portable ----
@@ -183,7 +184,7 @@ namespace TVFollow.Tests
             using (var tv = new FakeTv("127.0.0.1", 0))
             {
                 tv.Down = true;
-                Controller c = Fast(new Controller(SettingsFor(tv)));
+                Controller c = Fast(FirstTv(SettingsFor(tv)));
                 c.OnTvNetwork = () => false;
                 c.Candidates = () => { throw new Exception("searched off the TV's network"); };
                 c.TurnOn(TurnOnMode.Follow);
@@ -197,7 +198,7 @@ namespace TVFollow.Tests
             using (var tv = new FakeTv("127.0.0.1", 0))
             {
                 tv.Down = true;
-                Controller c = Fast(new Controller(SettingsFor(tv)));
+                Controller c = Fast(FirstTv(SettingsFor(tv)));
                 c.SearchEvery = TimeSpan.FromMinutes(10);
                 int searches = 0;
                 c.Candidates = () => { searches++; return new List<string>(); };
@@ -213,7 +214,7 @@ namespace TVFollow.Tests
             using (var tv = new FakeTv("127.0.0.1", 0))
             {
                 tv.Down = true;
-                Controller c = Fast(new Controller(SettingsFor(tv)));
+                Controller c = Fast(FirstTv(SettingsFor(tv)));
                 int sent = 0;
                 c.SendWake = mac => { sent++; return 2; };
                 c.WakeReachMs = 500;
@@ -229,7 +230,7 @@ namespace TVFollow.Tests
             using (var tv = new FakeTv("127.0.0.1", 0))
             {
                 tv.Down = true;
-                Controller c = Fast(new Controller(SettingsFor(tv)));
+                Controller c = Fast(FirstTv(SettingsFor(tv)));
                 c.SendWake = mac => 0;
                 c.TurnOn(TurnOnMode.Follow);
                 Check(LogText().Contains("no network to send a wake packet on"), "a wake that never went out isn't logged");
@@ -243,9 +244,9 @@ namespace TVFollow.Tests
                 Settings s = SettingsFor(tv);
                 s.Save();
                 tv.NetworkType = "ethernet";
-                Fast(new Controller(s)).TurnOff(false, false);
-                Check(s.WakeMac == "00:11:22:33:44:66", "wake address not updated: " + s.WakeMac);
-                Check(Settings.Load().WakeMac == "00:11:22:33:44:66", "new wake address not saved");
+                Fast(FirstTv(s)).TurnOff(false, false);
+                Check(Tv(s).WakeMac == "00:11:22:33:44:66", "wake address not updated: " + Tv(s).WakeMac);
+                Check(Tv(Settings.Load()).WakeMac == "00:11:22:33:44:66", "new wake address not saved");
                 File.Delete(Settings.FilePath);
             }
         }
@@ -280,14 +281,14 @@ namespace TVFollow.Tests
         static void SettingsPauseAndComments()
         {
             var s = new Settings();
-            s.Ip = "192.168.1.50";
-            s.Serial = "X000000001";
+            Tv(s).Ip = "192.168.1.50";
+            Tv(s).Serial = "X000000001";
             s.Paused = true;
             s.Save();
             Check(Settings.Load().Paused, "pause not kept");
             File.WriteAllText(Settings.FilePath, "ip=192.168.1.50   # the TV\r\nserial=X000000001\t# its serial\r\ninput=hdmi2 # where the PC is\r\n");
             Settings t = Settings.Load();
-            Check(t.Ip == "192.168.1.50" && t.Serial == "X000000001" && t.Input == "hdmi2", "comment kept: [" + t.Ip + "] [" + t.Serial + "] [" + t.Input + "]");
+            Check(Tv(t).Ip == "192.168.1.50" && Tv(t).Serial == "X000000001" && Tv(t).Input == "hdmi2", "comment kept: [" + Tv(t).Ip + "] [" + Tv(t).Serial + "] [" + Tv(t).Input + "]");
             Check(!t.Paused, "paused should default to off");
             File.Delete(Settings.FilePath);
         }
@@ -395,9 +396,10 @@ namespace TVFollow.Tests
 
         static void ScannerSavedAndDuplicates()
         {
-            List<string> all = TvScanner.WithSaved(new List<string> { "192.168.1.5" }, "10.0.0.7");
+            List<string> all = TvScanner.WithSaved(new List<string> { "192.168.1.5" }, new[] { "10.0.0.7" });
             Check(all.Count == 2 && all[1] == "10.0.0.7", "saved address not added");
-            Check(TvScanner.WithSaved(new List<string> { "10.0.0.7" }, "10.0.0.7").Count == 1, "saved address added twice");
+            Check(TvScanner.WithSaved(new List<string> { "10.0.0.7" }, new[] { "10.0.0.7" }).Count == 1, "saved address added twice");
+            Check(TvScanner.WithSaved(new List<string> { "10.0.0.7" }, new[] { "10.0.0.8", "", "10.0.0.9" }).Count == 3, "every saved TV's address is tried");
             Check(TvScanner.WithSaved(new List<string>(), null).Count == 0, "no saved address");
             using (var a = new FakeTv("127.0.0.1", 0))
             using (var b = new FakeTv("127.0.0.2", a.Port))
@@ -496,7 +498,6 @@ namespace TVFollow.Tests
                 tv.App = "tvinput.hdmi2";
                 var s = new Settings();
                 s.Port = tv.Port;
-                s.GatewayMac = "AA:BB:CC:DD:EE:FF"; // the router of the home the TV was in before
                 SetupForm form = OffScreenSetup(s, () => TvScanner.Probe(new[] { "127.0.0.1" }, tv.Port));
                 try
                 {
@@ -515,10 +516,10 @@ namespace TVFollow.Tests
                 }
                 finally { form.Dispose(); }
                 Settings saved = Settings.Load();
-                Check(saved.Ip == "127.0.0.1" && saved.Serial == tv.Serial, "TV not saved: " + saved.Ip + " " + saved.Serial);
-                Check(saved.Input == "hdmi2", "input not saved: " + saved.Input);
-                Check(saved.WakeMac == "00:11:22:33:44:55", "wake address not saved: " + saved.WakeMac);
-                Check(saved.GatewayMac == "", "a new setup kept the old router: " + saved.GatewayMac);
+                Check(Tv(saved).Ip == "127.0.0.1" && Tv(saved).Serial == tv.Serial, "TV not saved: " + Tv(saved).Ip + " " + Tv(saved).Serial);
+                Check(Tv(saved).Input == "hdmi2", "input not saved: " + Tv(saved).Input);
+                Check(Tv(saved).WakeMac == "00:11:22:33:44:55", "wake address not saved: " + Tv(saved).WakeMac);
+                Check(saved.Tvs.Count == 1 && Tv(saved).Name == "Test TV", "TVs saved: " + saved.Tvs.Count + ", name " + Tv(saved).Name);
                 File.Delete(Settings.FilePath);
             }
         }
@@ -533,7 +534,7 @@ namespace TVFollow.Tests
                 limited.ControlMode = "limited";
                 var s = new Settings();
                 s.Port = slow.Port;
-                s.Serial = slow.Serial;           // so step 1 picks the slow TV
+                Tv(s).Serial = slow.Serial;           // so step 1 picks the slow TV
                 SetupForm form = OffScreenSetup(s, () => TvScanner.Probe(new[] { "127.0.0.1", "127.0.0.2" }, slow.Port));
                 try
                 {
@@ -542,7 +543,7 @@ namespace TVFollow.Tests
                     Thread.Sleep(100);
                     form.GoBack();                // ...but the user goes back
                     List<FoundTv> found = TvScanner.Probe(new[] { "127.0.0.2" }, slow.Port);
-                    form.Tv = found[0];           // and picks the other TV
+                    form.Pick(found[0]);          // and ticks the other TV instead
                     form.GoNext();
                     Pump(() => AllText(form.CurrentPage).Contains("Limited"), 10);
                     Thread.Sleep(2000);           // the slow TV's late "allowed" arrives now

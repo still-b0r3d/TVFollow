@@ -66,11 +66,12 @@ namespace TVFollow
     }
 
     // Sends the remote's presses one at a time, in order (typing must arrive in order), on a
-    // background thread so the window never waits on the network.
+    // background thread so the window never waits on the network. Each press goes to the TV the
+    // remote was on when it was pressed, even if another TV is picked before it goes out.
     class RemoteSender : IDisposable
     {
         readonly Func<RokuClient> client;
-        readonly BlockingCollection<Func<RokuClient, int>> queue = new BlockingCollection<Func<RokuClient, int>>();
+        readonly BlockingCollection<Func<int>> queue = new BlockingCollection<Func<int>>();
         readonly Thread thread;
 
         // what the TV said to the last press: 2xx fine, 403 blocked by Limited, 0 no answer
@@ -89,15 +90,17 @@ namespace TVFollow
 
         public void Send(Func<RokuClient, int> action)
         {
-            if (!queue.IsAddingCompleted) queue.Add(action);
+            if (queue.IsAddingCompleted) return;
+            RokuClient tv = client();
+            queue.Add(() => action(tv));
         }
 
         void Run()
         {
-            foreach (Func<RokuClient, int> action in queue.GetConsumingEnumerable())
+            foreach (Func<int> press in queue.GetConsumingEnumerable())
             {
                 int code;
-                try { code = action(client()); }
+                try { code = press(); }
                 catch { code = 0; }
                 Answered(code);
             }

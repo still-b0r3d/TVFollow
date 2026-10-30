@@ -13,6 +13,7 @@ the TV is one of your screens.
 - Sleep and shutdown turn it off as well.
 - It only turns the TV off while the TV is showing your PC, so it never interrupts
   someone watching something else on it.
+- More than one TV as a screen? Each one follows along, with its own input.
 
 ![The TVFollow setup window, finding a TV on the network](docs/images/1-find.png)
 
@@ -48,9 +49,12 @@ folder. To update it, replace TVFollow.exe in that folder.
 
 ## Setup, step by step
 
-**1. Find your TV.** TVFollow looks for TVs on your network and picks yours if there's
-only one. If it isn't listed, click **Enter the TV's address instead**. The TV shows its
-address under **Settings → Network → About**.
+**1. Find your TV.** TVFollow looks for TVs on your network and ticks yours if there's
+only one. Is the PC plugged into more than one TV? Tick each of them; steps 2 to 4 then
+go through them one at a time. If a TV isn't listed, click **Enter the TV's address
+instead**. The TV shows its address under **Settings → Network → About**.
+
+![Step 1 with two TVs ticked and a Roku stick that can't be](docs/images/11-find-two-tvs.png)
 
 **2. Let this PC control the TV.** Newer Roku TVs come set to *Limited*, which lets
 phones and PCs open apps but blocks the power button. If yours is on Limited, the
@@ -100,6 +104,12 @@ TVFollow runs from a small TV icon in the taskbar corner. You might need to clic
 - **Quit TVFollow**: stops it. It starts again when you sign in (if it starts with
   Windows) or when you open TVFollow from the Start menu.
 
+With two or more TVs the buttons read **All TVs on**, **All TVs off** and **All TVs to
+PC**, and each TV gets a menu of its own (named as the TV calls itself) with its own TV
+on, TV off, TV to PC and remote.
+
+![The tray menu with two TVs: All TVs on, off and to PC, then a menu for each TV](docs/images/12-tray-menu-two-tvs.png)
+
 ### The remote
 
 **Remote…** opens a remote above the taskbar corner, with every button that makes
@@ -117,6 +127,7 @@ TV's inputs by the names you gave them.
 - The pin keeps the remote above other windows; **Esc** closes it.
 - Prefer a different shape? Settings has three: **Classic** (above), **Compact** and
   **Wide strip**.
+- With two or more TVs, a drop-down at the top of the remote picks the TV it works.
 
 | Compact | Wide strip |
 |---|---|
@@ -133,8 +144,9 @@ Start menu while it's running. Changes apply straight away.
 
 ![The Settings window](docs/images/10-settings.png)
 
-- **TV:** which TV and whether it's answering, the input your PC is on, and **Change
-  TV…** (runs setup again).
+- **TV:** which TV and whether it's answering, and the input your PC is on (for each
+  TV, numbered, when there are several). **Add or change TVs…** runs setup again: tick a
+  new TV to add it, untick one to stop using it. TVs already set up keep their settings.
 - **Following:** the two follow options, and Pause.
 - **Remote:** the layout, and a button to open it.
 - **This PC:** start with Windows and the desktop shortcuts. Switching between installed
@@ -146,7 +158,8 @@ your desktop too.
 
 When a new version is out, a notification says so and the menu gets a **Get TVFollow …**
 item that opens its download page. To update, download the new TVFollow.exe and open it:
-setup remembers your TV, and finishing replaces the old version.
+setup remembers your TVs and keeps their settings, so it's **Next**, then **Finish**, and
+finishing replaces the old version.
 
 ### How it decides
 
@@ -158,6 +171,8 @@ setup remembers your TV, and finishing replaces the old version.
   TVFollow waits for the mouse or keyboard before turning the TV on.
 - **The router gave the TV a new address:** TVFollow finds it again by itself. After a
   router swap, press **TV to PC** in the tray once (details in [How it works](docs/HOW-IT-WORKS.md)).
+- **Several TVs:** each one goes by these rules on its own, all at the same time, so one
+  TV that's slow to wake doesn't hold up the others.
 
 More detail in [How it works](docs/HOW-IT-WORKS.md).
 
@@ -165,8 +180,8 @@ More detail in [How it works](docs/HOW-IT-WORKS.md).
 
 - **Change settings:** right-click the tray icon → **Settings…**, or open **TVFollow**
   from the Start menu while it's running (if it isn't running, that starts it).
-- **Change TV, or switch between installed and portable:** **Settings… → Change TV…** or
-  the "run setup again" link there.
+- **Add, remove or change TVs, or switch between installed and portable:** **Settings… →
+  Add or change TVs…** or the "run setup again" link there.
 - **Uninstall:** **Settings → Apps → Installed apps → TVFollow → Uninstall** (on
   Windows 10: **Settings → Apps → Apps & features**). That removes the program, its
   shortcuts, its settings and its log. Nothing on the TV changes.
@@ -197,6 +212,7 @@ TVFollow also takes commands, for hotkeys, Stream Deck buttons or scripts:
 | `TVFollow.exe on` | Turns the TV on |
 | `TVFollow.exe off` | Turns the TV off, whatever it's showing |
 | `TVFollow.exe pc` | Turns the TV on and switches it to your PC |
+| `TVFollow.exe on 2` | With several TVs: `on`, `off` and `pc` do every TV, or just the one named after them, by its number in the Settings window or its name (`TVFollow.exe pc Office TV`) |
 | `TVFollow.exe setup` | Opens the setup window |
 | `TVFollow.exe uninstall` | Removes TVFollow (`--quiet` skips the questions) |
 | `TVFollow.exe --version` | Prints the version |
@@ -222,6 +238,6 @@ compiler stamps each build differently.
 TVFollow is free. Use it, change it and share it, at home or at work, under the MIT
 License with the [Commons Clause](https://commonsclause.com/): the one thing nobody may
 do is sell it, or sell something whose value comes mostly from it. See
-[LICENSE](LICENSE). Made by [still b0r3d](https://github.com/still-b0r3d).
+[LICENSE](LICENSE). Made by [b0r3d.org](https://b0r3d.org).
 
 Roku is a trademark of Roku, Inc. TVFollow isn't affiliated with or endorsed by Roku.

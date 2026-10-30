@@ -114,12 +114,25 @@ namespace TVFollow.Tests
         static Settings SettingsFor(FakeTv tv)
         {
             var s = new Settings();
-            s.Ip = tv.Ip;
+            Tv(s).Ip = tv.Ip;
             s.Port = tv.Port;
-            s.Serial = tv.Serial;
-            s.Input = "hdmi1";
-            s.WakeMac = "00:11:22:33:44:55";
+            Tv(s).Serial = tv.Serial;
+            Tv(s).Input = "hdmi1";
+            Tv(s).WakeMac = "00:11:22:33:44:55";
             return s;
+        }
+
+        // the first TV's settings, made on first use (most tests have one TV)
+        internal static TvSettings Tv(Settings s)
+        {
+            if (s.Tvs.Count == 0) s.Tvs.Add(new TvSettings());
+            return s.Tvs[0];
+        }
+
+        // the first TV's controller
+        static Controller FirstTv(Settings s)
+        {
+            return new Controller(s, Tv(s));
         }
 
         // ---- settings and parsing ----
@@ -127,11 +140,11 @@ namespace TVFollow.Tests
         static void SettingsRoundTrip()
         {
             var s = new Settings();
-            s.Ip = "192.168.1.50";
-            s.Serial = "X000000001";
-            s.Input = "hdmi2";
-            s.WakeMac = "00:11:22:33:44:55";
-            s.GatewayMac = "AA:BB:CC:DD:EE:01";
+            Tv(s).Ip = "192.168.1.50";
+            Tv(s).Serial = "X000000001";
+            Tv(s).Input = "hdmi2";
+            Tv(s).WakeMac = "00:11:22:33:44:55";
+            Tv(s).GatewayMac = "AA:BB:CC:DD:EE:01";
             s.Port = 18060;
             s.OnWithMonitors = false;
             s.StartWithWindows = false;
@@ -140,11 +153,11 @@ namespace TVFollow.Tests
             s.Save();
             s.Save(); // second save replaces the file
             Settings t = Settings.Load();
-            Check(t.Ip == s.Ip && t.Serial == s.Serial && t.Input == "hdmi2" && t.WakeMac == s.WakeMac && t.GatewayMac == s.GatewayMac, "fields lost");
+            Check(Tv(t).Ip == Tv(s).Ip && Tv(t).Serial == Tv(s).Serial && Tv(t).Input == "hdmi2" && Tv(t).WakeMac == Tv(s).WakeMac && Tv(t).GatewayMac == Tv(s).GatewayMac, "fields lost");
             Check(t.Port == 18060, "port lost");
             Check(!t.OnWithMonitors && t.OffWithMonitors, "options lost");
             Check(!t.StartWithWindows && t.DesktopShortcuts && !t.CheckUpdates, "install options lost");
-            Check(t.PcApp == "tvinput.hdmi2", "PC app wrong");
+            Check(Tv(t).PcApp == "tvinput.hdmi2", "PC app wrong");
             File.Delete(Settings.FilePath);
         }
 
@@ -153,8 +166,8 @@ namespace TVFollow.Tests
             Directory.CreateDirectory(Settings.Dir);
             File.WriteAllText(Settings.FilePath, "# old style\r\nip=192.168.1.50\r\nserial=X1\r\ninput=HDMI1\r\nmac=00:11:22:33:44:55\r\nport=nonsense\r\n");
             Settings s = Settings.Load();
-            Check(s.WakeMac == "00:11:22:33:44:55", "old mac key ignored");
-            Check(s.Input == "hdmi1", "input not lower-cased");
+            Check(Tv(s).WakeMac == "00:11:22:33:44:55", "old mac key ignored");
+            Check(Tv(s).Input == "hdmi1", "input not lower-cased");
             Check(s.Port == Settings.DefaultPort, "bad port not ignored");
             Check(s.IsComplete, "should count as set up");
             File.Delete(Settings.FilePath);
@@ -195,7 +208,7 @@ namespace TVFollow.Tests
         {
             using (var tv = new FakeTv("127.0.0.1", 0))
             {
-                Fast(new Controller(SettingsFor(tv))).TurnOff(false, false);
+                Fast(FirstTv(SettingsFor(tv))).TurnOff(false, false);
                 Check(!tv.IsOn, "TV still on");
                 Check(tv.Count("POST /keypress/PowerOff") == 1, "expected one PowerOff");
                 Check(LogText().Contains("off: sending power off"), "power off not logged before sending");
@@ -207,10 +220,10 @@ namespace TVFollow.Tests
             using (var tv = new FakeTv("127.0.0.1", 0))
             {
                 tv.App = "";
-                Fast(new Controller(SettingsFor(tv))).TurnOff(false, false);
+                Fast(FirstTv(SettingsFor(tv))).TurnOff(false, false);
                 Check(tv.IsOn && tv.Presses == 0, "should not touch a TV on its home screen");
                 tv.App = "12";
-                Fast(new Controller(SettingsFor(tv))).TurnOff(false, true);
+                Fast(FirstTv(SettingsFor(tv))).TurnOff(false, true);
                 Check(tv.IsOn && tv.Presses == 0, "should not touch a TV showing an app");
             }
         }
@@ -220,7 +233,7 @@ namespace TVFollow.Tests
             using (var tv = new FakeTv("127.0.0.1", 0))
             {
                 tv.App = "12";
-                Fast(new Controller(SettingsFor(tv))).TurnOff(true, false);
+                Fast(FirstTv(SettingsFor(tv))).TurnOff(true, false);
                 Check(!tv.IsOn, "button should turn it off");
             }
         }
@@ -233,7 +246,7 @@ namespace TVFollow.Tests
             {
                 tv.PowerMode = "DisplayOff";
                 tv.App = ""; // comes on to the home screen
-                Fast(new Controller(SettingsFor(tv))).TurnOn(TurnOnMode.Follow);
+                Fast(FirstTv(SettingsFor(tv))).TurnOn(TurnOnMode.Follow);
                 Check(tv.IsOn, "TV still off");
                 Check(tv.App == "tvinput.hdmi1", "not switched to the PC, showing " + tv.App);
                 Check(tv.Count("POST /keypress/InputHDMI1") >= 1, "no input press");
@@ -245,7 +258,7 @@ namespace TVFollow.Tests
             using (var tv = new FakeTv("127.0.0.1", 0))
             {
                 tv.App = "12";
-                Fast(new Controller(SettingsFor(tv))).TurnOn(TurnOnMode.Follow);
+                Fast(FirstTv(SettingsFor(tv))).TurnOn(TurnOnMode.Follow);
                 Check(tv.App == "12" && tv.Presses == 0, "should leave a busy TV alone");
             }
         }
@@ -255,7 +268,7 @@ namespace TVFollow.Tests
             using (var tv = new FakeTv("127.0.0.1", 0))
             {
                 tv.App = "12";
-                Fast(new Controller(SettingsFor(tv))).TurnOn(TurnOnMode.ToPc);
+                Fast(FirstTv(SettingsFor(tv))).TurnOn(TurnOnMode.ToPc);
                 Check(tv.App == "tvinput.hdmi1", "should switch to the PC");
             }
         }
@@ -266,7 +279,7 @@ namespace TVFollow.Tests
             {
                 tv.PowerMode = "DisplayOff";
                 tv.App = "";
-                Fast(new Controller(SettingsFor(tv))).TurnOn(TurnOnMode.PowerOnly);
+                Fast(FirstTv(SettingsFor(tv))).TurnOn(TurnOnMode.PowerOnly);
                 Check(tv.IsOn && tv.App == "", "should power on and nothing else");
                 Check(tv.Count("POST /keypress/PowerOn") == 1 && tv.Presses == 1, "expected exactly one press");
             }
@@ -278,7 +291,7 @@ namespace TVFollow.Tests
             {
                 tv.ControlMode = "limited";
                 tv.PowerMode = "DisplayOff";
-                Fast(new Controller(SettingsFor(tv))).TurnOn(TurnOnMode.Follow);
+                Fast(FirstTv(SettingsFor(tv))).TurnOn(TurnOnMode.Follow);
                 Check(!tv.IsOn, "a Limited TV can't be turned on");
                 Check(LogText().Contains("-> 403"), "the 403 should be in the log");
                 Check(LogText().Contains("gave up"), "should give up, not hang");
@@ -292,7 +305,7 @@ namespace TVFollow.Tests
                 tv.Down = true;
                 tv.PowerMode = "DisplayOff";
                 var woken = new List<string>();
-                Controller c = Fast(new Controller(SettingsFor(tv)));
+                Controller c = Fast(FirstTv(SettingsFor(tv)));
                 c.SendWake = mac => { woken.Add(mac); tv.Down = false; tv.PowerMode = "PowerOn"; return 2; };
                 c.TurnOn(TurnOnMode.Follow);
                 Check(woken.Count == 1 && woken[0] == "00:11:22:33:44:55", "expected one wake packet to the TV's address");
@@ -308,14 +321,14 @@ namespace TVFollow.Tests
             {
                 wrong.Serial = "X999999999";
                 Settings s = SettingsFor(right);
-                s.Ip = "127.0.0.3"; // nothing there any more
-                Controller c = Fast(new Controller(s));
+                Tv(s).Ip = "127.0.0.3"; // nothing there any more
+                Controller c = Fast(FirstTv(s));
                 c.Candidates = () => new List<string> { "127.0.0.3", "127.0.0.1", "127.0.0.2" };
                 c.TurnOff(true, false);
                 Check(!right.IsOn, "the right TV should be off");
                 Check(wrong.IsOn && wrong.Presses == 0, "the other Roku must not be touched");
-                Check(s.Ip == "127.0.0.2", "new address not used");
-                Check(Settings.Load().Ip == "127.0.0.2", "new address not saved");
+                Check(Tv(s).Ip == "127.0.0.2", "new address not used");
+                Check(Tv(Settings.Load()).Ip == "127.0.0.2", "new address not saved");
                 File.Delete(Settings.FilePath);
             }
         }
@@ -515,8 +528,8 @@ namespace TVFollow.Tests
             try
             {
                 var s = new Settings();
-                s.Ip = "192.168.1.50";
-                s.Serial = "X000000001";
+                Tv(s).Ip = "192.168.1.50";
+                Tv(s).Serial = "X000000001";
                 s.DesktopShortcuts = true;
                 s.Save();
                 Installer.Install(p, s, System.Reflection.Assembly.GetExecutingAssembly().Location);
