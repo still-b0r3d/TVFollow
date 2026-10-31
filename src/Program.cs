@@ -9,7 +9,7 @@
 //   TVFollow.exe on 2       on, pc and off take a TV's number in Settings, or its name, to
 //                           do it to that TV alone
 //   TVFollow.exe uninstall  remove TVFollow from this PC (--quiet: don't ask)
-//   TVFollow.exe --version  print the version
+//   TVFollow.exe --version  print the version and the commit it was built from
 // Used by TVFollow itself: --startup (at sign-in, quietly) and follow (after setup).
 using System;
 using System.Collections.Generic;
@@ -25,6 +25,11 @@ namespace TVFollow
     static class Program
     {
         public const string Version = "1.2";
+        // the commit this copy was built from: GitHub's build writes it in here and in AssemblyInfo.cs,
+        // so a release says "1.2+abc1234". A copy built anywhere else says "dev".
+        public const string Build = "dev";
+        // the version as the windows, the log and --version show it
+        public const string FullVersion = Version + "+" + Build;
 
         [DllImport("kernel32.dll")]
         static extern bool AttachConsole(int processId);
@@ -48,7 +53,7 @@ namespace TVFollow
             if (cmd == "--version" || cmd == "-v")
             {
                 AttachConsole(-1); // print into the window it was started from
-                Console.WriteLine("TVFollow " + Version);
+                Console.WriteLine("TVFollow " + FullVersion);
                 return 0;
             }
 
@@ -272,7 +277,7 @@ namespace TVFollow
                 }
                 try
                 {
-                    Log.Write("started " + Version + ", following the monitors" + (tvs.Count > 1 ? " with " + tvs.Count + " TVs" : ""));
+                    Log.Write("started " + FullVersion + ", following the monitors" + (tvs.Count > 1 ? " with " + tvs.Count + " TVs" : ""));
                     var follower = new Follower(settings, tvs);
                     follower.Start();
                     using (var tray = new Tray(follower))

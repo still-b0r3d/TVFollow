@@ -175,7 +175,7 @@ namespace TVFollow
             {
                 AutoSize = true,
                 Location = new Point(24, 20),
-                Text = "TVFollow " + Program.Version + "  ·  Help  ·  made by " + Maker,
+                Text = "TVFollow " + Program.FullVersion + "  ·  Help  ·  made by " + Maker,
                 LinkColor = SetupPage.Muted,
                 ActiveLinkColor = SystemColors.HotTrack,
                 LinkBehavior = LinkBehavior.HoverUnderline

@@ -19,15 +19,32 @@ jobs:
         with:
           persist-credentials: false
 
+      # the exe says which commit it was built from, "1.2+abc1234"; the repo's copy says "dev"
+      - name: Stamp the commit
+        shell: pwsh
+        run: |
+          $commit = $env:GITHUB_SHA.Substring(0, 7)
+          function Stamp($file, $placeholder) {
+            $path = Join-Path $PWD $file
+            $text = [IO.File]::ReadAllText($path)
+            $count = [regex]::Matches($text, [regex]::Escape($placeholder)).Count
+            if ($count -ne 1) { throw "$file should have $placeholder once, not $count times" }
+            [IO.File]::WriteAllText($path, $text.Replace($placeholder, $placeholder.Replace('dev', $commit)))
+          }
+          Stamp src\Program.cs 'Build = "dev"'
+          Stamp src\AssemblyInfo.cs '+dev"'
+          "stamped $commit"
+
       - name: Build and test
         shell: cmd
         run: build.cmd test
 
+      # one line ending in \n, so sha256sum -c can check a download too
       - name: Checksum
         shell: pwsh
         run: |
           $hash = (Get-FileHash bin\TVFollow.exe -Algorithm SHA256).Hash.ToLower()
-          "$hash  TVFollow.exe" | Out-File bin\TVFollow.exe.sha256 -Encoding ascii
+          Set-Content bin\TVFollow.exe.sha256 "$hash  TVFollow.exe`n" -NoNewline -Encoding ascii
           Get-Content bin\TVFollow.exe.sha256
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -51,12 +68,15 @@ jobs:
           name: TVFollow
           path: bin
 
+      # the exe's "1.2+abc1234": 1.2 must be the tag, abc1234 this commit
       - name: The tag must match the exe's version
         shell: pwsh
         run: |
           $tag = $env:GITHUB_REF_NAME.TrimStart('v')
           $exe = (Get-Item bin\TVFollow.exe).VersionInfo.ProductVersion
-          if ($tag -ne $exe) { Write-Error "Tag $env:GITHUB_REF_NAME doesn't match TVFollow.exe's version $exe"; exit 1 }
+          $version, $build = $exe.Split('+')
+          if ($tag -ne $version) { Write-Error "Tag $env:GITHUB_REF_NAME doesn't match TVFollow.exe's version $exe"; exit 1 }
+          if ($build -ne $env:GITHUB_SHA.Substring(0, 7)) { Write-Error "TVFollow.exe ($exe) isn't stamped with this commit, $env:GITHUB_SHA"; exit 1 }
           "tag and exe agree: $exe"
 
       - name: Draft the release

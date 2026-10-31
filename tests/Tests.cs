@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Windows.Forms;
 
 namespace TVFollow.Tests
 {
@@ -58,6 +59,7 @@ namespace TVFollow.Tests
             Run("updates: remembering the last check", UpdateState);
             RunReviewFixes();
             Run("version matches the exe's version", VersionMatches);
+            Run("the version line fits beside the buttons", VersionLineFits);
 
             try { Directory.Delete(home, true); } catch { }
             Console.WriteLine();
@@ -636,8 +638,45 @@ namespace TVFollow.Tests
         {
             var attr = (AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(
                 typeof(Program).Assembly, typeof(AssemblyInformationalVersionAttribute));
-            Check(attr != null && attr.InformationalVersion == Program.Version,
-                "AssemblyInfo.cs says " + (attr == null ? "nothing" : attr.InformationalVersion) + ", Program.Version says " + Program.Version);
+            Check(attr != null && attr.InformationalVersion == Program.FullVersion,
+                "AssemblyInfo.cs says " + (attr == null ? "nothing" : attr.InformationalVersion) + ", Program.FullVersion says " + Program.FullVersion);
+            // dev here; GitHub's build writes in the commit
+            Check(System.Text.RegularExpressions.Regex.IsMatch(Program.Build, "^(dev|[0-9a-f]{7})$"),
+                "the build should be dev or a commit: " + Program.Build);
+        }
+
+        // the version line at the bottom of the setup and Settings windows ends before their buttons
+        // start (GitHub's build runs this with the commit in it, which is longer than dev)
+        static void VersionLineFits()
+        {
+            using (var setup = OffScreenSetup(new Settings(), () => new List<FoundTv>()))
+            {
+                CheckFits(setup, setup.FooterButtons[0]);
+                setup.Close();
+            }
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                Settings s = SettingsFor(tv);
+                var follower = new Follower(s, Controller.For(s)); // not started
+                using (var tray = new Tray(follower))
+                using (var window = new SettingsForm(s, follower, tray))
+                {
+                    window.StartPosition = FormStartPosition.Manual;
+                    window.Location = new System.Drawing.Point(-20000, -20000);
+                    window.Show();
+                    CheckFits(window, FindControl<Button>(window, b => b.Text == "Close"));
+                    window.Close();
+                }
+                File.Delete(Settings.FilePath);
+            }
+        }
+
+        static void CheckFits(Form form, Button button)
+        {
+            LinkLabel line = FindControl<LinkLabel>(form, l => l.Text.StartsWith("TVFollow " + Program.FullVersion + " "));
+            Check(line != null && button != null, form.Text + ": no version line or button");
+            int end = line.RectangleToScreen(line.ClientRectangle).Right, start = button.RectangleToScreen(button.ClientRectangle).Left;
+            Check(end < start, form.Text + ": the version line ends at " + end + ", the button starts at " + start);
         }
     }
 }

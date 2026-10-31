@@ -215,7 +215,7 @@ TVFollow also takes commands, for hotkeys, Stream Deck buttons or scripts:
 | `TVFollow.exe on 2` | With several TVs: `on`, `off` and `pc` do every TV, or just the one named after them, by its number in the Settings window or its name (`TVFollow.exe pc Office TV`) |
 | `TVFollow.exe setup` | Opens the setup window |
 | `TVFollow.exe uninstall` | Removes TVFollow (`--quiet` skips the questions) |
-| `TVFollow.exe --version` | Prints the version |
+| `TVFollow.exe --version` | Prints the version and the commit it was built from (`1.2+abc1234`) |
 
 After setup, TVFollow lives in `%LOCALAPPDATA%\Programs\TVFollow`.
 
@@ -229,9 +229,11 @@ You don't need anything installed. Windows already has the C# compiler TVFollow 
 3. Open `bin\TVFollow.exe` and set it up as above.
 
 `build.cmd test` also runs the tests, against pretend TVs. Every release is built the
-same way on GitHub's own machines. The SHA-256 checksum next to each download is for
-checking that download; your own build won't match it byte for byte, because the
-compiler stamps each build differently.
+same way on GitHub's own machines, which add the commit it was built from to the
+version: `1.2+abc1234` at the bottom of the Settings window. Your own build says
+`1.2+dev` there. The SHA-256 checksum next to each download is for checking that
+download; your own build won't match it byte for byte, because the compiler stamps
+each build differently.
 
 ## License
 

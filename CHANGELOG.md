@@ -1,5 +1,14 @@
 # Changelog
 
+## Next version (not released yet)
+
+- The version in the setup and Settings windows, the log and `TVFollow.exe --version`
+  carries the commit the copy was built from, like `1.2+abc1234`, and so does the exe's
+  **Product version** (right-click TVFollow.exe → Properties → Details). GitHub's build
+  fills it in; a copy built with build.cmd says `1.2+dev`.
+- TVFollow.exe.sha256 ends its line the way `sha256sum -c` expects, so
+  `sha256sum -c TVFollow.exe.sha256` can check a download.
+
 ## 1.2 (2026-10-30)
 
 More than one TV.

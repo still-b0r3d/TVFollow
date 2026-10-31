@@ -15,7 +15,7 @@ labels: ''
 
 **Your PC**
 - Windows 10 or 11:
-- TVFollow version (right-click the TV icon → Settings…, it's at the bottom):
+- TVFollow version (right-click the TV icon → Settings…, it's at the bottom, like 1.2+abc1234):
 
 **The log**
 Right-click the TV icon → **Open log** and paste the lines from around when it

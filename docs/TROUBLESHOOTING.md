@@ -149,4 +149,5 @@ Apps & features**) and run TVFollow.exe again.
 
 [Open an issue](https://github.com/still-b0r3d/TVFollow/issues/new/choose) and include
 your TV's brand and model, its Roku OS version (**Settings → System → About**), your
-Windows version and the last few lines of the log.
+Windows version, the TVFollow version from the bottom of the Settings window (like
+`1.2+abc1234`) and the last few lines of the log.
