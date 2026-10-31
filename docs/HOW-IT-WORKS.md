@@ -4,8 +4,8 @@
 
 TVFollow keeps a hidden window that Windows tells about three things:
 
-- **the screens turning off and on** (the same signal that switches your monitors off
-  after the screen timeout),
+- **the screens turning off, dimming and coming back on** (the same signal that switches
+  your monitors off after the screen timeout),
 - **the PC going to sleep**,
 - **the PC shutting down or restarting**.
 
@@ -20,7 +20,9 @@ about twice a second.
 | Screens off | Turns the TV off, if it's showing your PC |
 | Screens on, mouse or keyboard used in the last 5 seconds | Turns the TV on and switches it to your PC, unless it's on and showing something else |
 | Screens on, nobody there | Waits for the mouse or keyboard, then as above |
-| Screens dimmed, then back to full brightness | Nothing (the screens never went off) |
+| Screens dimmed, then back within 30 seconds | Nothing (the screens never went off) |
+| Screens still dimmed after 30 seconds | Same as screens off (a screen saver can keep Windows' dim going for the whole screen timeout, and the screens may be dark by then) |
+| Screens back from that long dim | Same as screens on |
 | Sleep or shutdown | Turns the TV off, if it's showing your PC (quickly, without retries) |
 | Paused | Nothing, until you resume (also across restarts) |
 

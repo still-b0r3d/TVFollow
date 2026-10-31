@@ -2,6 +2,12 @@
 
 ## Next version (not released yet)
 
+- Coming back to the PC while Windows still had the screens dimmed left the TV off. With a
+  screen saver on, Windows can keep the screens dimmed for the whole screen timeout (half an
+  hour with a 30-minute timeout), and on some PCs they're dark all that time. A dim that lasts
+  30 seconds now counts as the screens going off, so the TV turns off, and coming back from it
+  counts as them coming on, so the TV turns on with the mouse. A shorter dim still changes
+  nothing. The log says when the screens dim.
 - The version in the setup and Settings windows, the log and `TVFollow.exe --version`
   carries the commit the copy was built from, like `1.2+abc1234`, and so does the exe's
   **Product version** (right-click TVFollow.exe → Properties → Details). GitHub's build

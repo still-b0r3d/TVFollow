@@ -44,6 +44,7 @@ namespace TVFollow.Tests
             Run("rules: monitors on with fresh input", RulesFreshInput);
             Run("rules: monitors on with nobody there waits for input", RulesWaitForInput);
             Run("rules: paused and switched-off rules do nothing", RulesPausedAndOptions);
+            Run("rules: a long dim counts as the monitors going off", RulesLongDim);
             Run("TV inputs are read with their names", InputsAreRead);
             Run("scanner lists TVs before sticks and skips silence", ScannerOrder);
             Run("power test: passes on a TV that answers while off", PowerTestPasses);
@@ -341,6 +342,7 @@ namespace TVFollow.Tests
         {
             public double Idle;
             public uint Tick = 100;
+            public uint Now = 1000;
             public readonly List<bool> Wants = new List<bool>();
             public readonly FollowRules Rules = new FollowRules();
 
@@ -348,6 +350,7 @@ namespace TVFollow.Tests
             {
                 Rules.SecondsSinceInput = () => Idle;
                 Rules.LastInputTick = () => Tick;
+                Rules.Clock = () => Now;
                 Rules.Want = on => Wants.Add(on);
             }
         }
@@ -402,6 +405,70 @@ namespace TVFollow.Tests
             p.Rules.MonitorsOff();
             p.Rules.MonitorsOn();
             Check(p.Wants.Count == 1 && p.Wants[0], "off switched off: only the on should happen");
+        }
+
+        // A screen saver can keep Windows' dim going for the whole screen timeout, with the
+        // screens already dark: coming back then used to leave the TV off.
+        static void RulesLongDim()
+        {
+            var p = new RulesProbe();
+            p.Idle = 0.2;
+            p.Rules.Display(1);
+            p.Rules.Display(2);
+            p.Now += 29000;
+            p.Rules.CheckDim();
+            Check(p.Wants.Count == 1, "dimmed 29 s: should do nothing yet");
+            p.Now += 1500;
+            p.Rules.CheckDim();
+            Check(p.Wants.Count == 2 && !p.Wants[1], "dimmed 30 s: should want the TV off");
+            p.Rules.CheckDim();
+            Check(p.Wants.Count == 2, "should only fire once");
+            p.Rules.Display(1); // the mouse moved
+            Check(p.Wants.Count == 3 && p.Wants[2], "back from a long dim: should want the TV on");
+
+            // nobody there when it ends: wait for input, as for any other wake
+            p.Rules.Display(2);
+            p.Now += 31000;
+            p.Rules.CheckDim();
+            p.Idle = 300;
+            p.Rules.Display(1);
+            Check(p.Wants.Count == 4 && !p.Wants[3], "no input: only the off should happen");
+            p.Tick = 200;
+            p.Rules.CheckForInput();
+            Check(p.Wants.Count == 5 && p.Wants[4], "input: should want the TV on");
+
+            // the dim runs on into Windows' real off: the TV is told again, then on as usual
+            p.Idle = 0.2;
+            p.Rules.Display(2);
+            p.Now += 31000;
+            p.Rules.CheckDim();
+            p.Rules.Display(0);
+            p.Rules.Display(1);
+            Check(p.Wants.Count == 8 && !p.Wants[5] && !p.Wants[6] && p.Wants[7], "dim, off, on");
+
+            // a dim from before sleep doesn't count after waking
+            p.Rules.Display(2);
+            p.Rules.Resumed();
+            p.Now += 60000;
+            p.Rules.CheckDim();
+            Check(p.Wants.Count == 8, "a dim from before sleep mustn't turn the TV off");
+
+            // the tick count wraps every 49.7 days
+            p = new RulesProbe();
+            p.Now = uint.MaxValue - 10000;
+            p.Rules.Display(2);
+            p.Now += 31000;
+            p.Rules.CheckDim();
+            Check(p.Wants.Count == 1 && !p.Wants[0], "should still count when the clock wraps");
+
+            p = new RulesProbe();
+            p.Idle = 0.2;
+            p.Rules.Paused = true;
+            p.Rules.Display(2);
+            p.Now += 31000;
+            p.Rules.CheckDim();
+            p.Rules.Display(1);
+            Check(p.Wants.Count == 0, "paused should do nothing");
         }
 
         // ---- setup pieces ----

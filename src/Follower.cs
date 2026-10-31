@@ -15,8 +15,14 @@ namespace TVFollow
         // so the TV only follows them on once there's mouse or keyboard input.
         public const double FreshInputSec = 5;
 
+        // Windows dims the screens about 15 s before it switches them off. A screen saver can make
+        // the dim last the whole screen timeout instead, with the screens already dark, so a dim
+        // this long counts as the monitors going off, and the end of it as them coming back.
+        public const double LongDimSec = 30;
+
         public Func<double> SecondsSinceInput = UserInput.SecondsSinceInput;
         public Func<uint> LastInputTick = UserInput.LastInputTick;
+        public Func<uint> Clock = () => unchecked((uint)Environment.TickCount);  // ms, like the input ticks
         public Action<bool> Want = delegate { };  // true: TV on, false: TV off
         public bool OnWithMonitors = true;
         public bool OffWithMonitors = true;
@@ -25,20 +31,32 @@ namespace TVFollow
         bool waitingForInput;
         uint inputTickAtWake;
         int lastDisplay = -1;
+        uint dimmedAt;
+        bool longDim;  // the dim went on long enough to count as the monitors going off
 
-        // Windows' display state: 0 off, 1 on, 2 dimmed. Coming back from dimmed isn't the
+        // Windows' display state: 0 off, 1 on, 2 dimmed. Coming back from a short dim isn't the
         // monitors coming back on (they never went off), so it's ignored; on after on still
         // counts, since sleep doesn't always send "off" first.
         public void Display(int state)
         {
             int before = lastDisplay;
             lastDisplay = state;
+            if (state == 2)
+            {
+                if (before == 2) return;
+                dimmedAt = Clock();
+                Log.Write("monitors dimmed");
+                return;
+            }
+            bool wasLongDim = longDim;
+            longDim = false;
             if (state == 0) MonitorsOff();
-            else if (state == 1 && before != 2) MonitorsOn();
+            else if (state == 1 && before == 2 && !wasLongDim) Log.Write("monitors back from dimmed");
+            else if (state == 1) MonitorsOn();
         }
 
         // after sleep, the next "on" always counts
-        public void Resumed() { lastDisplay = -1; }
+        public void Resumed() { lastDisplay = -1; longDim = false; }
 
         public void MonitorsOn()
         {
@@ -55,6 +73,11 @@ namespace TVFollow
         public void MonitorsOff()
         {
             Log.Write("monitors off");
+            Off();
+        }
+
+        void Off()
+        {
             waitingForInput = false;
             if (Paused || !OffWithMonitors) return;
             Want(false);
@@ -68,6 +91,15 @@ namespace TVFollow
             if (Paused) return;
             Log.Write("input seen");
             Want(true);
+        }
+
+        // called about twice a second too
+        public void CheckDim()
+        {
+            if (lastDisplay != 2 || longDim || unchecked(Clock() - dimmedAt) < LongDimSec * 1000) return;
+            longDim = true;
+            Log.Write("monitors dimmed for " + LongDimSec + "s, so they count as off");
+            Off();
         }
     }
 
@@ -156,6 +188,7 @@ namespace TVFollow
                 }
                 if (showSettings.WaitOne(0)) SettingsRequested();
                 Rules.CheckForInput();
+                Rules.CheckDim();
             };
             tick.Start();
         }

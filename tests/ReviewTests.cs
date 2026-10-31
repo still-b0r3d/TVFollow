@@ -22,7 +22,7 @@ namespace TVFollow.Tests
             Run("the TV's wake address follows it to a cable", WakeMacIsRefreshed);
             Run("network maths: contains, broadcast, addresses to try", NetworkMaths);
             Run("settings: pause is kept and trailing comments are ignored", SettingsPauseAndComments);
-            Run("rules: undimming isn't the monitors coming back", RulesIgnoreUndim);
+            Run("rules: undimming after a short dim isn't the monitors coming back", RulesIgnoreUndim);
             Run("opening TVFollow: when setup shows", SetupShowsWhen);
             Run("install: the downloaded-from-internet mark is dropped", InstallDropsDownloadMark);
             Run("install: a busy exe is retried", InstallRetriesBusyExe);
@@ -299,6 +299,8 @@ namespace TVFollow.Tests
             p.Idle = 0.2;
             p.Rules.Display(1);
             p.Rules.Display(2);
+            p.Now += 29000;
+            p.Rules.CheckDim();
             p.Rules.Display(1);
             Check(p.Wants.Count == 1, "undimming counted as the monitors coming on");
             p.Rules.Display(0);

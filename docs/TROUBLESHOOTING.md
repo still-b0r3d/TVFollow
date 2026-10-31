@@ -53,6 +53,17 @@ TVFollow also sends a network wake signal when the TV doesn't answer, again ever
 seconds for 20 seconds, which wakes many TVs even from deep standby. If the log shows
 `sent a wake packet` and then `TV not found`, Fast TV start is the fix.
 
+## My screens were dark when I came back, and the TV stayed off
+
+Windows had probably *dimmed* the screens rather than switched them off. It normally dims
+them about 15 seconds before the screen timeout, but with a screen saver on, the dim can
+last the whole timeout again, and on some PCs the screens are dark all that time. TVFollow
+1.2 and older ignore a dim, so coming back during one doesn't turn the TV on, and the log
+shows nothing at that time. Newer versions count a dim that lasts 30 seconds as the screens
+going off, and coming back from it as them coming on. With 1.2 or older, press **TV on**
+in the tray menu, or turn the screen saver off (**Settings → Personalization → Lock screen
+→ Screen saver**).
+
 ## The TV comes on but shows the Roku home screen instead of my PC
 
 Open **Settings…** and check **Input this PC is on** (with several TVs, each TV has its
