@@ -59,10 +59,8 @@ Windows had probably *dimmed* the screens rather than switched them off. It norm
 them about 15 seconds before the screen timeout, but with a screen saver on, the dim can
 last the whole timeout again, and on some PCs the screens are dark all that time. TVFollow
 1.2 and older ignore a dim, so coming back during one doesn't turn the TV on, and the log
-shows nothing at that time. Newer versions count a dim that lasts 30 seconds as the screens
-going off, and coming back from it as them coming on. With 1.2 or older, press **TV on**
-in the tray menu, or turn the screen saver off (**Settings → Personalization → Lock screen
-→ Screen saver**).
+shows nothing at that time. From 1.2.1, a dim that lasts 30 seconds counts as the screens
+going off, and coming back from it as them coming on, so update to the latest version.
 
 ## The TV comes on but shows the Roku home screen instead of my PC
 
@@ -161,4 +159,4 @@ Apps & features**) and run TVFollow.exe again.
 [Open an issue](https://github.com/still-b0r3d/TVFollow/issues/new/choose) and include
 your TV's brand and model, its Roku OS version (**Settings → System → About**), your
 Windows version, the TVFollow version from the bottom of the Settings window (like
-`1.2+abc1234`) and the last few lines of the log.
+`1.2.1+abc1234`) and the last few lines of the log.

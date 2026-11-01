@@ -1,6 +1,8 @@
 # Changelog
 
-## Next version (not released yet)
+## 1.2.1 (2026-10-31)
+
+A fix for the TV staying off when you come back.
 
 - Coming back to the PC while Windows still had the screens dimmed left the TV off. With a
   screen saver on, Windows can keep the screens dimmed for the whole screen timeout (half an
@@ -9,9 +11,9 @@
   counts as them coming on, so the TV turns on with the mouse. A shorter dim still changes
   nothing. The log says when the screens dim.
 - The version in the setup and Settings windows, the log and `TVFollow.exe --version`
-  carries the commit the copy was built from, like `1.2+abc1234`, and so does the exe's
+  carries the commit the copy was built from, like `1.2.1+abc1234`, and so does the exe's
   **Product version** (right-click TVFollow.exe → Properties → Details). GitHub's build
-  fills it in; a copy built with build.cmd says `1.2+dev`.
+  fills it in; a copy built with build.cmd says `1.2.1+dev`.
 - TVFollow.exe.sha256 ends its line the way `sha256sum -c` expects, so
   `sha256sum -c TVFollow.exe.sha256` can check a download.
 

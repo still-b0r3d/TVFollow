@@ -24,7 +24,7 @@ namespace TVFollow
 {
     static class Program
     {
-        public const string Version = "1.2";
+        public const string Version = "1.2.1";
         // the commit this copy was built from: GitHub's build writes it in here and in AssemblyInfo.cs,
         // so a release says "1.2+abc1234". A copy built anywhere else says "dev".
         public const string Build = "dev";
