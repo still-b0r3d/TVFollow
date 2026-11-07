@@ -787,8 +787,8 @@ namespace TVFollow.Tests
                 Settings s = SettingsFor(tv);
                 s.Save();
                 var follower = new Follower(s, Controller.For(s)); // not started
-                Action<Form> place = Tray.PlaceDevWindow;
-                Tray.PlaceDevWindow = OffScreen;
+                Action<Form> place = Tray.PlaceWindow;
+                Tray.PlaceWindow = OffScreen;
                 try
                 {
                     using (var tray = new Tray(follower))
@@ -807,14 +807,14 @@ namespace TVFollow.Tests
                             Check(ShownItems(tray).Contains("| Settings… | Developer tools… | Open log |"), "ticking the switch: " + ShownItems(tray));
 
                             item.PerformClick();
-                            Check(DevWindows().Count == 1, "the tray item didn't open the developer tools");
-                            DevForm opened = DevWindows()[0];
+                            Check(OpenWindows<DevForm>().Count == 1, "the tray item didn't open the developer tools");
+                            DevForm opened = OpenWindows<DevForm>()[0];
                             Check(opened.Location.X < -10000, "the developer tools opened on the screen, at " + opened.Location);
                             // once more: the same window comes back, even from minimized
                             MinimizeOffScreen(opened);
                             Check(opened.WindowState == FormWindowState.Minimized && IsIconic(opened.Handle), "the test couldn't minimize the window");
                             item.PerformClick();
-                            Check(DevWindows().Count == 1 && DevWindows()[0] == opened, "a second click opened a second window");
+                            Check(OpenWindows<DevForm>().Count == 1 && OpenWindows<DevForm>()[0] == opened, "a second click opened a second window");
                             Check(opened.WindowState == FormWindowState.Normal && !IsIconic(opened.Handle), "a minimized developer tools window stayed minimized");
 
                             box.Checked = false;
@@ -830,8 +830,8 @@ namespace TVFollow.Tests
                 }
                 finally
                 {
-                    Tray.PlaceDevWindow = place;
-                    foreach (DevForm left in DevWindows()) left.Close();
+                    Tray.PlaceWindow = place;
+                    foreach (DevForm left in OpenWindows<DevForm>()) left.Close();
                 }
                 File.Delete(Settings.FilePath);
             }
@@ -881,13 +881,14 @@ namespace TVFollow.Tests
             return text;
         }
 
-        static List<DevForm> DevWindows()
+        // the open windows of one kind (DevForm, SettingsForm)
+        static List<T> OpenWindows<T>() where T : Form
         {
-            var found = new List<DevForm>();
+            var found = new List<T>();
             foreach (Form f in Application.OpenForms)
             {
-                var d = f as DevForm;
-                if (d != null && !d.IsDisposed) found.Add(d);
+                var w = f as T;
+                if (w != null && !w.IsDisposed) found.Add(w);
             }
             return found;
         }

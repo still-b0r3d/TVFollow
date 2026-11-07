@@ -20,6 +20,7 @@ namespace TVFollow.Tests
             Run("remote: clicking buttons sends the right presses", RemoteClicks);
             Run("settings: the remote layout is kept", RemoteLayoutSetting);
             Run("settings window: options apply and save straight away", SettingsWindowApplies);
+            Run("settings window: Settings… brings back the open one, even from minimized", SettingsBroughtBack);
         }
 
         static void RemoteKeyMap()
@@ -212,6 +213,43 @@ namespace TVFollow.Tests
                     window.Choose(RemoteForm.Compact);
                     Check(Settings.Load().RemoteLayout == RemoteForm.Compact, "layout not saved");
                     window.Close();
+                }
+                File.Delete(Settings.FilePath);
+            }
+        }
+
+        static void SettingsBroughtBack()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                Settings s = SettingsFor(tv);
+                s.Save();
+                var follower = new Follower(s, Controller.For(s)); // not started
+                Action<Form> place = Tray.PlaceWindow;
+                Tray.PlaceWindow = OffScreen;
+                try
+                {
+                    using (var tray = new Tray(follower))
+                    {
+                        ToolStripItem item = TrayItem(tray, "Settings…");
+                        item.PerformClick();
+                        Check(OpenWindows<SettingsForm>().Count == 1, "Settings… didn't open the Settings window");
+                        SettingsForm window = OpenWindows<SettingsForm>()[0];
+                        Check(window.Location.X < -10000, "the Settings window opened on the screen, at " + window.Location);
+                        Pump(() => !AllText(window).Contains("Asking the TV"), 10);
+                        // once more: the same window comes back, even from minimized (double-clicking
+                        // the icon and opening TVFollow again go the same way)
+                        MinimizeOffScreen(window);
+                        Check(window.WindowState == FormWindowState.Minimized && IsIconic(window.Handle), "the test couldn't minimize the window");
+                        item.PerformClick();
+                        Check(OpenWindows<SettingsForm>().Count == 1 && OpenWindows<SettingsForm>()[0] == window, "a second click opened a second Settings window");
+                        Check(window.WindowState == FormWindowState.Normal && !IsIconic(window.Handle), "a minimized Settings window stayed minimized");
+                    }
+                }
+                finally
+                {
+                    Tray.PlaceWindow = place;
+                    foreach (SettingsForm left in OpenWindows<SettingsForm>()) left.Close();
                 }
                 File.Delete(Settings.FilePath);
             }

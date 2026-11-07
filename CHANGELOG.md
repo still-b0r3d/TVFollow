@@ -25,6 +25,8 @@ Developer tools, for putting your own Roku apps on the TV.
   go back, a notification says so, once each time.
 - **Push the app's folder again whenever a file in it is saved**, for making apps.
 - The Settings window grows to fit what it shows, as far as the screen allows.
+- **Settings…** in the tray menu, double-clicking the icon and opening TVFollow again all
+  bring a minimized Settings window back up. Before, it stayed down in the taskbar.
 - The version and the build are shown apart: `TVFollow v1.3 · Build: abc1234` at the bottom
   of the setup and Settings windows (on two lines there now), in the log and in
   `TVFollow.exe --version`. The exe's **Product version** says `1.3 build abc1234`.

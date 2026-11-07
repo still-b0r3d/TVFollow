@@ -41,8 +41,9 @@ namespace TVFollow
         // the developer tools (Program sets them once the tray is up)
         public DevTools Dev;
 
-        // runs on the developer tools window just before it first shows (the tests move it off the screen)
-        public static Action<Form> PlaceDevWindow = delegate { };
+        // runs on the Settings or developer tools window just before it first shows (the tests move
+        // it off the screen)
+        public static Action<Form> PlaceWindow = delegate { };
 
         public event Action<bool> PausedChanged = delegate { };
 
@@ -197,10 +198,13 @@ namespace TVFollow
             ShowRemote(null);
         }
 
+        // One Settings window at a time: Settings… in the menu, double-clicking the icon, or
+        // opening TVFollow again
         public void ShowSettings()
         {
-            if (settingsWindow != null && !settingsWindow.IsDisposed) { settingsWindow.Activate(); return; }
+            if (settingsWindow != null && !settingsWindow.IsDisposed) { BringBack(settingsWindow); return; }
             settingsWindow = new SettingsForm(follower.Settings, follower, this);
+            PlaceWindow(settingsWindow);
             settingsWindow.Show();
             settingsWindow.Activate();
         }
@@ -209,17 +213,18 @@ namespace TVFollow
         public void ShowDeveloperTools(Controller tv)
         {
             if (Dev == null) return;
-            if (devWindow != null && !devWindow.IsDisposed)
-            {
-                // Activate alone leaves a minimized window down in the taskbar
-                if (devWindow.WindowState == FormWindowState.Minimized) devWindow.WindowState = FormWindowState.Normal;
-                devWindow.Activate();
-                return;
-            }
+            if (devWindow != null && !devWindow.IsDisposed) { BringBack(devWindow); return; }
             devWindow = new DevForm(Dev, Dev.For(tv));
-            PlaceDevWindow(devWindow);
+            PlaceWindow(devWindow);
             devWindow.Show();
             devWindow.Activate();
+        }
+
+        // an open window to the front; Activate alone leaves a minimized one down in the taskbar
+        static void BringBack(Form window)
+        {
+            if (window.WindowState == FormWindowState.Minimized) window.WindowState = FormWindowState.Normal;
+            window.Activate();
         }
 
         // the switch in Settings: the background work starts or stops, and the window and the tray
