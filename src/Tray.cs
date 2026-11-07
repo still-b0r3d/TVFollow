@@ -19,7 +19,8 @@ namespace TVFollow
         }
     }
 
-    // The TV in the taskbar corner: the remote, TV buttons, Pause, Settings, the log and Quit.
+    // The TV in the taskbar corner: the remote, TV buttons, Pause, Settings, the developer tools
+    // (only while they're switched on in Settings), the log and Quit.
     // With several TVs the TV buttons do every TV, and each TV has a menu of its own.
     class Tray : IDisposable
     {
@@ -27,7 +28,7 @@ namespace TVFollow
         readonly Follower follower;
         readonly List<Controller> tvs;
         readonly Icon following, paused;
-        readonly ToolStripMenuItem state, pause;
+        readonly ToolStripMenuItem state, pause, developer;
         readonly List<KeyValuePair<ToolStripMenuItem, Controller>> tvMenus = new List<KeyValuePair<ToolStripMenuItem, Controller>>();
         ToolStripMenuItem update;
         string balloonUrl; // where clicking the current notification goes, if anywhere
@@ -39,6 +40,9 @@ namespace TVFollow
 
         // the developer tools (Program sets them once the tray is up)
         public DevTools Dev;
+
+        // runs on the developer tools window just before it first shows (the tests move it off the screen)
+        public static Action<Form> PlaceDevWindow = delegate { };
 
         public event Action<bool> PausedChanged = delegate { };
 
@@ -65,6 +69,10 @@ namespace TVFollow
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(pause);
             menu.Items.Add("Settings…", null, delegate { ShowSettings(); });
+            // straight to the developer tools, there only while they're switched on in Settings
+            developer = new ToolStripMenuItem("Developer tools…", null, delegate { ShowDeveloperTools(null); });
+            developer.Available = follower.Settings.DeveloperTools;
+            menu.Items.Add(developer);
             menu.Items.Add("Open log", null, delegate { OpenLog(); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Quit TVFollow", null, delegate { Log.Write("quit from the tray"); Application.ExitThread(); });
@@ -201,15 +209,24 @@ namespace TVFollow
         public void ShowDeveloperTools(Controller tv)
         {
             if (Dev == null) return;
-            if (devWindow != null && !devWindow.IsDisposed) { devWindow.Activate(); return; }
+            if (devWindow != null && !devWindow.IsDisposed)
+            {
+                // Activate alone leaves a minimized window down in the taskbar
+                if (devWindow.WindowState == FormWindowState.Minimized) devWindow.WindowState = FormWindowState.Normal;
+                devWindow.Activate();
+                return;
+            }
             devWindow = new DevForm(Dev, Dev.For(tv));
+            PlaceDevWindow(devWindow);
             devWindow.Show();
             devWindow.Activate();
         }
 
-        // the switch in Settings: the background work starts or stops, and the window goes with it
+        // the switch in Settings: the background work starts or stops, and the window and the tray
+        // menu's Developer tools… go with it
         public void DeveloperToolsChanged()
         {
+            developer.Available = follower.Settings.DeveloperTools;
             if (Dev != null) Dev.Refresh();
             if (!follower.Settings.DeveloperTools && devWindow != null && !devWindow.IsDisposed) devWindow.Close();
         }

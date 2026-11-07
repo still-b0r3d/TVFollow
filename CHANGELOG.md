@@ -4,8 +4,8 @@
 
 Developer tools, for putting your own Roku apps on the TV.
 
-- **Settings… → Show the developer tools** (off to start with) adds a **Developer
-  tools…** button. The tray menu is as it was.
+- **Settings… → Show the developer tools** (off to start with) adds **Developer tools…**
+  to Settings and to the tray menu (right under **Settings…**).
 - The developer tools window says whether the TV's developer mode is on and, while it's
   off, gives the steps to turn it on with the TV's own remote. The TV ignores the code
   when TVFollow sends it, so TVFollow's remote can't do it. The window keeps checking and

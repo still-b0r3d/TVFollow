@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
@@ -31,6 +32,7 @@ namespace TVFollow.Tests
             Run("dev: the app log shows the TV's console", DevAppLog);
             Run("dev: the developer window shows the TV's state", DevWindow);
             Run("dev: Settings shows the developer tools only when switched on", DevSettingsSwitch);
+            Run("dev: the tray menu has Developer tools… only when switched on, and it opens them", DevTrayItem);
             Run("dev: removing TVFollow's settings takes the pushed apps' copies too", DevUninstallRemovesCopies);
             DevClient.InstallerPort = 80;   // as it was, for whatever runs after
         }
@@ -776,6 +778,118 @@ namespace TVFollow.Tests
                 }
                 File.Delete(Settings.FilePath);
             }
+        }
+
+        static void DevTrayItem()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                Settings s = SettingsFor(tv);
+                s.Save();
+                var follower = new Follower(s, Controller.For(s)); // not started
+                Action<Form> place = Tray.PlaceDevWindow;
+                Tray.PlaceDevWindow = OffScreen;
+                try
+                {
+                    using (var tray = new Tray(follower))
+                    using (var dev = new DevTools(s, follower.Controllers))
+                    {
+                        tray.Dev = dev;
+                        ToolStripItem item = TrayItem(tray, "Developer tools…");
+                        Check(item != null, "no Developer tools… in the tray menu at all");
+                        Check(ShownItems(tray).Contains("| Settings… | Open log |"), "the tray menu while they're off: " + ShownItems(tray));
+                        using (var window = new SettingsForm(s, follower, tray))
+                        {
+                            OffScreen(window);
+                            window.Show();
+                            CheckBox box = FindBox(window, "Show the developer tools");
+                            box.Checked = true;
+                            Check(ShownItems(tray).Contains("| Settings… | Developer tools… | Open log |"), "ticking the switch: " + ShownItems(tray));
+
+                            item.PerformClick();
+                            Check(DevWindows().Count == 1, "the tray item didn't open the developer tools");
+                            DevForm opened = DevWindows()[0];
+                            Check(opened.Location.X < -10000, "the developer tools opened on the screen, at " + opened.Location);
+                            // once more: the same window comes back, even from minimized
+                            MinimizeOffScreen(opened);
+                            Check(opened.WindowState == FormWindowState.Minimized && IsIconic(opened.Handle), "the test couldn't minimize the window");
+                            item.PerformClick();
+                            Check(DevWindows().Count == 1 && DevWindows()[0] == opened, "a second click opened a second window");
+                            Check(opened.WindowState == FormWindowState.Normal && !IsIconic(opened.Handle), "a minimized developer tools window stayed minimized");
+
+                            box.Checked = false;
+                            Check(opened.IsDisposed, "switching them off left the developer tools open");
+                            Check(ShownItems(tray).Contains("| Settings… | Open log |"), "switching them off left the tray item: " + ShownItems(tray));
+                            window.Close();
+                        }
+                    }
+                    // switched on before TVFollow starts: the item is there from the start
+                    s.DeveloperTools = true;
+                    using (var tray = new Tray(follower))
+                        Check(ShownItems(tray).Contains("| Settings… | Developer tools… | Open log |"), "after a restart: " + ShownItems(tray));
+                }
+                finally
+                {
+                    Tray.PlaceDevWindow = place;
+                    foreach (DevForm left in DevWindows()) left.Close();
+                }
+                File.Delete(Settings.FilePath);
+            }
+        }
+
+        static void OffScreen(Form window)
+        {
+            window.StartPosition = FormStartPosition.Manual;
+            window.Location = new Point(-20000, -20000);
+            window.ShowInTaskbar = false;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct WindowPlacement
+        {
+            public int Length, Flags, ShowCmd, MinX, MinY, MaxX, MaxY, Left, Top, Right, Bottom;
+        }
+
+        [DllImport("user32.dll")] static extern bool GetWindowPlacement(IntPtr window, ref WindowPlacement placement);
+        [DllImport("user32.dll")] static extern bool SetWindowPlacement(IntPtr window, ref WindowPlacement placement);
+        [DllImport("user32.dll")] static extern bool IsIconic(IntPtr window);
+
+        // Minimized, and off the screen while minimized too: without a taskbar button, Windows would
+        // park it as a little title bar at the bottom of the screen
+        static void MinimizeOffScreen(Form window)
+        {
+            var placement = new WindowPlacement { Length = Marshal.SizeOf(typeof(WindowPlacement)) };
+            GetWindowPlacement(window.Handle, ref placement);
+            placement.Flags = 1;                        // WPF_SETMINPOSITION
+            placement.MinX = placement.MinY = -20000;
+            placement.ShowCmd = 7;                      // SW_SHOWMINNOACTIVE: no other window comes forward
+            SetWindowPlacement(window.Handle, ref placement);
+        }
+
+        static ToolStripItem TrayItem(Tray tray, string text)
+        {
+            foreach (ToolStripItem item in tray.Menu.Items) if (item.Text == text) return item;
+            return null;
+        }
+
+        // the tray menu as it would open, a line between items blank: "… | Settings… | Open log |  | Quit TVFollow |"
+        // (Available, not Visible: Visible is false for every item while the menu is closed)
+        static string ShownItems(Tray tray)
+        {
+            string text = "|";
+            foreach (ToolStripItem item in tray.Menu.Items) if (item.Available) text += " " + item.Text + " |";
+            return text;
+        }
+
+        static List<DevForm> DevWindows()
+        {
+            var found = new List<DevForm>();
+            foreach (Form f in Application.OpenForms)
+            {
+                var d = f as DevForm;
+                if (d != null && !d.IsDisposed) found.Add(d);
+            }
+            return found;
         }
     }
 }

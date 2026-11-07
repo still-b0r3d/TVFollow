@@ -100,6 +100,8 @@ TVFollow runs from a small TV icon in the taskbar corner. You might need to clic
   example while someone watches TV and your PC goes to sleep. The icon turns grey while
   paused.
 - **Settings…**: the Settings window (below). Double-clicking the icon does the same.
+- **Developer tools…**: only there once you've switched on the
+  [developer tools](#developer-tools) in Settings.
 - **Open log**: what TVFollow did and when, handy if something seems off.
 - **Quit TVFollow**: stops it. It starts again when you sign in (if it starts with
   Windows) or when you open TVFollow from the Start menu.
@@ -193,7 +195,7 @@ More detail in [How it works](docs/HOW-IT-WORKS.md).
 For making your own Roku apps, or trying one someone made for you: TVFollow can put an app
 on the TV straight from your PC, using the TV's **developer mode**. Most people never need
 this, so it's hidden until you switch it on: **Settings… → Show the developer tools**, then
-**Developer tools…**.
+**Developer tools…**, there in Settings or straight from the tray menu.
 
 **Turn developer mode on** (once for each TV). This takes the TV's own remote: the TV
 ignores the code when TVFollow sends it, so TVFollow's remote can't do it.

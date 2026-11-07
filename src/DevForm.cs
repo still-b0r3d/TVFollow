@@ -7,8 +7,8 @@ using System.Windows.Forms;
 
 namespace TVFollow
 {
-    // The developer tools window (Settings → Developer tools…): developer mode on one TV, the
-    // password chosen on it, the app pushed to it, and the two background options.
+    // The developer tools window (Developer tools… in Settings or the tray menu): developer mode on
+    // one TV, the password chosen on it, the app pushed to it, and the two background options.
     class DevForm : Form
     {
         const string Steps =
