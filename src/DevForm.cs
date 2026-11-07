@@ -8,7 +8,7 @@ using System.Windows.Forms;
 namespace TVFollow
 {
     // The developer tools window (Developer tools… in Settings or the tray menu): developer mode on
-    // one TV, the password chosen on it, the app pushed to it, and the two background options.
+    // one TV, the password chosen on it, the app pushed to it, and the three background options.
     class DevForm : Form
     {
         const string Steps =
@@ -32,7 +32,7 @@ namespace TVFollow
         readonly ComboBox picker;   // several TVs only
         readonly Label modeState, modeSteps, passwordResult, appState, result, folderLine;
         readonly TextBox password;
-        readonly CheckBox showPassword, pushBack, onSave;
+        readonly CheckBox showPassword, pushBack, onSave, inputs;
         readonly Button check, pushZip, pushFolder, pushExample, open, remove, screenshot, appLog;
         readonly Timer poll = new Timer();
         readonly List<KeyValuePair<DevTv, Action<DevReport>>> hooks = new List<KeyValuePair<DevTv, Action<DevReport>>>();
@@ -125,6 +125,14 @@ namespace TVFollow
             });
             folderLine = Muted(Line(""));
             folderLine.Margin = new Padding(20, 0, 0, 8);
+            inputs = Check("Let the app switch the TV's inputs", delegate
+            {
+                tv.Tv.DevInputs = inputs.Checked;
+                Save();
+                tools.Refresh();
+            });
+            Muted(Line("A Roku TV won't let an app switch its inputs, so the app asks TVFollow, which does it while " +
+                "this PC is on. How an app asks is in How the developer tools work, below.")).Margin = new Padding(20, 0, 0, 8);
 
             Controls.Add(body);
             Controls.Add(Footer());
@@ -234,6 +242,7 @@ namespace TVFollow
             password.Text = tv.Tv.DevPassword;
             pushBack.Checked = tv.Tv.DevPushBack;
             onSave.Checked = tv.Tv.DevOnSave;
+            inputs.Checked = tv.Tv.DevInputs;
             loading = false;
             last = null;
             modeState.Text = "Asking the TV…";
@@ -489,10 +498,10 @@ namespace TVFollow
         {
             if (log != null && !log.IsDisposed)
             {
-                if (log.Ip == tv.Tv.Ip) { log.Activate(); return; }
+                if (log.Console == tv.Console) { log.Activate(); return; }
                 log.Close();
             }
-            log = new DevLogForm(tv.Tv.Ip, tv.Label);
+            log = new DevLogForm(tv.Console, tv.Label);
             log.Show();
         }
     }

@@ -24,6 +24,9 @@ Developer tools, for putting your own Roku apps on the TV.
   the TV off with your monitors. If developer mode itself went off, or the app couldn't
   go back, a notification says so, once each time.
 - **Push the app's folder again whenever a file in it is saved**, for making apps.
+- **Let the app switch the TV's inputs** (off to start with): a Roku TV won't let an app
+  switch its inputs, so the pushed app can ask TVFollow, which switches the TV while this
+  PC is on. The README says how an app asks.
 - The Settings window grows to fit what it shows, as far as the screen allows.
 - **Settings…** in the tray menu, double-clicking the icon and opening TVFollow again all
   bring a minimized Settings window back up. Before, it stayed down in the taskbar.

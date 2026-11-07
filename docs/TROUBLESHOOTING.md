@@ -181,6 +181,20 @@ log shows what happens while it's open: the app's error and the line it stopped 
 the developer tools say the TV refused the app with "Compilation Failed", the log shows
 the line too.
 
+## My app's input buttons don't show, or the TV doesn't switch
+
+- Is **Let the app switch the TV's inputs** ticked in the developer tools, for that TV?
+  It works only while TVFollow runs, so not while this PC is off or asleep.
+- The TV lets one program read an app's console. If another one does (a debugger, say),
+  TVFollow can't hear your app, and the log says "another program is reading the app's
+  console". Close that program, or untick the option while you use it.
+- On the TV: **Settings → System → Advanced system settings → Control by mobile apps →
+  Network access** has to be on **Enabled**. On Limited, the TV won't tell TVFollow its
+  list of inputs.
+- The log says what TVFollow saw: lines with `developer tools:` about the app's asks,
+  like "told the app on the TV about 4 inputs" or "the app asked for HDMI 2
+  (tvinput.hdmi2): switched".
+
 ## Start over
 
 Right-click the TV icon → **Settings…** → **Add or change TVs…** and go through setup

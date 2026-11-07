@@ -92,9 +92,13 @@ namespace TVFollow.Tests
             if (!ok) throw new Exception(what);
         }
 
+        // Read without shutting out writers: File.ReadAllText would, and a background job's line
+        // written meanwhile would be lost (Log.Write gives up quietly on a file it can't open).
         static string LogText()
         {
-            return File.Exists(Log.FilePath) ? File.ReadAllText(Log.FilePath) : "";
+            if (!File.Exists(Log.FilePath)) return "";
+            using (var file = new FileStream(Log.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var reader = new StreamReader(file)) return reader.ReadToEnd();
         }
 
         static Controller Fast(Controller c)

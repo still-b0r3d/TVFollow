@@ -159,6 +159,7 @@ namespace TVFollow.Tests
                 return;
             }
             if (method != "POST") { status = 404; return; }
+            if (path.StartsWith("/input?")) return; // for the app on screen, which reads it with roInput
             if (ControlMode == "limited" && path.StartsWith("/keypress/")) { status = 403; return; }
             if (path == "/keypress/PowerOff") { PowerMode = "DisplayOff"; if (DownWhenOff) Down = true; }
             else if (path == "/keypress/PowerOn") { if (!RefusePowerOn) PowerMode = "PowerOn"; }

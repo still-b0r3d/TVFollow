@@ -240,6 +240,39 @@ another replaces it.
   couldn't go back, a notification says so.
 - **Push the app's folder again whenever a file in it is saved**: for making apps. Save
   a file, and a moment later the TV runs your new version.
+- **Let the app switch the TV's inputs** (off to start with): a Roku TV won't let an app
+  switch its inputs (to a game console on HDMI 2, say), so the pushed app can ask TVFollow,
+  which switches the TV for it while this PC is on. How an app asks is just below.
+
+**Switching inputs from your app** (for app makers), with that option ticked. While your
+app is on screen, TVFollow reads its console, the one **App log…** shows:
+
+1. A few seconds after your app opens, TVFollow says hello with an input event, which
+   your app reads with `roInput`: `tvfollow=hello`, `protocol=1`, `token` (a code for
+   your asks), `pc` (the input this PC is on, like `tvinput.hdmi1`), `inputs` (how many),
+   then `input1`, `name1`, `input2`, `name2` and so on: each input's id and the name the
+   TV gives it. No hello means TVFollow isn't running or the option is off, so keep your
+   input buttons hidden until one comes.
+2. To switch, print `TVFollow ask`, the token from the latest hello and the input's id:
+
+   ```brightscript
+   print "TVFollow ask " + token + " tvinput.hdmi2"
+   ```
+
+   TVFollow switches the TV within a second or so, only to an input from its list. An
+   ask with an older token is ignored, because the TV repeats its recent console lines to
+   anything that connects.
+3. Print `TVFollow hello` when your app wants a hello again (when it has just started,
+   say).
+
+The TV lets one program read an app's console at a time. While your app is on screen,
+this option and another tool reading the console (a debugger, say) get in each other's
+way, so untick the option while you use the other tool. TVFollow's own **App log…**
+window shares the connection. With the console open, a crash can leave your app stopped in
+Roku's debugger instead of closed (the app log shows where); press **Home** to leave it.
+TVFollow says no goodbye: if it stops (the option unticked, the PC asleep), your input
+buttons do nothing until the next hello. Nothing on your PC listens for the app:
+TVFollow connects to the TV, as it does for everything else.
 
 While developer mode is on, the TV's app installer is open on your home network behind
 your password, and the app log is open to anyone on it. That's how Roku made developer

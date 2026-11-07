@@ -19,11 +19,12 @@ namespace TVFollow
         public string Name = "";        // what the TV calls itself, for the menus and the log
 
         // developer mode (the developer tools): the password chosen on the TV, kept as DevSecret
-        // seals it; the app's folder last pushed; and the two options
+        // seals it; the app's folder last pushed; and the three options
         public string DevPasswordSealed = "";
         public string DevFolder = "";
         public bool DevPushBack = true;  // put the pushed app back when it disappears from the TV
         public bool DevOnSave;           // push DevFolder again when a file in it is saved
+        public bool DevInputs;           // the pushed app may ask TVFollow to switch the TV's input
 
         public string DevPassword
         {
@@ -229,7 +230,7 @@ namespace TVFollow
             switch (key)
             {
                 case "ip": case "serial": case "input": case "wake_mac": case "mac": case "gateway_mac": case "name":
-                case "dev_password": case "dev_folder": case "dev_push_back": case "dev_on_save":
+                case "dev_password": case "dev_folder": case "dev_push_back": case "dev_on_save": case "dev_inputs":
                     return key;
                 default: return null;
             }
@@ -255,6 +256,7 @@ namespace TVFollow
                 case "dev_folder": tv.DevFolder = value; break;
                 case "dev_push_back": tv.DevPushBack = !IsNo(value); break;
                 case "dev_on_save": tv.DevOnSave = !IsNo(value); break;
+                case "dev_inputs": tv.DevInputs = !IsNo(value); break;
             }
         }
 
@@ -303,6 +305,7 @@ namespace TVFollow
             if (tv.DevFolder.Length > 0) text.Append(prefix + "dev_folder=" + OneLine(tv.DevFolder) + "\r\n");
             if (!tv.DevPushBack) text.Append(prefix + "dev_push_back=no\r\n");
             if (tv.DevOnSave) text.Append(prefix + "dev_on_save=yes\r\n");
+            if (tv.DevInputs) text.Append(prefix + "dev_inputs=yes\r\n");
         }
 
         // Some values come from the TV's own answers (its serial, its network card, its input

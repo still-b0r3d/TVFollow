@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -58,9 +59,10 @@ namespace TVFollow
         }
     }
 
-    // The developer tools of every TV. Two jobs run in the background while TVFollow follows the
-    // monitors: putting a pushed app back when it vanished from its TV, and pushing an app's folder
-    // again when a file in it is saved. Neither runs while the tools are switched off in Settings.
+    // The developer tools of every TV. Three jobs run in the background while TVFollow follows the
+    // monitors: putting a pushed app back when it vanished from its TV, pushing an app's folder
+    // again when a file in it is saved, and switching the TV's input when the pushed app asks.
+    // None of them runs while the tools are switched off in Settings.
     class DevTools : IDisposable
     {
         readonly Settings settings;
@@ -97,7 +99,7 @@ namespace TVFollow
         }
     }
 
-    // One TV's developer tools: pushing, removing and pictures, and the two background jobs.
+    // One TV's developer tools: pushing, removing and pictures, and the background jobs.
     class DevTv
     {
         public static int AskMs = 3000;
@@ -105,6 +107,12 @@ namespace TVFollow
         public static int PutBackMs = 30000;   // putting an app back holds up turning the TV off
         public static int SettleMs = 1500;     // quiet time after the last change in a watched folder
         public static int RetryMs = 3000;      // looking again for a watched folder that went away
+        public static int InputsIdleMs = 3000; // how often TVFollow looks whether the pushed app is on screen
+        public static int HelloAfterMs = 500;  // the console has to stay connected this long before the hello
+
+        // what the pushed app prints on its console: "TVFollow hello" for a hello, and
+        // "TVFollow ask <token> tvinput.hdmi2" to switch, with the token from the last hello
+        public const string HelloLine = "TVFollow hello", AskLine = "TVFollow ask ";
 
         readonly DevTools tools;
         readonly Settings settings;
@@ -120,6 +128,41 @@ namespace TVFollow
         bool toldDevModeOff, toldPutBackFailed;
         string lastPushed;   // a fingerprint of the last zip the TV took, so a save that changed nothing isn't pushed
 
+        // the app's console (port 8085), shared by the app log window and the app's asks
+        public readonly DevConsole Console;
+
+        // Letting the app switch inputs. Locks, always taken in this order: inputsLock (the looks
+        // and the work the app asks for, one at a time; held across calls to the TV), switching
+        // (starting or stopping the console reading, each whole), then watchLock, the console's
+        // own lock, and listenLock (the state the console's callbacks touch, held only briefly).
+        readonly object inputsLock = new object();
+        readonly object switching = new object();
+        readonly object listenLock = new object();
+        readonly ConsoleListener asks = new ConsoleListener();
+        Timer inputsTimer;            // under watchLock
+        int inputsRun, lookedRun;     // each start of the looking gets a number; the state below is for lookedRun
+        // under inputsLock
+        bool appShown;                // the pushed app was on screen at the last look
+        int missed;                   // the looks in a row the TV didn't answer
+        bool toldNoInputs;
+        string lastRefused;           // the last ask that wasn't carried out, said once in a row
+        // under listenLock
+        bool listening;               // reading the console for the app's asks
+        int connection;               // goes up with each connection to the console, each loss of one, and each start and stop
+        bool settled;                 // the console has stayed connected a moment: the hello can go
+        bool firstLine;               // the next line with something in it is the connection's first
+        bool helloDue;                // this connection's app hasn't had a hello yet
+        bool helloWanted;             // a hello is waiting to be sent
+        string askWanted;             // the latest ask waiting to be carried out, from connection askFrom
+        int askFrom;
+        bool draining;                // a worker is carrying out what's waiting
+        bool toldBusy;
+        int toldHello;                // the connection whose hello the log mentioned
+        Timer helloTimer;             // the hello, once the console has stayed connected a moment
+        string token = "";            // the code in this connection's hello: an ask has to carry it
+        // under the console's own lock (its callbacks)
+        string partial = "";          // console text after its last line break
+
         // something happened in the background (a push on save, an app put back): the window shows it
         public event Action<DevReport> Background = delegate { };
 
@@ -128,6 +171,10 @@ namespace TVFollow
             this.tools = tools;
             this.settings = settings;
             Controller = controller;
+            Console = new DevConsole(() => Tv.Ip);
+            asks.Connected = ConsoleConnected;
+            asks.Text = ConsoleText;
+            asks.Trouble = delegate { ConsoleLost(); };
         }
 
         public TvSettings Tv { get { return Controller.Tv; } }
@@ -351,6 +398,7 @@ namespace TVFollow
         public void Refresh()
         {
             lock (refreshing) RefreshNow();
+            RefreshInputs();
         }
 
         void RefreshNow()
@@ -456,8 +504,14 @@ namespace TVFollow
                     retry.Dispose();
                     retry = null;
                 }
+                if (inputsTimer != null)
+                {
+                    inputsTimer.Dispose();
+                    inputsTimer = null;
+                }
             }
             StopWatching();
+            StopListening();
         }
 
         // a change in the folder: the push waits until the saving stops
@@ -519,6 +573,441 @@ namespace TVFollow
             }
             if (!r.Ok) tools.Notify("Couldn't push your app", r.Text);
             Background(r);
+        }
+
+        // ---- letting the app switch inputs ----
+        //
+        // A Roku TV refuses an app that tries to switch its inputs, so the pushed app asks TVFollow.
+        // While the app is on screen, TVFollow reads the app's console (the app log) and tells
+        // the app it's there, and which inputs the TV has, with an input event the app reads with
+        // roInput. The hello carries a new token with each connection; the app prints
+        // "TVFollow ask <token> tvinput.hdmi2", and only this connection's token counts, because
+        // the TV repeats its recent console lines to a new reader. TVFollow only ever talks to
+        // the TV here: nothing on this PC listens for the app.
+
+        // Starts or stops the looking, as the settings now say.
+        void RefreshInputs()
+        {
+            bool wanted = settings.DeveloperTools && Tv.DevInputs;
+            lock (watchLock)
+            {
+                if (closed || wanted == (inputsTimer != null)) return;
+                if (wanted)
+                {
+                    inputsRun++;
+                    inputsTimer = new Timer(delegate { LookForAsks(); });
+                    inputsTimer.Change(0, Timeout.Infinite);
+                }
+                else
+                {
+                    inputsTimer.Dispose();
+                    inputsTimer = null;
+                }
+            }
+            if (!wanted) StopListening();
+            Controller.Say(wanted ? "developer tools: the app on the TV can ask for the TV's inputs now"
+                : "developer tools: the app on the TV can't ask for the TV's inputs any more");
+        }
+
+        public bool LookingForAsks
+        {
+            get { lock (watchLock) return inputsTimer != null; }
+        }
+
+        public bool ListeningForAsks
+        {
+            get { lock (listenLock) return listening; }
+        }
+
+        // the looking that started as run is still wanted: not switched off or closed since
+        bool StillWanted(int run)
+        {
+            lock (watchLock) return !closed && inputsTimer != null && inputsRun == run;
+        }
+
+        // One look every few seconds: is the pushed app on screen? While it is, its console is read.
+        void LookForAsks()
+        {
+            int next = InputsIdleMs;
+            lock (inputsLock)
+            {
+                int run;
+                lock (watchLock)
+                {
+                    if (inputsTimer == null) return;
+                    run = inputsRun;
+                }
+                if (lookedRun != run)
+                {
+                    // started again: nothing seen before counts
+                    lookedRun = run;
+                    appShown = toldNoInputs = false;
+                    missed = 0;
+                    lastRefused = null;
+                }
+                try { next = Look(run); }
+                catch (Exception e) { Controller.Say("developer tools: looking for the app's asks: " + e.Message); }
+            }
+            lock (watchLock)
+            {
+                if (inputsTimer != null) inputsTimer.Change(next, Timeout.Infinite);
+            }
+        }
+
+        // one look; says how long until the next
+        int Look(int run)
+        {
+            // like the following, nothing goes to the TV's address on another network (a laptop away from home)
+            if (!Controller.OnTvNetwork())
+            {
+                Gone();
+                return InputsIdleMs;
+            }
+            RokuClient ecp = Ecp();
+            string app = ecp.GetActiveApp(AskMs);
+            if (app == null)
+            {
+                // no answer: a moment's hiccup, or the TV went off. A few in a row count as the app
+                // gone, and the looks slow down until the TV answers again.
+                if (++missed < 3) return InputsIdleMs;
+                Gone();
+                return InputsIdleMs * 5;
+            }
+            missed = 0;
+            if (app != "dev")
+            {
+                Gone();
+                return InputsIdleMs;
+            }
+            if (!appShown)
+            {
+                // only this TV: another Roku that got its address isn't told this TV's inputs
+                DeviceInfo info = ecp.GetDeviceInfo(AskMs);
+                if (info == null || (Tv.Serial.Length > 0 && info.Serial != Tv.Serial)) return InputsIdleMs;
+                appShown = true;
+                StartListening(run);
+            }
+            else
+            {
+                // a hello that didn't get through (the TV didn't take it, say) goes again
+                bool again;
+                lock (listenLock) again = listening && settled && helloDue;
+                if (again) Hello(ecp);
+            }
+            return InputsIdleMs;
+        }
+
+        void Gone()
+        {
+            appShown = false;
+            StopListening();
+        }
+
+        // Each whole, under switching: an untick or Close in the middle of a look always wins.
+        void StartListening(int run)
+        {
+            lock (switching)
+            {
+                if (!StillWanted(run)) return;
+                lock (listenLock)
+                {
+                    if (listening) return;
+                    listening = true;
+                    settled = false;
+                    token = "";
+                    connection++;
+                }
+                Console.Listen(asks);
+            }
+        }
+
+        void StopListening()
+        {
+            lock (switching)
+            {
+                lock (listenLock)
+                {
+                    if (!listening) return;
+                    listening = false;
+                    Unsettle();
+                    helloWanted = false;
+                    askWanted = null;
+                }
+                Console.Unlisten(asks);
+            }
+        }
+
+        // no hello and no asks on the connection there was (under listenLock)
+        void Unsettle()
+        {
+            settled = false;
+            token = "";
+            connection++;
+            if (helloTimer != null)
+            {
+                helloTimer.Dispose();
+                helloTimer = null;
+            }
+        }
+
+        // Connected (again): a new token, so asks from before don't count. The hello goes once
+        // the connection has lasted a moment. (On the console's thread.)
+        void ConsoleConnected()
+        {
+            lock (listenLock)
+            {
+                if (!listening) return;
+                Unsettle();
+                token = Guid.NewGuid().ToString("N").Substring(0, 8);
+                helloDue = firstLine = true;
+                partial = "";
+                int mine = connection;
+                helloTimer = new Timer(delegate { Settled(mine); }, null, HelloAfterMs, Timeout.Infinite);
+            }
+        }
+
+        void ConsoleLost()
+        {
+            lock (listenLock) Unsettle();
+        }
+
+        void Settled(int mine)
+        {
+            lock (listenLock)
+            {
+                if (!listening || connection != mine) return;
+                settled = true;
+                helloWanted = true;
+            }
+            Kick();
+        }
+
+        // the console's text, line by line (under the console's lock)
+        void ConsoleText(string chunk)
+        {
+            string text = partial + chunk;
+            int start = 0, end;
+            while ((end = text.IndexOf('\n', start)) >= 0)
+            {
+                ConsoleLine(text.Substring(start, end - start));
+                start = end + 1;
+            }
+            // a line that never ends isn't an ask
+            partial = text.Length - start > 4096 ? "" : text.Substring(start);
+        }
+
+        void ConsoleLine(string line)
+        {
+            if (line.Trim().Length == 0) return;
+            bool first;
+            lock (listenLock)
+            {
+                first = firstLine;
+                firstLine = false;
+            }
+            // a TV that another program's console session holds says so first, then hangs up:
+            // no hello on this connection
+            if (first && line.IndexOf("connection is already in use", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                bool tell;
+                lock (listenLock)
+                {
+                    Unsettle();
+                    tell = !toldBusy;
+                    toldBusy = true;
+                }
+                if (tell) Controller.Say("developer tools: another program is reading the app's console, so the app can't ask for inputs until it stops");
+                return;
+            }
+            // only lines that start with "TVFollow": the app's other lines and the TV's own pass by
+            line = line.TrimStart();
+            if (line.StartsWith(AskLine, StringComparison.Ordinal))
+            {
+                string[] words = line.Substring(AskLine.Length).Split(new[] { ' ', '\t', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                lock (listenLock)
+                {
+                    // an ask with another token is one the TV repeated to a new reader, or one from before
+                    if (!listening || words.Length < 2 || token.Length == 0 || words[0] != token) return;
+                    askWanted = words[1];
+                    askFrom = connection;
+                }
+                Kick();
+                return;
+            }
+            if (line.StartsWith(HelloLine, StringComparison.Ordinal))
+            {
+                lock (listenLock)
+                {
+                    if (!listening || !settled) return;   // one comes anyway once the console settles
+                    helloWanted = true;
+                }
+                Kick();
+            }
+        }
+
+        // What the app asks for is carried out off the console's thread by one worker at a time:
+        // the latest ask and one hello at most, so an app printing them in a loop can't pile up work.
+        void Kick()
+        {
+            lock (listenLock)
+            {
+                if (draining) return;
+                draining = true;
+            }
+            ThreadPool.QueueUserWorkItem(delegate { Drain(); });
+        }
+
+        void Drain()
+        {
+            lock (inputsLock)
+            {
+                while (true)
+                {
+                    bool hello;
+                    string ask;
+                    int from;
+                    lock (listenLock)
+                    {
+                        hello = helloWanted;
+                        ask = askWanted;
+                        from = askFrom;
+                        helloWanted = false;
+                        askWanted = null;
+                        if (!hello && ask == null)
+                        {
+                            draining = false;
+                            return;
+                        }
+                    }
+                    try
+                    {
+                        if (ask != null) Switch(ask, from);
+                        if (hello) Hello(Ecp());
+                    }
+                    catch (Exception e) { Controller.Say("developer tools: the app's asks: " + e.Message); }
+                }
+            }
+        }
+
+        // the app asked for an input (under inputsLock)
+        void Switch(string what, int from)
+        {
+            RokuClient ecp = Ecp();
+            List<KeyValuePair<string, string>> inputs = ecp.GetTvInputs(AskMs);
+            if (inputs == null)
+            {
+                Refused(what, ", but the TV won't list its inputs");
+                return;
+            }
+            KeyValuePair<string, string> input = inputs.Find(p => string.Equals(p.Key, what, StringComparison.OrdinalIgnoreCase));
+            if (input.Key == null)
+            {
+                Refused(what, what.StartsWith("tvinput.", StringComparison.OrdinalIgnoreCase) ? ", an input this TV doesn't have" : ", which isn't an input");
+                return;
+            }
+            // still this connection, and still wanted (not unticked meanwhile, say)
+            lock (listenLock) if (!listening || connection != from) return;
+            int code = ecp.Launch(input.Key, AskMs);
+            bool switched = code >= 200 && code < 300;
+            lastRefused = null;
+            Controller.Say("developer tools: the app asked for " + Clean(input.Value) + " (" + input.Key + "): " +
+                (switched ? "switched" : code == 0 ? "no answer" : "the TV said " + code));
+            // the app is off the screen now: its console is left alone until it's back
+            if (switched) Gone();
+        }
+
+        // an ask that isn't carried out goes in the log, the same one only once in a row
+        void Refused(string what, string why)
+        {
+            if (what == lastRefused) return;
+            lastRefused = what;
+            Controller.Say("developer tools: the app asked for " + Shown(what) + why);
+        }
+
+        // Tells the app on screen TVFollow is there, and which inputs the TV has: tvfollow=hello,
+        // protocol=1, token (for its asks), pc (the input this PC is on), inputs (how many), then
+        // input1, name1, input2, name2... (like tvinput.hdmi2 and the TV's name for it).
+        // (Under inputsLock.)
+        void Hello(RokuClient ecp)
+        {
+            string forToken;
+            int forConnection;
+            lock (listenLock)
+            {
+                if (!listening || !settled) return;
+                forToken = token;
+                forConnection = connection;
+            }
+            List<KeyValuePair<string, string>> inputs = ecp.GetTvInputs(AskMs);
+            if (inputs == null)
+            {
+                if (!toldNoInputs)
+                {
+                    toldNoInputs = true;
+                    Controller.Say("developer tools: the TV won't list its inputs (is Control by mobile apps on Limited?), so the app wasn't told any");
+                }
+                return;
+            }
+            toldNoInputs = false;
+            // an input event goes to whatever is on screen, and the last look may be a few seconds old
+            if (ecp.GetActiveApp(AskMs) != "dev") return;
+            var pairs = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("tvfollow", "hello"),
+                new KeyValuePair<string, string>("protocol", "1"),
+                new KeyValuePair<string, string>("token", forToken),
+                new KeyValuePair<string, string>("pc", Tv.PcApp),
+                new KeyValuePair<string, string>("inputs", inputs.Count.ToString(CultureInfo.InvariantCulture)),
+            };
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                string n = (i + 1).ToString(CultureInfo.InvariantCulture);
+                pairs.Add(new KeyValuePair<string, string>("input" + n, inputs[i].Key));
+                pairs.Add(new KeyValuePair<string, string>("name" + n, inputs[i].Value));
+            }
+            int code;
+            lock (listenLock)
+            {
+                // the connection the token belongs to is still the one being read
+                if (!listening || connection != forConnection) return;
+            }
+            code = ecp.Input(pairs, AskMs);
+            bool sent = code >= 200 && code < 300;
+            bool tell;
+            lock (listenLock)
+            {
+                if (connection == forConnection && sent) helloDue = false;
+                if (sent) toldBusy = false;
+                // the log mentions a connection's first hello, and every one that didn't get through
+                tell = !sent || toldHello != forConnection;
+                if (sent) toldHello = forConnection;
+            }
+            if (tell)
+                Controller.Say("developer tools: told the app on the TV about " + inputs.Count + " inputs" +
+                    (sent ? "" : code == 0 ? " (no answer, trying again)" : " (the TV said " + code + ", trying again)"));
+        }
+
+        // something the app wrote, for the log: one line in quotes, kept short
+        static string Shown(string text)
+        {
+            return "\"" + Clean(text) + "\"";
+        }
+
+        // Text from the app or the TV, for the log: control characters, line and paragraph breaks
+        // and invisible format characters (like the ones that turn text right to left) become
+        // spaces, and it's kept to 60 characters.
+        static string Clean(string text)
+        {
+            var line = new StringBuilder();
+            foreach (char c in text)
+            {
+                if (line.Length >= 60) { line.Append("…"); break; }
+                UnicodeCategory kind = char.GetUnicodeCategory(c);
+                bool hidden = kind == UnicodeCategory.Control || kind == UnicodeCategory.Format ||
+                    kind == UnicodeCategory.LineSeparator || kind == UnicodeCategory.ParagraphSeparator;
+                line.Append(hidden ? ' ' : c);
+            }
+            return line.ToString();
         }
     }
 }

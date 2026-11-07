@@ -344,6 +344,10 @@ namespace TVFollow.Tests
     class FakeConsole : IDisposable
     {
         public readonly int Port;
+        public string Backlog = "";   // sent to each new reader after the welcome, as a TV repeats its recent lines
+        public bool Busy;             // says another program reads it and hangs up, as a TV does to a second reader
+        public int BusyHangUpMs;      // how long a busy console waits before it hangs up
+        int accepted;
         readonly TcpListener listener;
         readonly List<NetworkStream> open = new List<NetworkStream>();
 
@@ -358,6 +362,9 @@ namespace TVFollow.Tests
 
         public int Connections { get { lock (open) return open.Count; } }
 
+        // every connection made, a turned-away one too
+        public int Accepted { get { lock (open) return accepted; } }
+
         void Serve()
         {
             while (true)
@@ -366,7 +373,17 @@ namespace TVFollow.Tests
                 try { client = listener.AcceptTcpClient(); }
                 catch { return; }
                 NetworkStream s = client.GetStream();
-                byte[] hello = Encoding.ASCII.GetBytes("Welcome to the pretend app console.\r\n");
+                lock (open) accepted++;
+                if (Busy)
+                {
+                    byte[] busy = Encoding.ASCII.GetBytes("Console connection is already in use.\r\n");
+                    try { s.Write(busy, 0, busy.Length); } catch { }
+                    int wait = BusyHangUpMs;
+                    if (wait <= 0) client.Close();
+                    else new Thread(delegate () { Thread.Sleep(wait); client.Close(); }) { IsBackground = true }.Start();
+                    continue;
+                }
+                byte[] hello = Encoding.ASCII.GetBytes("Welcome to the pretend app console.\r\n" + Backlog);
                 s.Write(new byte[] { 255, 251, 1 }, 0, 3);                // IAC WILL ECHO: not text
                 s.Write(new byte[] { 255, 250, 24, 1, 255, 240 }, 0, 6);  // IAC SB ... IAC SE: not text either
                 s.Write(hello, 0, hello.Length);
@@ -376,7 +393,13 @@ namespace TVFollow.Tests
 
         public void Say(string line)
         {
-            byte[] bytes = Encoding.UTF8.GetBytes(line + "\n");
+            Send(line + "\n");
+        }
+
+        // without a line break: a line can come in pieces
+        public void Send(string text)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(text);
             lock (open) foreach (NetworkStream s in open) { try { s.Write(bytes, 0, bytes.Length); } catch { } }
         }
 

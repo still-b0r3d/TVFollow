@@ -165,6 +165,16 @@ namespace TVFollow
             catch { return null; }
         }
 
+        // Name=value pairs for the app on screen, which reads them with roInput (POST /input).
+        // The HTTP status, or 0 if the TV didn't answer.
+        public int Input(IList<KeyValuePair<string, string>> pairs, int timeoutMs)
+        {
+            var query = new StringBuilder();
+            foreach (KeyValuePair<string, string> p in pairs)
+                query.Append(query.Length == 0 ? '?' : '&').Append(Uri.EscapeDataString(p.Key)).Append('=').Append(Uri.EscapeDataString(p.Value));
+            return Post("input" + query, timeoutMs);
+        }
+
         public int Keypress(string key, int timeoutMs) { return Post("keypress/" + key, timeoutMs); }
 
         public int Launch(string appId, int timeoutMs) { return Post("launch/" + appId, timeoutMs); }

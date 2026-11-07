@@ -158,7 +158,34 @@ it isn't.
 - **The app log** is the TV's app console on port 8085, plain text over TCP (telnet
   commands are dropped, and keep-alive notices a TV that went away). It needs no password,
   and the window reconnects while it's open. It shows what the app prints while the window
-  is open, so open it before pushing or opening the app.
+  is open, so open it before pushing or opening the app. TVFollow keeps one connection to
+  it for each TV, shared with the app's asks for inputs (below); a window opened while
+  that's connected starts with the recent text (the last 32,000 characters at most).
+- **Letting the app switch inputs:** a Roku TV answers 403 when an app sends its own
+  remote-control service a key press or a launch (at `127.0.0.1` or the TV's own address),
+  and its app manager won't open `tvinput.*`, so an app can't switch the TV's input itself.
+  With **Let the app switch the TV's inputs** ticked, TVFollow asks `query/active-app`
+  every 3 seconds, but only while this PC is on the TV's network, and every 15 seconds
+  once the TV has missed three looks in a row. While the pushed app (`dev`) is on screen,
+  it checks the TV's serial number once, then reads the app's console (port 8085, through
+  the same connection as the **App log…** window, since the TV allows one reader). Once the
+  connection has lasted half a second, TVFollow sends the hello, after checking `dev` is
+  still on screen: `POST /input` with `tvfollow=hello`, `protocol=1`, `token` (8 random
+  characters, new with each connection), `pc`, `inputs`, then `input1`, `name1` and so on,
+  the inputs read from `query/apps`. A hello that doesn't get through goes again at the next
+  look. A console line `TVFollow hello` gets another hello. A line
+  `TVFollow ask <token> <input>` gets `launch/<input>`, but only with this connection's
+  token (the TV repeats its recent lines to a new reader, so old asks come round again)
+  and only for an input `query/apps` lists; one worker carries them out, the latest ask and
+  one hello at a time. An ask that isn't carried out goes in the log, as one line of at
+  most 60 characters (the same one once in a row). After a switch, or three missed looks,
+  TVFollow lets go of the console until the app is back on screen. A console whose first
+  line is "Console connection is already in use" (another program reads it) gets no
+  hello, and the log says so once. Unticking the option, switching the developer tools off
+  or quitting stops all of it at once, even in the middle of a look. Nothing on the PC
+  listens: TVFollow connects to the TV, as it does for everything else. (Reading the app's
+  registry with `query/registry/dev` would have been simpler, but a TV only answers that
+  once it has a developer signing key; otherwise it says "Device not keyed".)
 - **Zips and folders** are read with limits: 200 MB and 20,000 files and folders in all,
   and a folder at most 32 levels deep, so a link that loops back up stops quickly. Paths
   in a zip that point outside it (`..`, `C:`, a leading `/`) are left out.
@@ -210,7 +237,7 @@ remote_layout=classic
 | `developer_tools` | Only there while the developer tools are switched on (`developer_tools=yes`) |
 | `dev_password` | The developer mode password, encrypted for your Windows account (`dpapi:` and Windows' own encryption). Copied to another PC or account, it can't be read, and the password box is empty again |
 | `dev_folder` | The app's folder pushed last (empty after pushing a zip or the example) |
-| `dev_push_back`, `dev_on_save` | The developer tools' two options (`dev_push_back=no` and `dev_on_save=yes` are only written when set that way) |
+| `dev_push_back`, `dev_on_save`, `dev_inputs` | The developer tools' three options (`dev_push_back=no`, `dev_on_save=yes` and `dev_inputs=yes` are only written when set that way) |
 
 **Several TVs:** the first TV uses the keys above, the way TVFollow 1.1 wrote them, so an
 older TVFollow reading the file still finds that one. Each other TV has the same six keys

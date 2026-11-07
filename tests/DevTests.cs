@@ -30,6 +30,8 @@ namespace TVFollow.Tests
             Run("dev: a vanished app goes back on before the TV turns off", DevPutBack);
             Run("dev: a saved file pushes the folder again, once", DevPushOnSave);
             Run("dev: the app log shows the TV's console", DevAppLog);
+            Run("dev: the pushed app asks TVFollow to switch the TV's input", DevAppSwitchesInputs);
+            Run("dev: nobody reads the app's console for asks unless switched on, and only on this TV", DevInputsOnlyWhenOn);
             Run("dev: the developer window shows the TV's state", DevWindow);
             Run("dev: Settings shows the developer tools only when switched on", DevSettingsSwitch);
             Run("dev: the tray menu has Developer tools… only when switched on, and it opens them", DevTrayItem);
@@ -130,18 +132,20 @@ namespace TVFollow.Tests
             Tv(s).DevPassword = password;
             Tv(s).DevFolder = "C:\\Apps\\Den #2 app";
             Tv(s).DevOnSave = true;
+            Tv(s).DevInputs = true;
             s.Tvs.Add(new TvSettings { Ip = "192.168.1.51", Serial = "X000000002", DevPushBack = false });
             s.DeveloperTools = true;
             s.Save();
             string file = File.ReadAllText(Settings.FilePath);
             Check(!file.Contains(password), "the password is in settings.ini as typed");
             Check(file.Contains("dev_password=dpapi:"), "the password isn't sealed: " + file);
+            Check(file.Contains("\ndev_inputs=yes") && !file.Contains("tv2.dev_inputs"), "the inputs option's lines: " + file);
             Settings t = Settings.Load();
             Check(t.DeveloperTools, "the switch was lost");
             Check(Tv(t).DevPassword == password, "the password didn't come back");
             Check(Tv(t).DevFolder == "C:\\Apps\\Den #2 app", "the folder lost its #: " + Tv(t).DevFolder);
-            Check(Tv(t).DevOnSave && Tv(t).DevPushBack, "the first TV's options were lost");
-            Check(!t.Tvs[1].DevPushBack && !t.Tvs[1].DevOnSave && t.Tvs[1].DevPassword == "", "the second TV's options were lost");
+            Check(Tv(t).DevOnSave && Tv(t).DevPushBack && Tv(t).DevInputs, "the first TV's options were lost");
+            Check(!t.Tvs[1].DevPushBack && !t.Tvs[1].DevOnSave && !t.Tvs[1].DevInputs && t.Tvs[1].DevPassword == "", "the second TV's options were lost");
 
             // a TV that never used the tools gets no lines for them
             var plain = new Settings();
@@ -636,7 +640,8 @@ namespace TVFollow.Tests
                 DevClient.ConsolePort = console.Port;
                 try
                 {
-                    using (var form = new DevLogForm("127.0.0.1", "Test TV"))
+                    var shared = new DevConsole(() => "127.0.0.1");
+                    using (var form = new DevLogForm(shared, "Test TV"))
                     {
                         form.StartPosition = FormStartPosition.Manual;
                         form.Location = new Point(-20000, -20000);
@@ -651,8 +656,25 @@ namespace TVFollow.Tests
                         console.Say("TVFollow example: you pressed OK");
                         Pump(() => form.LogText.Contains("TVFollow example: you pressed OK\r\n"), 10);
                         Check(form.Text == "App log · Test TV", "the title is " + form.Text);
+
+                        // another reader (the app's asks for inputs) shares the one connection, and
+                        // starts with the recent text
+                        var other = new ConsoleListener();
+                        bool told = false;
+                        string got = "";
+                        other.Connected = () => told = true;
+                        other.Text = chunk => got += chunk;
+                        shared.Listen(other);
+                        Check(told && got.Contains("Welcome to the pretend app console.") && got.Contains("you pressed OK"), "a second reader got: " + got);
+                        console.Say("for both");
+                        Pump(() => got.Contains("for both") && form.LogText.Contains("for both"), 10);
+                        Check(console.Accepted == 1, "a second connection to the console: " + console.Accepted);
+                        shared.Unlisten(other);
+                        Check(shared.Connected, "one reader left, and the console closed");
                         form.Close();
                     }
+                    // nobody reads it any more: the connection closes
+                    Pump(() => !shared.Connected, 10);
                 }
                 finally { DevClient.ConsolePort = before; }
             }
@@ -687,6 +709,14 @@ namespace TVFollow.Tests
                         box.Text = "another-pass";
                         Check(Tv(s).DevPassword == "another-pass" && Tv(Settings.Load()).DevPassword == "another-pass", "a typed password wasn't saved");
                         box.Text = installer.Password;
+
+                        // letting the app switch inputs: ticked, saved, looked for; unticked, stopped
+                        CheckBox inputsBox = FindBox(window, "Let the app switch the TV's inputs");
+                        Check(inputsBox != null && !inputsBox.Checked && !tools.Tvs[0].LookingForAsks, "no unticked inputs option");
+                        inputsBox.Checked = true;
+                        Check(Tv(s).DevInputs && Tv(Settings.Load()).DevInputs && tools.Tvs[0].LookingForAsks, "ticking the inputs option");
+                        inputsBox.Checked = false;
+                        Check(!Tv(s).DevInputs && !Tv(Settings.Load()).DevInputs && !tools.Tvs[0].LookingForAsks, "unticking the inputs option");
 
                         // a folder around the app: the app's own folder is pushed, and remembered
                         WriteFile(parent, "inner/manifest", "title=Inner app\nmajor_version=1\nminor_version=0\nbuild_version=1\n");
@@ -834,6 +864,278 @@ namespace TVFollow.Tests
                     foreach (DevForm left in OpenWindows<DevForm>()) left.Close();
                 }
                 File.Delete(Settings.FilePath);
+            }
+        }
+
+        // the timings the input tests make short, put back afterwards
+        class InputTimings : IDisposable
+        {
+            readonly int idle = DevTv.InputsIdleMs, after = DevTv.HelloAfterMs,
+                retry = DevConsole.RetryMs, port = DevClient.ConsolePort;
+
+            public InputTimings(FakeConsole console, int helloAfterMs)
+            {
+                DevTv.InputsIdleMs = 150;
+                DevTv.HelloAfterMs = helloAfterMs;
+                DevConsole.RetryMs = 200;
+                DevClient.ConsolePort = console.Port;
+            }
+
+            public void Dispose()
+            {
+                DevTv.InputsIdleMs = idle;
+                DevTv.HelloAfterMs = after;
+                DevConsole.RetryMs = retry;
+                DevClient.ConsolePort = port;
+            }
+        }
+
+        static void DevAppSwitchesInputs()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            using (var console = new FakeConsole("127.0.0.1", 0))
+            using (new InputTimings(console, 100))
+            {
+                tv.DeveloperEnabled = true;
+                tv.DevAppName = "Input app";
+                tv.InputNames = new[] { "PC", "Game console", "HDMI 3" };
+                tv.App = "dev";
+                // the TV repeats its recent lines to a new reader: an ask from an earlier run
+                console.Backlog = "TVFollow ask 0ld70ken tvinput.hdmi3\nTVFollow hello\n";
+                Settings s = SettingsFor(tv);
+                s.DeveloperTools = true;
+                Tv(s).DevInputs = true;
+                using (DevTools tools = DevToolsFor(s))
+                {
+                    // the app on screen is told TVFollow is there, which inputs the TV has, and a token
+                    Until(tv, () => Hellos(tv).Count >= 1, "the first hello");
+                    Dictionary<string, string> hello = Hellos(tv)[0];
+                    Check(hello["protocol"] == "1" && hello["pc"] == "tvinput.hdmi1" && hello["inputs"] == "4" && hello["token"].Length == 8,
+                        "the hello: " + Describe(hello));
+                    Check(hello["input1"] == "tvinput.hdmi1" && hello["name1"] == "PC" && hello["input2"] == "tvinput.hdmi2" &&
+                        hello["name2"] == "Game console" && hello["input4"] == "tvinput.cvbs" && hello["name4"] == "AV", "the inputs: " + Describe(hello));
+                    Thread.Sleep(400);   // a few looks
+                    Check(tv.App == "dev", "an ask the TV repeated from before was carried out: " + tv.App);
+                    string token = Last(Hellos(tv))["token"];
+
+                    // the app asks: the TV switches, and the app's console is left alone
+                    console.Say("TVFollow ask " + token + " tvinput.hdmi2");
+                    Until(tv, () => tv.App == "tvinput.hdmi2", "the switch to HDMI 2");
+                    Until(tv, () => LogText().Contains("the app asked for Game console (tvinput.hdmi2): switched"), "the log line for the switch");
+                    Until(tv, () => !tools.Tvs[0].ListeningForAsks && !tools.Tvs[0].Console.Connected, "letting go of the console");
+
+                    // back in the app: told again with a new token; the ask the TV repeats isn't carried out again
+                    console.Backlog = "TVFollow ask " + token + " tvinput.hdmi2\n";
+                    int hellos = Hellos(tv).Count;
+                    tv.App = "dev";
+                    Until(tv, () => Hellos(tv).Count > hellos, "the hello when the app came back");
+                    string token2 = Last(Hellos(tv))["token"];
+                    Check(token2.Length == 8 && token2 != token, "the token stayed the same: " + token2);
+                    Thread.Sleep(400);
+                    Check(tv.App == "dev", "the repeated ask was carried out again: " + tv.App);
+                    console.Say("TVFollow ask " + token + " tvinput.hdmi2");
+                    Thread.Sleep(400);
+                    Check(tv.App == "dev", "an ask with an old token was carried out");
+
+                    // the app's own hello line gets a hello
+                    hellos = Hellos(tv).Count;
+                    console.Say("TVFollow hello");
+                    Until(tv, () => Hellos(tv).Count > hellos, "the hello for the app's hello line");
+                    Check(Last(Hellos(tv))["token"] == token2, "a hello on the same connection changed the token");
+
+                    // only the TV's own inputs, and the app's words stay one line in the log
+                    console.Say("TVFollow ask " + token2 + " tvinput.hdmi9");
+                    Until(tv, () => LogText().Contains("\"tvinput.hdmi9\", an input this TV doesn't have"), "the log line for a missing input");
+                    console.Say("TVFollow ask " + token2 + " launch/12");
+                    Until(tv, () => LogText().Contains("\"launch/12\", which isn't an input"), "the log line for something that isn't an input");
+                    console.Say("TVFollow ask " + token2 + " tvinput.hdmi1" + (char)27 + "[2J");
+                    Until(tv, () => LogText().Contains("\"tvinput.hdmi1 [2J\""), "the log line for an ask with a control character");
+                    Check(LogText().IndexOf((char)27) < 0, "a control character got into the log");
+                    Check(tv.App == "dev" && tv.Count("POST /launch/12") == 0, "something that isn't an input was opened: " + tv.App);
+
+                    // a line can come in pieces
+                    console.Send("TVFollow ask " + token2 + " tvin");
+                    Thread.Sleep(200);
+                    Check(tv.App == "dev", "half a line was carried out");
+                    console.Say("put.hdmi3");
+                    Until(tv, () => tv.App == "tvinput.hdmi3", "the switch from a line in two pieces");
+
+                    // a moment without an answer from the TV isn't the app leaving: same connection, same token
+                    hellos = Hellos(tv).Count;
+                    tv.App = "dev";
+                    Until(tv, () => Hellos(tv).Count > hellos, "the hello after HDMI 3");
+                    string token3 = Last(Hellos(tv))["token"];
+                    int accepted = console.Accepted;
+                    tv.Down = true;
+                    Thread.Sleep(200);
+                    tv.Down = false;
+                    console.Say("TVFollow ask " + token3 + " tvinput.hdmi2");
+                    Until(tv, () => tv.App == "tvinput.hdmi2", "the switch after the TV missed a look");
+                    Check(console.Accepted == accepted, "the console was read anew after one missed look");
+
+                    // the app log window open too: the asks share its connection, the lines the
+                    // window already has don't count, and a switch leaves the window's connection be
+                    using (var window = new DevLogForm(tools.Tvs[0].Console, "Test TV"))
+                    {
+                        console.Backlog = "TVFollow ask " + token3 + " tvinput.hdmi1\n";
+                        OffScreen(window);
+                        window.Show();
+                        Pump(() => window.LogText.Contains("TVFollow ask " + token3), 10);
+                        accepted = console.Accepted;
+                        hellos = Hellos(tv).Count;
+                        tv.App = "dev";
+                        Until(tv, () => Hellos(tv).Count > hellos, "the hello with the app log open");
+                        string token4 = Last(Hellos(tv))["token"];
+                        Thread.Sleep(400);
+                        Check(tv.App == "dev" && token4 != token3, "an ask the window already had was carried out: " + tv.App);
+                        console.Say("TVFollow ask " + token4 + " tvinput.hdmi3");
+                        Until(tv, () => tv.App == "tvinput.hdmi3", "the switch with the app log open");
+                        Until(tv, () => !tools.Tvs[0].ListeningForAsks, "letting go after the switch");
+                        Check(tools.Tvs[0].Console.Connected && console.Accepted == accepted, "the window's connection went, or a second one was made");
+                        Pump(() => window.LogText.Contains("TVFollow ask " + token4), 10);
+                        window.Close();
+                    }
+                }
+                Check(Hellos(tv).Count > 0, "no hellos at all");
+            }
+        }
+
+        static void DevInputsOnlyWhenOn()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            using (var console = new FakeConsole("127.0.0.1", 0))
+            using (new InputTimings(console, 300))
+            {
+                tv.DeveloperEnabled = true;
+                tv.DevAppName = "Input app";
+                tv.App = "dev";
+                Settings s = SettingsFor(tv);
+                using (DevTools tools = DevToolsFor(s))
+                {
+                    // the developer tools off, then on without the option: nobody looks
+                    Thread.Sleep(300);
+                    s.DeveloperTools = true;
+                    tools.Refresh();
+                    Thread.Sleep(300);
+                    Check(!tools.Tvs[0].LookingForAsks && console.Accepted == 0 && Hellos(tv).Count == 0, "looked without the option");
+                    // ticked: the console is read and the app told; the developer tools off again: all stops
+                    Tv(s).DevInputs = true;
+                    tools.Refresh();
+                    Until(tv, () => Hellos(tv).Count >= 1, "the hello once ticked");
+                    s.DeveloperTools = false;
+                    tools.Refresh();
+                    Check(!tools.Tvs[0].LookingForAsks && !tools.Tvs[0].ListeningForAsks, "still at it with the developer tools off");
+                    Until(tv, () => !tools.Tvs[0].Console.Connected, "letting go of the console");
+                    Thread.Sleep(300);   // a look under way finishes
+                    int asked = tv.Requests().Count, connections = console.Accepted;
+                    Thread.Sleep(500);
+                    Check(tv.Requests().Count == asked && console.Accepted == connections, "kept asking the TV after the developer tools went off");
+                }
+
+                // another Roku at the TV's address: its console isn't read, and it isn't told anything
+                s.DeveloperTools = true;
+                tv.Serial = "SOMEONE-ELSE";
+                int hellos = Hellos(tv).Count, accepted = console.Accepted;
+                using (DevTools tools = DevToolsFor(s))
+                {
+                    Thread.Sleep(600);
+                    Check(Hellos(tv).Count == hellos && console.Accepted == accepted, "another Roku was read or told");
+                }
+                tv.Serial = Tv(s).Serial;
+
+                // this PC on another network (a laptop away from home): nothing goes to the TV's address
+                Controller away = Fast(FirstTv(s));
+                away.OnTvNetwork = () => false;
+                int looks = tv.Count("GET /query/active-app");
+                using (var tools = new DevTools(s, new List<Controller> { away }))
+                {
+                    Thread.Sleep(600);
+                    Check(tv.Count("GET /query/active-app") == looks && console.Accepted == accepted, "the TV was asked from another network");
+                }
+
+                // unticked while a look is talking to the TV: the look doesn't start reading the console
+                tv.DelayMs = 500;
+                looks = tv.Count("GET /query/active-app");
+                using (DevTools tools = DevToolsFor(s))
+                {
+                    Until(tv, () => tv.Count("GET /query/active-app") > looks, "the first look");
+                    Tv(s).DevInputs = false;
+                    tools.Refresh();
+                    Thread.Sleep(1500);
+                    Check(!tools.Tvs[0].ListeningForAsks && console.Accepted == accepted && Hellos(tv).Count == hellos,
+                        "a look that was under way when the option was unticked started reading the console");
+                }
+                tv.DelayMs = 0;
+                Tv(s).DevInputs = true;
+
+                // another program reads the console, and the TV is slow to hang up: said once, and
+                // no hello while it does
+                console.Busy = true;
+                console.BusyHangUpMs = 800;
+                using (DevTools tools = DevToolsFor(s))
+                {
+                    Until(tv, () => LogText().Contains("another program is reading the app's console"), "the log line for a busy console");
+                    Until(tv, () => console.Accepted >= accepted + 3, "trying the console again");
+                    string log = LogText();
+                    Check(log.IndexOf("another program is reading") == log.LastIndexOf("another program is reading"), "said more than once: " + log);
+                    Check(Hellos(tv).Count == hellos, "the app was told while its console was busy");
+                    // free again: the hello comes
+                    console.Busy = false;
+                    Until(tv, () => Hellos(tv).Count > hellos, "the hello once the console was free");
+                }
+
+                // Limited hides the TV's inputs: nothing to tell the app
+                tv.ControlMode = "limited";
+                hellos = Hellos(tv).Count;
+                using (DevTools tools = DevToolsFor(s))
+                {
+                    Until(tv, () => LogText().Contains("the TV won't list its inputs"), "the log line for inputs hidden by Limited");
+                    Check(Hellos(tv).Count == hellos, "the app was told about inputs the TV didn't list");
+                }
+            }
+        }
+
+        static Dictionary<string, string> Last(List<Dictionary<string, string>> hellos)
+        {
+            return hellos[hellos.Count - 1];
+        }
+
+        // the hellos TVFollow sent to the app on the pretend TV, each as its name=value pairs
+        static List<Dictionary<string, string>> Hellos(FakeTv tv)
+        {
+            var hellos = new List<Dictionary<string, string>>();
+            foreach (string request in tv.Requests())
+            {
+                if (!request.StartsWith("POST /input?")) continue;
+                var pairs = new Dictionary<string, string>();
+                foreach (string pair in request.Substring("POST /input?".Length).Split('&'))
+                {
+                    int eq = pair.IndexOf('=');
+                    if (eq > 0) pairs[Uri.UnescapeDataString(pair.Substring(0, eq))] = Uri.UnescapeDataString(pair.Substring(eq + 1));
+                }
+                string kind;
+                if (pairs.TryGetValue("tvfollow", out kind) && kind == "hello") hellos.Add(pairs);
+            }
+            return hellos;
+        }
+
+        static string Describe(Dictionary<string, string> pairs)
+        {
+            var parts = new List<string>();
+            foreach (KeyValuePair<string, string> p in pairs) parts.Add(p.Key + "=" + p.Value);
+            return string.Join(", ", parts);
+        }
+
+        // waits up to 10 s for done; if it doesn't come, says what didn't happen, with the log and
+        // the pretend TV's last requests
+        static void Until(FakeTv tv, Func<bool> done, string what)
+        {
+            try { Pump(done, 10); }
+            catch (TimeoutException)
+            {
+                List<string> asked = tv.Requests();
+                throw new Exception(what + " didn't come. The log: " + LogText().Replace("\r\n", " / ") +
+                    " The TV's last requests: " + string.Join(" | ", asked.GetRange(Math.Max(0, asked.Count - 8), Math.Min(8, asked.Count)).ToArray()));
             }
         }
 

@@ -1,31 +1,26 @@
 using System;
 using System.Drawing;
 using System.IO;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading;
 using System.Windows.Forms;
 
 namespace TVFollow
 {
     // The pushed app's console (port 8085 while developer mode is on): what the app prints, and
-    // the error and the line it stopped at when it crashes. Read only; it keeps reconnecting while
-    // the window is open.
+    // the error and the line it stopped at when it crashes. Read only, through the TV's one
+    // shared console connection, which keeps reconnecting while the window is open.
     class DevLogForm : Form
     {
         public const int MaxChars = 400000;  // older lines go once the log gets this long
 
-        public readonly string Ip;
+        public readonly DevConsole Console;
         readonly TextBox text;
         readonly Label state;
-        readonly object clientLock = new object();
-        TcpClient client;   // the open connection; closing it stops the reading
+        readonly ConsoleListener listener = new ConsoleListener();
         volatile bool closing;
-        int telnet;         // where a telnet command the console sends stands (they aren't text)
 
-        public DevLogForm(string ip, string label)
+        public DevLogForm(DevConsole console, string label)
         {
-            Ip = ip;
+            Console = console;
             SuspendLayout();
             Text = "App log · " + label;
             Font = SystemFonts.MessageBoxFont;
@@ -80,15 +75,14 @@ namespace TVFollow
             ResumeLayout(false);
             PerformLayout();
 
-            Shown += delegate
-            {
-                var reader = new Thread(Read) { IsBackground = true, Name = "app log" };
-                reader.Start();
-            };
+            listener.Connected = () => Status("Connected. What the app prints shows up here.");
+            listener.Text = chunk => Append(chunk.Replace("\r", "").Replace("\n", "\r\n"));
+            listener.Trouble = Status;
+            Shown += delegate { Console.Listen(listener); };
             FormClosing += delegate
             {
                 closing = true;
-                lock (clientLock) if (client != null) client.Close();
+                Console.Unlisten(listener);
             };
         }
 
@@ -99,85 +93,6 @@ namespace TVFollow
             var b = new Button { Text = label, AutoSize = true, MinimumSize = new Size(84, 30), UseVisualStyleBackColor = true, Margin = new Padding(8, 0, 0, 0) };
             b.Click += click;
             return b;
-        }
-
-        void Read()
-        {
-            Decoder decoder = Encoding.UTF8.GetDecoder();
-            var bytes = new byte[4096];
-            var kept = new byte[4096];
-            var chars = new char[Encoding.UTF8.GetMaxCharCount(kept.Length)];
-            while (!closing)
-            {
-                bool connected = false;
-                try
-                {
-                    TcpClient c = DevClient.OpenConsole(Ip, 3000);
-                    lock (clientLock)
-                    {
-                        if (closing) { c.Close(); return; }
-                        client = c;
-                    }
-                    connected = true;
-                    telnet = 0;
-                    Status("Connected. What the app prints shows up here.");
-                    NetworkStream stream = c.GetStream();
-                    int n;
-                    while (!closing && (n = stream.Read(bytes, 0, bytes.Length)) > 0)
-                    {
-                        int count = decoder.GetChars(kept, 0, Plain(bytes, n, kept), chars, 0);
-                        if (count > 0) Append(new string(chars, 0, count).Replace("\r", "").Replace("\n", "\r\n"));
-                    }
-                }
-                catch (Exception e)
-                {
-                    if (closing) return;
-                    if (!connected) Status("Can't reach the app log (" + Why(e) + "). It's there while developer mode is on. Trying again…");
-                }
-                finally
-                {
-                    lock (clientLock)
-                    {
-                        if (client != null) client.Close();
-                        client = null;
-                    }
-                }
-                if (connected && !closing) Status("The TV closed the app log. Trying again…");
-                for (int i = 0; i < 30 && !closing; i++) Thread.Sleep(100);
-            }
-        }
-
-        // The text, without the telnet commands a console can send: IAC (255), then a command, an
-        // option after WILL, WONT, DO and DONT (251-254), and after SB (250) everything up to IAC
-        // SE (255 240). IAC IAC is a 255 in the text.
-        int Plain(byte[] input, int n, byte[] output)
-        {
-            int k = 0;
-            for (int i = 0; i < n; i++)
-            {
-                byte b = input[i];
-                switch (telnet)
-                {
-                    case 1:
-                        if (b == 255) { output[k++] = b; telnet = 0; }
-                        else telnet = b == 250 ? 3 : b >= 251 && b <= 254 ? 2 : 0;
-                        continue;
-                    case 2: telnet = 0; continue;
-                    case 3: if (b == 255) telnet = 4; continue;
-                    case 4: telnet = b == 240 ? 0 : 3; continue;
-                }
-                if (b == 255) { telnet = 1; continue; }
-                output[k++] = b;
-            }
-            return k;
-        }
-
-        static string Why(Exception e)
-        {
-            var socket = e as SocketException;
-            if (socket != null && socket.SocketErrorCode == SocketError.ConnectionRefused) return "the TV refused";
-            if (e is TimeoutException) return "no answer";
-            return e.Message.TrimEnd('.');
         }
 
         void Status(string words)
