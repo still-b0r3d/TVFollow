@@ -31,6 +31,8 @@ namespace TVFollow.Tests
             Run("dev: the app log shows the TV's console", DevAppLog);
             Run("dev: the developer window shows the TV's state", DevWindow);
             Run("dev: Settings shows the developer tools only when switched on", DevSettingsSwitch);
+            Run("dev: removing TVFollow's settings takes the pushed apps' copies too", DevUninstallRemovesCopies);
+            DevClient.InstallerPort = 80;   // as it was, for whatever runs after
         }
 
         // a pretend TV in developer mode with its installer, and settings that know the password.
@@ -664,8 +666,10 @@ namespace TVFollow.Tests
                 tv.DevAppVersion = "1.0.1";
                 Settings s = DevSettings(tv, installer);
                 DevTools tools = DevToolsFor(s);
-                int pollBefore = DevForm.PollMs;
+                int pollBefore = DevForm.PollMs, settleBefore = DevTv.SettleMs;
                 DevForm.PollMs = 200;
+                DevTv.SettleMs = 300;
+                string parent = TempFolder("Window apps");
                 try
                 {
                     using (var window = new DevForm(tools, tools.Tvs[0]))
@@ -680,6 +684,31 @@ namespace TVFollow.Tests
                         Check(box != null && box.Text == installer.Password, "the password box doesn't have the saved password");
                         box.Text = "another-pass";
                         Check(Tv(s).DevPassword == "another-pass" && Tv(Settings.Load()).DevPassword == "another-pass", "a typed password wasn't saved");
+                        box.Text = installer.Password;
+
+                        // a folder around the app: the app's own folder is pushed, and remembered
+                        WriteFile(parent, "inner/manifest", "title=Inner app\nmajor_version=1\nminor_version=0\nbuild_version=1\n");
+                        WriteFile(parent, "inner/source/main.brs", "sub Main()\nend sub\n");
+                        string inner = Path.Combine(parent, "inner");
+                        window.PushApp(() => DevPackage.FromFolder(parent), null);
+                        Pump(() => AllText(window).Contains("Pushed Inner app 1.0.1"), 10);
+                        Check(Tv(s).DevFolder == inner && tv.DevAppName == "Inner app", "the folder pushed: " + Tv(s).DevFolder);
+                        // pushing on save, ticked in the window; a save's push shows in the window
+                        FindBox(window, "Push the app's folder again").Checked = true;
+                        Check(Tv(s).DevOnSave && tools.Tvs[0].Watching, "not watching after ticking the option");
+                        WriteFile(parent, "inner/manifest", "title=Inner app\nmajor_version=1\nminor_version=0\nbuild_version=2\n");
+                        Pump(() => AllText(window).Contains("Pushed Inner app 1.0.2"), 15);
+                        // the example: the folder is forgotten, and so is watching it
+                        window.PushApp(() => DevPackage.Example(), "");
+                        Pump(() => AllText(window).Contains("Pushed TVFollow example 1.0.1"), 10);
+                        Check(Tv(s).DevFolder == "" && !tools.Tvs[0].Watching, "the example's push kept the folder: " + Tv(s).DevFolder);
+                        // a folder push that fails (no password yet) still remembers the folder
+                        Tv(s).DevOnSave = false;
+                        box.Text = "";
+                        window.PushApp(() => DevPackage.FromFolder(inner), null);
+                        Pump(() => AllText(window).Contains("Type the password"), 10);
+                        Check(Tv(s).DevFolder == inner, "a failed push forgot the folder");
+                        box.Text = installer.Password;
 
                         tv.DeveloperEnabled = false;
                         Pump(() => AllText(window).Contains("Developer mode is off.") && AllText(window).Contains("Press Home 3 times"), 10);
@@ -690,10 +719,28 @@ namespace TVFollow.Tests
                 finally
                 {
                     DevForm.PollMs = pollBefore;
+                    DevTv.SettleMs = settleBefore;
                     tools.Dispose();
                     File.Delete(Settings.FilePath);
+                    Directory.Delete(Path.GetDirectoryName(parent), true);
                 }
             }
+        }
+
+        static void DevUninstallRemovesCopies()
+        {
+            string dir = TempFolder("TVFollow data");
+            try
+            {
+                File.WriteAllText(Path.Combine(dir, "settings.ini"), "ip=192.168.1.50\r\n");
+                WriteFile(dir, "dev/X000000001.zip", "a kept app");
+                WriteFile(dir, "dev/X000000002.zip.tmp", "half a kept app");
+                Installer.RemoveSettings(dir);
+                // a portable copy's folder left behind would make that copy start portable again
+                Check(!Directory.Exists(dir), "the settings folder stayed: " +
+                    (Directory.Exists(dir) ? string.Join(", ", Directory.GetFileSystemEntries(dir, "*", SearchOption.AllDirectories)) : ""));
+            }
+            finally { Directory.Delete(Path.GetDirectoryName(dir), true); }
         }
 
         static void DevSettingsSwitch()
@@ -712,12 +759,16 @@ namespace TVFollow.Tests
                         window.StartPosition = FormStartPosition.Manual;
                         window.Location = new Point(-20000, -20000);
                         window.Show();
+                        // as it opens for real: centred. From here on the window stays where it is.
+                        window.StartPosition = FormStartPosition.CenterScreen;
+                        Point where = window.Location;
                         Check(!AllText(window).Contains("Developer tools…"), "the developer tools' button shows while they're off");
                         CheckBox box = FindBox(window, "Show the developer tools");
                         Check(box != null && !box.Checked, "no switch for the developer tools");
                         box.Checked = true;
                         Check(s.DeveloperTools && Settings.Load().DeveloperTools, "switching them on wasn't saved");
                         Check(AllText(window).Contains("Developer tools…"), "the button didn't show");
+                        Check(window.Location == where, "the window moved to " + window.Location + " when the switch changed");
                         box.Checked = false;
                         Check(!s.DeveloperTools && !AllText(window).Contains("Developer tools…"), "switching them off");
                         window.Close();

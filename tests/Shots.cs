@@ -299,8 +299,7 @@ namespace TVFollow.Tests
                         Save(window, folder, "16-developer-tools");
                         // and before developer mode is on: the steps
                         tv.DeveloperEnabled = false;
-                        DateTime until = DateTime.UtcNow.AddMilliseconds(DevForm.PollMs + 1500);
-                        WaitFor(() => Text(window).Contains("Developer mode is off.") || DateTime.UtcNow > until);
+                        WaitFor(() => Text(window).Contains("Developer mode is off."));
                         Save(window, folder, "17-developer-mode-off");
                         window.Close();
                     }
