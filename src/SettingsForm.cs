@@ -186,11 +186,12 @@ namespace TVFollow
         Control Footer()
         {
             var footer = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = Color.FromArgb(243, 243, 243) };
+            // two lines, like setup's: the version with its build and the links don't fit on one
             var about = new LinkLabel
             {
                 AutoSize = true,
-                Location = new Point(20, 18),
-                Text = "TVFollow " + Program.FullVersion + "  ·  Help  ·  Open log  ·  made by " + SetupForm.Maker,
+                Location = new Point(20, 10),
+                Text = "TVFollow " + Program.FullVersion + "\r\nHelp  ·  Open log  ·  made by " + SetupForm.Maker,
                 LinkColor = SetupPage.Muted,
                 ActiveLinkColor = SystemColors.HotTrack,
                 LinkBehavior = LinkBehavior.HoverUnderline

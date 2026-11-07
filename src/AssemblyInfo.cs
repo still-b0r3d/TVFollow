@@ -5,11 +5,11 @@ using System.Reflection;
 [assembly: AssemblyCompany("b0r3d.org")]
 [assembly: AssemblyProduct("TVFollow")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 still b0r3d. MIT License with the Commons Clause: free, not for sale.")]
-[assembly: AssemblyVersion("1.2.1.0")]
-[assembly: AssemblyFileVersion("1.2.1.0")]
-// the exe's "Product version": the version and the commit it was built from (Program.FullVersion);
-// GitHub's build writes the commit in place of dev
-[assembly: AssemblyInformationalVersion("1.2.1+dev")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
+// the exe's "Product version": the version and the commit it was built from, like "1.3 build
+// abc1234" (one line of plain text there); GitHub's build writes the commit in place of dev
+[assembly: AssemblyInformationalVersion("1.3 build dev")]
 
 // the compiler that comes with Windows leaves this out, and without it .NET runs the exe in its
 // .NET 4.0 compatibility mode: web addresses get "cleaned up" (a typed . / or \ never reached the

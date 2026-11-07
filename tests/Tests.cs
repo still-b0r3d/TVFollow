@@ -705,11 +705,14 @@ namespace TVFollow.Tests
         {
             var attr = (AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(
                 typeof(Program).Assembly, typeof(AssemblyInformationalVersionAttribute));
-            Check(attr != null && attr.InformationalVersion == Program.FullVersion,
-                "AssemblyInfo.cs says " + (attr == null ? "nothing" : attr.InformationalVersion) + ", Program.FullVersion says " + Program.FullVersion);
+            Check(attr != null && attr.InformationalVersion == Program.Version + " build " + Program.Build,
+                "AssemblyInfo.cs says " + (attr == null ? "nothing" : attr.InformationalVersion) + ", Program says " + Program.Version + " build " + Program.Build);
             // dev here; GitHub's build writes in the commit
             Check(System.Text.RegularExpressions.Regex.IsMatch(Program.Build, "^(dev|[0-9a-f]{7})$"),
                 "the build should be dev or a commit: " + Program.Build);
+            // a version and a build number, shown apart: never "1.3+abc1234" (the owner's rule)
+            Check(Program.FullVersion == "v" + Program.Version + " · Build: " + Program.Build, "the version line reads " + Program.FullVersion);
+            Check(!Program.FullVersion.Contains("+") && !attr.InformationalVersion.Contains("+"), "a + is back in the version: " + Program.FullVersion);
         }
 
         // the version line at the bottom of the setup and Settings windows ends before their buttons
@@ -740,7 +743,7 @@ namespace TVFollow.Tests
 
         static void CheckFits(Form form, Button button)
         {
-            LinkLabel line = FindControl<LinkLabel>(form, l => l.Text.StartsWith("TVFollow " + Program.FullVersion + " "));
+            LinkLabel line = FindControl<LinkLabel>(form, l => l.Text.StartsWith("TVFollow " + Program.FullVersion));
             Check(line != null && button != null, form.Text + ": no version line or button");
             int end = line.RectangleToScreen(line.ClientRectangle).Right, start = button.RectangleToScreen(button.ClientRectangle).Left;
             Check(end < start, form.Text + ": the version line ends at " + end + ", the button starts at " + start);

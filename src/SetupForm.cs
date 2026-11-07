@@ -171,11 +171,12 @@ namespace TVFollow
             back.Click += delegate { GoBack(); };
             CancelButton = cancel;
 
+            // two lines: the version with its build doesn't fit beside the three buttons on one
             var about = new LinkLabel
             {
                 AutoSize = true,
-                Location = new Point(24, 20),
-                Text = "TVFollow " + Program.FullVersion + "  ·  Help  ·  made by " + Maker,
+                Location = new Point(24, 12),
+                Text = "TVFollow " + Program.FullVersion + "\r\nHelp  ·  made by " + Maker,
                 LinkColor = SetupPage.Muted,
                 ActiveLinkColor = SystemColors.HotTrack,
                 LinkBehavior = LinkBehavior.HoverUnderline

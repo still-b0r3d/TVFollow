@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3 (not released yet)
+
+- The version and the build are shown apart: `TVFollow v1.3 · Build: abc1234` at the bottom
+  of the setup and Settings windows (on two lines there now), in the log and in
+  `TVFollow.exe --version`. The exe's **Product version** says `1.3 build abc1234`.
+
 ## 1.2.1 (2026-10-31)
 
 A fix for the TV staying off when you come back.

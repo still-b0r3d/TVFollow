@@ -2,7 +2,8 @@ name: build
 
 on:
   push:
-    branches: [main]
+    # version-1.3 and the like: a version being built, tested before it's released
+    branches: [main, 'version-*']
     tags: ['v*']
   pull_request:
 
@@ -19,7 +20,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # the exe says which commit it was built from, "1.2+abc1234"; the repo's copy says "dev"
+      # the exe says which commit it was built from, "v1.3 · Build: abc1234" and Product version
+      # "1.3 build abc1234"; the repo's copy says "dev"
       - name: Stamp the commit
         shell: pwsh
         run: |
@@ -32,7 +34,7 @@ jobs:
             [IO.File]::WriteAllText($path, $text.Replace($placeholder, $placeholder.Replace('dev', $commit)))
           }
           Stamp src\Program.cs 'Build = "dev"'
-          Stamp src\AssemblyInfo.cs '+dev"'
+          Stamp src\AssemblyInfo.cs ' build dev"'
           "stamped $commit"
 
       - name: Build and test
@@ -68,13 +70,13 @@ jobs:
           name: TVFollow
           path: bin
 
-      # the exe's "1.2+abc1234": 1.2 must be the tag, abc1234 this commit
+      # the exe's Product version "1.3 build abc1234": 1.3 must be the tag, abc1234 this commit
       - name: The tag must match the exe's version
         shell: pwsh
         run: |
           $tag = $env:GITHUB_REF_NAME.TrimStart('v')
           $exe = (Get-Item bin\TVFollow.exe).VersionInfo.ProductVersion
-          $version, $build = $exe.Split('+')
+          $version, $build = $exe -split ' build '
           if ($tag -ne $version) { Write-Error "Tag $env:GITHUB_REF_NAME doesn't match TVFollow.exe's version $exe"; exit 1 }
           if ($build -ne $env:GITHUB_SHA.Substring(0, 7)) { Write-Error "TVFollow.exe ($exe) isn't stamped with this commit, $env:GITHUB_SHA"; exit 1 }
           "tag and exe agree: $exe"
