@@ -106,7 +106,7 @@ namespace TVFollow
             FormClosed += delegate { tray.PausedChanged -= SyncPause; };
             Load += delegate
             {
-                FitTvs();
+                FitTvs(true);
                 foreach (TvLines tv in tvs) LoadTv(tv);
             };
         }
@@ -129,14 +129,15 @@ namespace TVFollow
         }
 
         // The window grows to show everything (several TVs, the developer tools' button), as far as
-        // the screen allows; what doesn't fit scrolls.
-        void FitTvs()
+        // the screen allows; what doesn't fit scrolls. center: when it opens (later, a window the
+        // user moved stays where it is).
+        void FitTvs(bool center)
         {
             int footer = ClientSize.Height - body.Height;
             int wanted = body.GetPreferredSize(new Size(body.ClientSize.Width, 0)).Height + footer;
             int most = Screen.FromControl(this).WorkingArea.Height - (Height - ClientSize.Height) - 20;
             ClientSize = new Size(ClientSize.Width, Math.Max(ClientSize.Height, Math.Min(wanted, most)));
-            if (StartPosition == FormStartPosition.CenterScreen) CenterToScreen();
+            if (center && StartPosition == FormStartPosition.CenterScreen) CenterToScreen();
         }
 
         void Heading(string text)
@@ -364,7 +365,7 @@ namespace TVFollow
             Log.Write(developer.Checked ? "settings: developer tools on" : "settings: developer tools off");
             Save();
             developerRow.Visible = developer.Checked;
-            FitTvs();
+            FitTvs(false);
             tray.DeveloperToolsChanged();
         }
 

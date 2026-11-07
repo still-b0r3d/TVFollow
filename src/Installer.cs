@@ -191,6 +191,15 @@ namespace TVFollow
         {
             foreach (string name in new[] { "settings.ini", "settings.ini.tmp", "updates.ini", "TVFollow.log", "TVFollow.log.old" })
                 DeleteFile(Path.Combine(dir, name));
+            // the developer tools' copies of pushed apps (left behind, they'd keep the folder, and a
+            // portable copy's folder would make it start portable again)
+            string dev = Path.Combine(dir, "dev");
+            if (Directory.Exists(dev))
+            {
+                foreach (string kept in Directory.GetFiles(dev, "*.zip")) DeleteFile(kept);
+                foreach (string temp in Directory.GetFiles(dev, "*.zip.tmp")) DeleteFile(temp);
+                DeleteEmptyDir(dev, null);
+            }
             DeleteEmptyDir(dir, null);
         }
 

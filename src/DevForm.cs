@@ -12,7 +12,7 @@ namespace TVFollow
     class DevForm : Form
     {
         const string Steps =
-            "To turn it on, use the TV's own remote. The TV ignores this code when it comes over the network, " +
+            "To turn it on, use the TV's own remote. The TV ignores the code below when TVFollow sends it, " +
             "so TVFollow's remote can't do it.\r\n" +
             "    1.  Press Home 3 times, Up 2 times, then Right, Left, Right, Left, Right.\r\n" +
             "    2.  On the Developer settings screen, choose Enable installer and restart, agree to Roku's " +
@@ -251,7 +251,7 @@ namespace TVFollow
             string folder = tv.Tv.DevFolder;
             onSave.Enabled = folder.Length > 0;
             folderLine.Text = folder.Length == 0
-                ? "Push a folder first: this works on the folder pushed last."
+                ? "Push a folder first. This works on the folder you pushed last."
                 : (tv.Tv.DevOnSave && tv.Watching ? "Watching " : "The folder: ") + folder;
         }
 
@@ -263,7 +263,9 @@ namespace TVFollow
             DevTv on = tv;
             DevStatus s = await Task.Run(() => on.Status(2500));
             asking = false;
-            if (IsDisposed || on != tv) return;
+            if (IsDisposed) return;
+            // the window moved to another TV meanwhile: ask about that one
+            if (on != tv) { Ask(); return; }
             last = s;
             ShowStatus(s);
         }
@@ -279,7 +281,7 @@ namespace TVFollow
             if (!s.Answering) appState.Text = "";
             else if (!s.DevMode) appState.Text = "Apps can be pushed once developer mode is on.";
             else if (!s.AppKnown) appState.Text = "The TV won't say which app is on it" + (s.Limited ? " while Network access is on Limited." : " right now.");
-            else appState.Text = s.App == null ? "No app on the TV yet." : "On the TV now: " + s.App;
+            else appState.Text = s.App == null ? "No pushed app on the TV." : "On the TV now: " + s.App;
             ShowFolder();
             UpdateButtons();
         }
@@ -441,6 +443,7 @@ namespace TVFollow
             Set(result, null, "Asking the TV for a picture…");
             result.ForeColor = SetupPage.Muted;
             DevTv on = tv;
+            string appName = last != null && last.App != null ? last.App.Name : "";
             byte[] picture = null;
             string extension = "";
             DevReport r = await Task.Run(() =>
@@ -455,8 +458,9 @@ namespace TVFollow
             busy = false;
             if (IsDisposed) return;
             UpdateButtons();
+            if (on != tv) return;   // the window moved to another TV meanwhile
             if (!r.Ok) { Show(result, r); return; }
-            string name = FileSafe(last != null && last.App != null ? last.App.Name : "") + " " + DateTime.Now.ToString("yyyy-MM-dd HH.mm.ss") + "." + extension;
+            string name = FileSafe(appName) + " " + DateTime.Now.ToString("yyyy-MM-dd HH.mm.ss") + "." + extension;
             using (var dialog = new SaveFileDialog
             {
                 Title = "Save the picture",

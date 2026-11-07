@@ -1,6 +1,7 @@
 # TVFollow example: a small Roku app to try pushing apps from TVFollow, and a place to
 # start your own. Change what you like, then use "Push a folder..." in TVFollow's
-# developer tools on this folder. Raise build_version each time you change it.
+# developer tools on this folder. Raise build_version when you want the TV to show
+# a new version number.
 title=TVFollow example
 major_version=1
 minor_version=0

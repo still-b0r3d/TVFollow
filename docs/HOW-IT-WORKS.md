@@ -117,36 +117,51 @@ delete that file to make it check again at the next start.
 Shown only once **Show the developer tools** is ticked in Settings; nothing below runs while
 it isn't.
 
-- **Developer mode** is read from `query/device-info`'s `developer-enabled`. It can't be
-  switched on from the network: the TV ignores the remote code (Home ×3, Up ×2, Right,
-  Left, Right, Left, Right) when it comes as ECP key presses, so the window gives the steps
-  for the TV's own remote and checks every few seconds.
+- **Developer mode** is read from `query/device-info`'s `developer-enabled`. TVFollow can't
+  switch it on: the TV ignored the remote code (Home ×3, Up ×2, Right, Left, Right, Left,
+  Right) when TVFollow sent it as ECP key presses, so the window gives the steps for the
+  TV's own remote and checks every few seconds.
 - **The installer** is the TV's developer web page on port 80, user `rokudev`, behind the
   password chosen on the TV. TVFollow answers its HTTP digest challenge only, never Basic,
   so the password itself never crosses the network. Before anything goes there, TVFollow
-  checks over ECP that the TV at that address has your TV's serial number and is in
-  developer mode, so nothing else at the address gets a try at the password.
+  checks over ECP that the device at that address has your TV's serial number and is in
+  developer mode, so another Roku that got your TV's address isn't asked. (A serial number
+  isn't a secret, so this doesn't stop someone set on faking your TV; a longer password
+  makes a guess harder.) **Check** asks for `plugin_install` with HEAD: 200 means the
+  password is right, 401 that it's wrong.
 - **Pushing** posts the app to `plugin_install` the way the page's own form does
-  (`mysubmit=Replace`, the zip as `archive`). TVFollow makes the zip itself: the manifest
-  at the top, forward slashes, the files in name order with their own times, junk left
-  out, so the same files always make the same zip. The TV says how it went in its page's
-  script (`Roku.Message` calls on older Roku OS, `JSON.parse` on newer), and the TV's own
-  words go in the window. "Identical to previous version" means the TV kept the app it
-  had, so TVFollow opens it with `launch/dev`. The app on the TV is read from
+  (`mysubmit=Replace`, the zip as `archive`); if the TV refuses that for a reason other
+  than the app's code, TVFollow tries once more with `mysubmit=Install`, as Roku's own
+  tools do. TVFollow makes the zip itself: the manifest at the top, forward slashes, the
+  files in name order with their own times, junk left out, so the same files always make
+  the same zip. Only an answer of 200 counts. The page says how it went in its script
+  (`Roku.Message` calls on older Roku OS, `JSON.parse` on newer); when the TV refuses an
+  app, its own words go in the window (control characters dropped, 300 characters at
+  most). "Identical to previous version" means the TV kept the app it had, so TVFollow
+  opens it with `launch/dev`. An answer of 577 (or "Failed to check for software update")
+  means the TV wants to look for a Roku update first. The app on the TV is read from
   `query/apps` (its id is `dev`).
 - **Remove** is `plugin_install` with `mysubmit=Delete`; **Screenshot** is
   `plugin_inspect` with `mysubmit=Screenshot`, then the picture the page links
   (`pkgs/dev.jpg` or `.png`).
-- **Putting an app back:** each push keeps a copy in `dev\<serial>.zip` in the settings
-  folder. When the monitors go off and TVFollow is about to turn off a TV that's showing
-  the PC, it first checks the TV still lists its `dev` app. If not, and developer mode is
-  on, the copy goes back on, then the TV turns off. A button's **TV off** never does this.
-  **Remove** deletes the copy.
+- **Putting an app back:** each successful push keeps a copy in `dev\<serial>.zip` in the
+  settings folder. When the monitors go off and TVFollow is about to turn off a TV that's
+  showing the PC, it first checks the TV still lists its `dev` app. If not, and developer
+  mode is on, the copy goes back on, then the TV turns off. A button's **TV off**, sleep
+  and shutdown never do this, and a TV on Limited, which hides its list of apps, is
+  skipped. If developer mode went off, or the copy couldn't go back (a new password, say),
+  a notification says so, once each time. **Remove** deletes the copy.
 - **Pushing on save** watches the folder pushed last, sub-folders too, and pushes 1.5
   seconds after the last change. Changes to skipped files (`.git`, editors' temporary
   files) don't count, and a zip that's the same as the one the TV took last isn't sent.
+  Only folders on this PC's own drives are watched, not network paths (`\\server\...`).
 - **The app log** is the TV's app console on port 8085, plain text over TCP (telnet
-  commands are dropped). It needs no password, and the window reconnects while it's open.
+  commands are dropped, and keep-alive notices a TV that went away). It needs no password,
+  and the window reconnects while it's open. It shows what the app prints while the window
+  is open, so open it before pushing or opening the app.
+- **Zips and folders** are read with limits: 200 MB and 20,000 files and folders in all,
+  and a folder at most 32 levels deep, so a link that loops back up stops quickly. Paths
+  in a zip that point outside it (`..`, `C:`, a leading `/`) are left out.
 
 ## Files and settings
 
@@ -192,9 +207,9 @@ remote_layout=classic
 | `check_updates` | Ask GitHub once a week whether there's a newer TVFollow |
 | `remote_layout` | `classic` (the default), `compact` or `strip` |
 | `paused` | Only there while paused from the tray (`paused=yes`) |
-| `developer_tools` | Only there once the developer tools are switched on (`developer_tools=yes`) |
-| `dev_password` | The developer mode password, encrypted for your Windows account (`dpapi:` and Windows' own encryption). Copied to another PC or account, it can't be read, and the developer tools ask for it again |
-| `dev_folder` | The app's folder pushed last |
+| `developer_tools` | Only there while the developer tools are switched on (`developer_tools=yes`) |
+| `dev_password` | The developer mode password, encrypted for your Windows account (`dpapi:` and Windows' own encryption). Copied to another PC or account, it can't be read, and the password box is empty again |
+| `dev_folder` | The app's folder pushed last (empty after pushing a zip or the example) |
 | `dev_push_back`, `dev_on_save` | The developer tools' two options (`dev_push_back=no` and `dev_on_save=yes` are only written when set that way) |
 
 **Several TVs:** the first TV uses the keys above, the way TVFollow 1.1 wrote them, so an

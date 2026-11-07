@@ -147,16 +147,25 @@ namespace TVFollow
             }
         }
 
-        // the text, without the telnet commands a console can send (IAC = 255, then a command,
-        // and for WILL, WONT, DO and DONT an option)
+        // The text, without the telnet commands a console can send: IAC (255), then a command, an
+        // option after WILL, WONT, DO and DONT (251-254), and after SB (250) everything up to IAC
+        // SE (255 240). IAC IAC is a 255 in the text.
         int Plain(byte[] input, int n, byte[] output)
         {
             int k = 0;
             for (int i = 0; i < n; i++)
             {
                 byte b = input[i];
-                if (telnet == 1) { telnet = b >= 251 && b <= 254 ? 2 : 0; if (b == 255) output[k++] = b; continue; }
-                if (telnet == 2) { telnet = 0; continue; }
+                switch (telnet)
+                {
+                    case 1:
+                        if (b == 255) { output[k++] = b; telnet = 0; }
+                        else telnet = b == 250 ? 3 : b >= 251 && b <= 254 ? 2 : 0;
+                        continue;
+                    case 2: telnet = 0; continue;
+                    case 3: if (b == 255) telnet = 4; continue;
+                    case 4: telnet = b == 240 ? 0 : 3; continue;
+                }
                 if (b == 255) { telnet = 1; continue; }
                 output[k++] = b;
             }

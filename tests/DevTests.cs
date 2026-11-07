@@ -193,6 +193,11 @@ namespace TVFollow.Tests
                 Check(p.Root == Path.GetFullPath(app).TrimEnd('\\') && p.Note == "", "root " + p.Root + ", note " + p.Note);
                 Check(Convert.ToBase64String(DevPackage.FromFolder(app).Zip) == Convert.ToBase64String(p.Zip), "the same files made a different zip");
                 Check(DevPackage.Skipped("source\\x.swp") && DevPackage.Skipped("__MACOSX/a") && !DevPackage.Skipped("images/a.png"), "what's left out");
+
+                // a manifest saved with a byte-order mark (Notepad does that) still has its title read
+                File.WriteAllText(Path.Combine(app, "manifest"), "title=Marked\nmajor_version=1\nminor_version=2\n", new System.Text.UTF8Encoding(true));
+                p = DevPackage.FromFolder(app);
+                Check(p.Title == "Marked" && p.Version == "1.2", "with a byte-order mark the manifest read as " + p);
             }
             finally { Directory.Delete(Path.GetDirectoryName(app), true); }
         }
@@ -227,6 +232,26 @@ namespace TVFollow.Tests
                 Check(string.Join(",", Entries(z.Zip)) == "manifest,source/main.brs", "zip, the new zip has: " + string.Join(",", Entries(z.Zip)));
                 File.WriteAllText(zipPath, "not a zip");
                 CheckThrows(() => DevPackage.FromZip(zipPath), "isn't a zip");
+
+                // what entries really unpack to counts toward the limit, not the sizes they claim
+                long maxBefore = DevPackage.MaxBytes;
+                DevPackage.MaxBytes = 2500;
+                try
+                {
+                    File.Delete(zipPath);
+                    using (FileStream fs = File.Create(zipPath))
+                    using (var archive = new ZipArchive(fs, ZipArchiveMode.Create))
+                    {
+                        AddEntry(archive, "manifest", "title=Big\n" + new string('#', 1000));
+                        AddEntry(archive, "source/a.brs", new string('a', 1000));
+                        AddEntry(archive, "source/b.brs", new string('b', 1000));
+                    }
+                    CheckThrows(() => DevPackage.FromZip(zipPath), "far too big");
+                    Directory.Delete(Path.Combine(parent, "other"), true);
+                    WriteFile(parent, "myapp/source/c.brs", new string('c', 3000));
+                    CheckThrows(() => DevPackage.FromFolder(parent), "far too big");
+                }
+                finally { DevPackage.MaxBytes = maxBefore; }
             }
             finally { Directory.Delete(Path.GetDirectoryName(parent), true); }
         }
@@ -282,7 +307,7 @@ namespace TVFollow.Tests
             DevResult r = DevClient.Judge("<script>Shell.create('Roku.Message').trigger('Set message type', 'success').trigger('Set message content', 'Install Success.').trigger('Render', node);</script>");
             Check(r.Outcome == DevOutcome.Done && r.Message == "Install Success.", "older success: " + r.Outcome + " " + r.Message);
             r = DevClient.Judge("Shell.create('Roku.Message').trigger('Set message type', 'error').trigger('Set message content', 'Install Failure: Compilation Failed.')");
-            Check(r.Outcome == DevOutcome.Refused && r.Message == "Install Failure: Compilation Failed." && r.Problem.Contains("app log"), "older error: " + r.Message + " / " + r.Problem);
+            Check(r.Outcome == DevOutcome.Refused && r.Message == "Install Failure: Compilation Failed." && r.Problem.Contains("App log"), "older error: " + r.Message + " / " + r.Problem);
             r = DevClient.Judge("var params = JSON.parse('{\"messages\":[{\"text\":\"Install Success.\",\"text_type\":\"text\",\"type\":\"success\"}],\"metadata\":{}}');");
             Check(r.Outcome == DevOutcome.Done && r.Message == "Install Success.", "newer success: " + r.Outcome + " " + r.Message);
             r = DevClient.Judge("JSON.parse('{\"messages\":[{\"text\":\"Can\\'t do \\\\\"that\\\\\"\",\"text_type\":\"text\",\"type\":\"error\"}]}');");
@@ -292,6 +317,12 @@ namespace TVFollow.Tests
             r = DevClient.Judge("<font color=\"red\">Install Failure: No manifest. Invalid package.</font>");
             Check(r.Outcome == DevOutcome.Refused && r.Message.StartsWith("Install Failure: No manifest"), "plain older failure: " + r.Message);
             Check(DevClient.Judge("<html>something else</html>").Outcome == DevOutcome.Done, "a page with nothing to say");
+            r = DevClient.Judge("Shell.create('Roku.Message').trigger('Set message type', 'error').trigger('Set message content', 'Failed to check for software update')");
+            Check(r.Outcome == DevOutcome.UpdateCheck && r.Problem.Contains("System update"), "update check: " + r.Outcome);
+            // the TV's words go in the log and the window: one line, not too long
+            r = DevClient.Judge("Shell.create('Roku.Message').trigger('Set message type', 'error').trigger('Set message content', 'Bad\\nfake log line " + new string('x', 1000) + "')");
+            Check(r.Outcome == DevOutcome.Refused && r.Message.IndexOf('\n') < 0 && r.Message.StartsWith("Bad fake log line") && r.Message.Length <= DevResult.MaxWords + 1,
+                "a long message with a line break: " + r.Message.Length + " characters");
         }
 
         // ---- talking to the TV ----
@@ -345,11 +376,40 @@ namespace TVFollow.Tests
                 Tv(s).DevPassword = installer.Password;
                 Check(dev.CheckPassword().Ok, "the check refused the right password");
 
+                // the app's own code: no second try, and the app log is the place to look
                 installer.Refuse = "Install Failure: Compilation Failed.";
                 installer.JsonMessages = true;
+                int submits = installer.Submits;
                 r = dev.Push(app, "pushed");
-                Check(!r.Ok && r.Text.Contains("Compilation Failed") && r.Text.Contains("app log") && !dev.HasKept, "refused: " + r.Text);
+                Check(!r.Ok && r.Text.Contains("Compilation Failed") && r.Text.Contains("App log") && !dev.HasKept && installer.Submits == submits + 1,
+                    "refused: " + r.Text + " (" + (installer.Submits - submits) + " tries)");
                 installer.Refuse = null;
+
+                // Replace turned away for another reason: once more as Install, like Roku's tools
+                installer.RefuseReplace = true;
+                r = dev.Push(app, "pushed");
+                Check(r.Ok && tv.Requests().Contains("INSTALLER Install") && tv.DevAppName == "TVFollow example", "Install after a refused Replace: " + r.Text);
+                installer.RefuseReplace = false;
+
+                // a TV that wants an update check first, said either way
+                installer.UpdateCheckPage = true;
+                r = dev.Push(app, "pushed");
+                Check(!r.Ok && r.Text.Contains("System update"), "update check page: " + r.Text);
+                installer.UpdateCheckPage = false;
+                installer.ForceStatus = 577;
+                r = dev.Push(app, "pushed");
+                Check(!r.Ok && r.Text.Contains("System update"), "577: " + r.Text);
+                // only a plain 200 is the installer's page: a redirect isn't "pushed"
+                installer.ForceStatus = 302;
+                r = dev.Push(app, "pushed");
+                Check(!r.Ok && r.Text.Contains("doesn't know"), "a redirect counted: " + r.Text);
+                Check(!dev.CheckPassword().Ok, "a redirect passed the password check");
+                installer.ForceStatus = 0;
+
+                // offered Basic beside digest, the password still never goes as it is
+                installer.OfferBasic = true;
+                Check(dev.Push(app, "pushed").Ok && dev.CheckPassword().Ok && !installer.SawBasic, "with Basic offered too, Basic seen: " + installer.SawBasic);
+                installer.OfferBasic = false;
 
                 tv.DeveloperEnabled = false;
                 int hits = installer.Hits;
@@ -367,7 +427,7 @@ namespace TVFollow.Tests
                 // developer mode on, but nothing answers on the installer's port
                 DevClient.InstallerPort = FreePort();
                 r = dev.Push(app, "pushed");
-                Check(!r.Ok && r.Text.Contains("didn't answer"), "no installer: " + r.Text);
+                Check(!r.Ok && r.Text.Contains("app installer didn't answer"), "no installer: " + r.Text);
                 Check(!LogText().Contains(installer.Password), "the password got into the log");
                 tools.Dispose();
             }
@@ -449,6 +509,20 @@ namespace TVFollow.Tests
                 Check(installer.Submits == 2, "pushed with the option off");
                 Tv(s).DevPushBack = true;
 
+                // sleep and shutdown give only a moment: never a push then
+                tv.PowerMode = "PowerOn";
+                tv.App = "tvinput.hdmi1";
+                c.TurnOff(false, true);
+                Check(installer.Submits == 2 && !tv.IsOn, "sleep pushed, or didn't turn the TV off");
+
+                // Network access on Limited hides the TV's list of apps: nothing is pushed blind
+                tv.ControlMode = "limited";
+                tv.PowerMode = "PowerOn";
+                tv.App = "tvinput.hdmi1";
+                c.TurnOff(false, false);
+                Check(installer.Submits == 2, "pushed with the app list hidden");
+                tv.ControlMode = "enabled";
+
                 // developer mode went off: said once, nothing pushed, and the TV still turns off
                 tv.DeveloperEnabled = false;
                 for (int i = 0; i < 2; i++)
@@ -459,6 +533,28 @@ namespace TVFollow.Tests
                 }
                 Check(installer.Submits == 2 && notes.FindAll(n => n.StartsWith("Developer mode is off")).Count == 1, "developer mode off: " + string.Join(" | ", notes));
                 Check(!tv.IsOn, "the TV stayed on");
+                tv.DeveloperEnabled = true;
+
+                // on again with a new password: the put-back fails, says so once, and the TV still turns off
+                Tv(s).DevPassword = "an-old-pass";
+                for (int i = 0; i < 2; i++)
+                {
+                    tv.PowerMode = "PowerOn";
+                    tv.App = "tvinput.hdmi1";
+                    c.TurnOff(false, false);
+                    Check(!tv.IsOn, "the TV stayed on after a failed put-back");
+                }
+                Check(notes.FindAll(n => n.StartsWith("Couldn't put your app back")).Count == 1 && notes.FindAll(n => n == "App put back").Count == 1,
+                    "a failed put-back: " + string.Join(" | ", notes));
+                Tv(s).DevPassword = installer.Password;
+
+                // back at the PC while the app went back on: the TV stays on, and on the PC
+                c.OffStillWanted = () => false;
+                tv.PowerMode = "PowerOn";
+                tv.App = "tvinput.hdmi1";
+                c.TurnOff(false, false);
+                Check(tv.DevAppName == "TVFollow example" && tv.IsOn && tv.App == "tvinput.hdmi1" && tv.Count("POST /launch/tvinput.hdmi1") == 1,
+                    "back during the put-back: on " + tv.IsOn + ", showing " + tv.App);
                 tools.Dispose();
             }
         }
@@ -466,8 +562,11 @@ namespace TVFollow.Tests
         static void DevPushOnSave()
         {
             string app = TempFolder("Saved app");
-            int settleBefore = DevTv.SettleMs;
-            DevTv.SettleMs = 300;
+            int settleBefore = DevTv.SettleMs, retryBefore = DevTv.RetryMs;
+            DevTv.SettleMs = 500;
+            DevTv.RetryMs = 300;
+            int quiet = DevTv.SettleMs * 3;   // long enough for a push that shouldn't happen to have happened
+            DevTools tools = null;
             try
             {
                 WriteFile(app, "manifest", "title=Saved\nmajor_version=1\nminor_version=0\nbuild_version=1\n");
@@ -479,36 +578,46 @@ namespace TVFollow.Tests
                     Settings s = DevSettings(tv, installer);
                     Tv(s).DevFolder = app;
                     Tv(s).DevOnSave = true;
-                    DevTools tools = DevToolsFor(s);
+                    tools = DevToolsFor(s);
                     DevTv dev = tools.Tvs[0];
                     var reports = new List<DevReport>();
                     dev.Background += r => { lock (reports) reports.Add(r); };
                     Check(dev.Watching, "not watching the folder");
 
                     WriteFile(app, "source/main.brs", "sub Main()\n    print \"changed\"\nend sub\n");
-                    WaitFor(() => installer.Installs == 1, 10, "the save wasn't pushed");
+                    WaitFor(() => installer.Installs == 1, 15, "the save wasn't pushed");
                     Check(tv.DevAppName == "Saved", "the TV got " + tv.DevAppName);
                     // an editor's backup file isn't a save of the app
                     WriteFile(app, "source/main.brs~", "backup");
-                    Thread.Sleep(900);
+                    Thread.Sleep(quiet);
                     Check(installer.Submits == 1, "a backup file was pushed");
-                    // a burst of saves is one push
+                    // a burst of saves goes in one push, with every file in it
                     WriteFile(app, "source/main.brs", "sub Main()\n    print \"one\"\nend sub\n");
                     WriteFile(app, "components/a.xml", "<component name=\"a\" />");
-                    WaitFor(() => installer.Installs == 2, 10, "the second save wasn't pushed");
-                    Thread.Sleep(900);
-                    Check(installer.Submits == 2, "one burst of saves pushed " + installer.Submits + " times");
+                    WaitFor(() => installer.Installs == 2, 15, "the second save wasn't pushed");
+                    Thread.Sleep(quiet);
+                    Check(installer.Submits == 2 && Entries(installer.Last).Contains("components/a.xml"),
+                        "one burst of saves pushed " + installer.Submits + " times");
                     lock (reports) Check(reports.Count == 2 && reports.TrueForAll(r => r.Ok), reports.Count + " reports");
+
+                    // a build tool clears the folder and makes it again: it's watched again, and pushed
+                    Directory.Delete(app, true);
+                    Thread.Sleep(DevTv.RetryMs * 2);
+                    WriteFile(app, "manifest", "title=Saved again\nmajor_version=1\nminor_version=0\nbuild_version=2\n");
+                    WriteFile(app, "source/main.brs", "sub Main()\nend sub\n");
+                    WaitFor(() => tv.DevAppName == "Saved again", 20, "the folder made again wasn't pushed");
+                    Check(dev.Watching, "not watching the folder made again");
 
                     s.DeveloperTools = false;
                     tools.Refresh();
                     Check(!dev.Watching, "still watching with the tools off");
-                    tools.Dispose();
                 }
             }
             finally
             {
+                if (tools != null) tools.Dispose();
                 DevTv.SettleMs = settleBefore;
+                DevTv.RetryMs = retryBefore;
                 Directory.Delete(Path.GetDirectoryName(app), true);
             }
         }
@@ -530,8 +639,10 @@ namespace TVFollow.Tests
                         form.ShowInTaskbar = false;
                         form.Show();
                         Pump(() => form.LogText.Contains("Welcome to the pretend app console.\r\n"), 10);
-                        Check(form.LogText.IndexOf((char)0xFF) < 0 && form.LogText.IndexOf((char)0xFB) < 0 && form.LogText.IndexOf((char)1) < 0,
-                            "the telnet command showed up as text");
+                        // bytes the text can't hold would show as the replacement character
+                        Check(form.LogText.IndexOf((char)0xFFFD) < 0 && form.LogText.IndexOf((char)1) < 0 && form.LogText.IndexOf((char)24) < 0,
+                            "the telnet commands showed up as text");
+                        Check(form.LogText.StartsWith("Welcome"), "something came before the console's first words: " + form.LogText.Length);
                         Pump(() => console.Connections == 1, 5);
                         console.Say("TVFollow example: you pressed OK");
                         Pump(() => form.LogText.Contains("TVFollow example: you pressed OK\r\n"), 10);

@@ -217,7 +217,12 @@ namespace TVFollow
             readonly AutoResetEvent kick = new AutoResetEvent(false);
             int wanted = -1;
 
-            public Worker(Controller controller) { this.controller = controller; }
+            public Worker(Controller controller)
+            {
+                this.controller = controller;
+                // the developer tools may take a while before an off: by then the monitors may want on
+                controller.OffStillWanted = () => Thread.VolatileRead(ref wanted) == 0;
+            }
 
             public void Start()
             {

@@ -20,8 +20,9 @@ namespace TVFollow
     // zip, so the TV can tell when nothing changed.
     class DevPackage
     {
-        // far past any Roku app; it only keeps a wrong pick (a whole drive, a video) out of memory
-        public const long MaxBytes = 200L * 1024 * 1024;
+        // far past any Roku app; it only keeps a wrong pick (a whole drive, a video) out of memory.
+        // (The tests lower it.)
+        public static long MaxBytes = 200L * 1024 * 1024;
         public const string ExamplePrefix = "example/";
 
         public byte[] Zip;
@@ -63,7 +64,9 @@ namespace TVFollow
         public static DevPackage FromFolder(string folder)
         {
             if (!Directory.Exists(folder)) throw new DevPackageException("That folder isn't there any more: " + folder);
-            string root = Path.GetFullPath(folder).TrimEnd('\\');
+            string root = Path.GetFullPath(folder);
+            // "E:\" stays as it is: "E:" would mean the drive's current folder, not its top
+            if (!string.Equals(root, Path.GetPathRoot(root), StringComparison.OrdinalIgnoreCase)) root = root.TrimEnd('\\');
             string note = "";
             if (!File.Exists(Path.Combine(root, "manifest")))
             {
@@ -77,7 +80,8 @@ namespace TVFollow
             }
             var items = new List<Item>();
             long total = 0;
-            Walk(root, "", 0, items, ref total);
+            int seen = 0;
+            Walk(root, "", 0, items, ref total, ref seen);
             DevPackage app = Pack(items, note);
             app.Root = root;
             return app;
@@ -86,25 +90,41 @@ namespace TVFollow
         // a Roku app is a few folders deep and has dozens of files, hundreds at most
         const int MaxDepth = 32, MaxFiles = 20000;
 
-        static void Walk(string dir, string prefix, int depth, List<Item> items, ref long total)
+        // Every file and folder counts toward MaxFiles, so two links back up the tree (junctions,
+        // say), which would otherwise branch for ever, stop as quickly as one. Links can't simply
+        // be skipped: OneDrive marks its folders the same way.
+        static void Walk(string dir, string prefix, int depth, List<Item> items, ref long total, ref int seen)
         {
-            // a link back up the tree (a junction, say) would otherwise go round for ever. Links
-            // can't simply be skipped: OneDrive marks its folders the same way.
             if (depth > MaxDepth) throw new DevPackageException("That folder goes too many folders deep for a Roku app. Pick the app's own folder.");
-            foreach (string file in Directory.GetFiles(dir))
+            string[] files, subs;
+            try
+            {
+                files = Directory.GetFiles(dir);
+                subs = Directory.GetDirectories(dir);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // a folder Windows keeps to itself, like System Volume Information at a drive's top
+                if (depth == 0) throw;
+                return;
+            }
+            foreach (string file in files)
             {
                 string relative = prefix + Path.GetFileName(file);
                 if (Skipped(relative)) continue;
                 var info = new FileInfo(file);
                 total += info.Length;
-                if (total > MaxBytes || items.Count >= MaxFiles) throw new DevPackageException(TooBig());
+                if (total > MaxBytes) throw new DevPackageException(TooBig("folder"));
+                if (++seen > MaxFiles) throw new DevPackageException(TooMany());
                 string path = file;
                 items.Add(new Item { Name = relative, Time = info.LastWriteTime, Read = () => File.ReadAllBytes(path) });
             }
-            foreach (string sub in Directory.GetDirectories(dir))
+            foreach (string sub in subs)
             {
                 string name = Path.GetFileName(sub);
-                if (!Skipped(name)) Walk(sub, prefix + name + "/", depth + 1, items, ref total);
+                if (Skipped(name)) continue;
+                if (++seen > MaxFiles) throw new DevPackageException(TooMany());
+                Walk(sub, prefix + name + "/", depth + 1, items, ref total, ref seen);
             }
         }
 
@@ -113,7 +133,7 @@ namespace TVFollow
         {
             var file = new FileInfo(path);
             if (!file.Exists) throw new DevPackageException("That file isn't there any more: " + path);
-            if (file.Length > MaxBytes) throw new DevPackageException(TooBig());
+            if (file.Length > MaxBytes) throw new DevPackageException(TooBig("zip"));
             byte[] bytes = File.ReadAllBytes(path);
             var items = new List<Item>();
             try
@@ -121,14 +141,16 @@ namespace TVFollow
                 using (var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read))
                 {
                     long total = 0;
+                    int seen = 0;
                     foreach (ZipArchiveEntry entry in zip.Entries)
                     {
+                        if (++seen > MaxFiles) throw new DevPackageException(TooMany());
                         string name = entry.FullName.Replace('\\', '/');
                         if (name.Length == 0 || name.EndsWith("/") || Skipped(name)) continue;   // a folder, or junk
                         if (name.StartsWith("/") || name.Contains(":") || ("/" + name + "/").Contains("/../")) continue;
-                        total += entry.Length;
-                        if (total > MaxBytes) throw new DevPackageException(TooBig());
-                        byte[] content = ReadEntry(entry);
+                        // what the entry really unpacks to counts, not the size it claims (a zip can lie)
+                        byte[] content = ReadEntry(entry, MaxBytes - total);
+                        total += content.Length;
                         items.Add(new Item { Name = name, Time = entry.LastWriteTime.DateTime, Read = () => content });
                     }
                 }
@@ -148,7 +170,8 @@ namespace TVFollow
             return Pack(items, note);
         }
 
-        static byte[] ReadEntry(ZipArchiveEntry entry)
+        // an entry's real contents, which may be at most limit bytes
+        static byte[] ReadEntry(ZipArchiveEntry entry, long limit)
         {
             using (Stream s = entry.Open())
             {
@@ -158,8 +181,7 @@ namespace TVFollow
                 while ((n = s.Read(buffer, 0, buffer.Length)) > 0)
                 {
                     all.Write(buffer, 0, n);
-                    // the size a zip claims can lie; the real one counts
-                    if (all.Length > MaxBytes) throw new DevPackageException(TooBig());
+                    if (all.Length > limit) throw new DevPackageException(TooBig("zip"));
                 }
                 return all.ToArray();
             }
@@ -202,7 +224,7 @@ namespace TVFollow
                 using (var archive = new ZipArchive(new MemoryStream(zip), ZipArchiveMode.Read))
                 {
                     ZipArchiveEntry manifest = archive.GetEntry("manifest");
-                    if (manifest != null && manifest.Length < 64 * 1024) ReadManifest(Encoding.UTF8.GetString(ReadEntry(manifest)), app);
+                    if (manifest != null) ReadManifest(Encoding.UTF8.GetString(ReadEntry(manifest, 64 * 1024)), app);
                     app.Files = archive.Entries.Count;
                 }
             }
@@ -223,7 +245,7 @@ namespace TVFollow
                 {
                     byte[] content = item.Read();
                     total += content.Length;
-                    if (total > MaxBytes) throw new DevPackageException(TooBig());
+                    if (total > MaxBytes) throw new DevPackageException(TooBig("folder"));
                     ZipArchiveEntry entry = zip.CreateEntry(item.Name, CompressionLevel.Optimal);
                     entry.LastWriteTime = ZipTime(item.Time);
                     using (Stream s = entry.Open()) s.Write(content, 0, content.Length);
@@ -247,6 +269,8 @@ namespace TVFollow
         static void ReadManifest(string text, DevPackage app)
         {
             string major = "", minor = "", build = "";
+            // Notepad and others can start the file with a byte-order mark, which Trim leaves
+            text = text.TrimStart((char)0xFEFF);
             foreach (string raw in text.Split('\n'))
             {
                 string line = raw.Trim();
@@ -267,16 +291,23 @@ namespace TVFollow
                 "with its source folder beside it.";
         }
 
-        static string TooBig()
+        static string TooBig(string what)
         {
-            return "That's far too big for a Roku app (over " + Size(MaxBytes) + "). Pick the app's own folder.";
+            return "That " + what + " is far too big for a Roku app (over " + Size(MaxBytes) + ")." +
+                (what == "folder" ? " Pick the app's own folder." : "");
+        }
+
+        static string TooMany()
+        {
+            return "That has far too many files for a Roku app. Pick the app's own folder.";
         }
 
         public static string Size(long bytes)
         {
             if (bytes < 1024) return bytes + " bytes";
             if (bytes < 1024 * 1024) return (bytes + 1023) / 1024 + " KB";
-            return (bytes / (1024.0 * 1024.0)).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB";
+            // "200 MB", "1.5 MB"
+            return (bytes / (1024.0 * 1024.0)).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " MB";
         }
     }
 }

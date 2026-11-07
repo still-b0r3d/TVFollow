@@ -22,6 +22,10 @@ namespace TVFollow.Tests
         public string Password = "test-pass-123";
         public bool JsonMessages;       // newer Roku OS: the page's messages as JSON.parse('...')
         public string Refuse;           // answer pushes with this error, like "Install Failure: Compilation Failed."
+        public bool RefuseReplace;      // turn away mysubmit=Replace (but take Install), as some TVs might
+        public bool OfferBasic;         // offer Basic (the password as it is) beside digest
+        public int ForceStatus;         // answer every request that has the password with this status
+        public bool UpdateCheckPage;    // answer pushes with newer Roku OS's "check for an update first" page
         public int Installs;            // apps taken (not counting the same files again)
         public int Asked;               // requests that came with the right password
         public bool SawBasic;           // a request offered the password with Basic, as it is
@@ -109,12 +113,23 @@ namespace TVFollow.Tests
             if (auth == null || !DigestOk(auth, method))
             {
                 Send(stream, 401, "Unauthorized", "text/html", Encoding.ASCII.GetBytes("<html>401 Unauthorized</html>"),
+                    (OfferBasic ? "WWW-Authenticate: Basic realm=\"" + Realm + "\"\r\n" : "") +
                     "WWW-Authenticate: Digest qop=\"auth\", realm=\"" + Realm + "\", nonce=\"" + nonce + "\"\r\n");
                 return;
             }
             Asked++;
             tv.Record("INSTALLER " + method + " " + path);
 
+            if (ForceStatus != 0)
+            {
+                Send(stream, ForceStatus, "Forced", "text/html", new byte[0], ForceStatus / 100 == 3 ? "Location: http://192.0.2.1/elsewhere\r\n" : "");
+                return;
+            }
+            if (method == "HEAD" && path == "/plugin_install")
+            {
+                Send(stream, 200, "OK", "text/html", new byte[0], "");
+                return;
+            }
             if (method == "GET" && (path == "/" || path == "/plugin_install"))
             {
                 Page(stream, "<html><title>Roku Development Kit</title>Development Application Installer</html>");
@@ -134,7 +149,9 @@ namespace TVFollow.Tests
             {
                 byte[] zip = form.ContainsKey("archive") ? form["archive"] : new byte[0];
                 Submits++;
+                if (UpdateCheckPage) { Page(stream, Message("error", "Failed to check for software update")); return; }
                 if (Refuse != null) { Page(stream, Message("error", Refuse)); return; }
+                if (RefuseReplace && submit == "Replace") { Page(stream, Message("error", "Install Failure: Nothing to replace.")); return; }
                 if (Last != null && tv.DevAppName != null && Same(zip, Last)) { Page(stream, Message("info", "Identical to previous version -- not replacing.")); return; }
                 string title, version;
                 if (!ReadApp(zip, out title, out version)) { Page(stream, Message("error", "Install Failure: No manifest. Invalid package.")); return; }
@@ -350,7 +367,8 @@ namespace TVFollow.Tests
                 catch { return; }
                 NetworkStream s = client.GetStream();
                 byte[] hello = Encoding.ASCII.GetBytes("Welcome to the pretend app console.\r\n");
-                s.Write(new byte[] { 255, 251, 1 }, 0, 3);   // IAC WILL ECHO: not text
+                s.Write(new byte[] { 255, 251, 1 }, 0, 3);                // IAC WILL ECHO: not text
+                s.Write(new byte[] { 255, 250, 24, 1, 255, 240 }, 0, 6);  // IAC SB ... IAC SE: not text either
                 s.Write(hello, 0, hello.Length);
                 lock (open) open.Add(s);
             }

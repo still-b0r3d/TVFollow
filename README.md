@@ -196,7 +196,7 @@ this, so it's hidden until you switch it on: **Settings… → Show the develope
 **Developer tools…**.
 
 **Turn developer mode on** (once for each TV). This takes the TV's own remote: the TV
-ignores the code when it comes over the network, so TVFollow's remote can't do it.
+ignores the code when TVFollow sends it, so TVFollow's remote can't do it.
 
 1. Press **Home** 3 times, **Up** 2 times, then **Right, Left, Right, Left, Right**.
 2. On the **Developer settings** screen, choose **Enable installer and restart**, agree
@@ -226,15 +226,16 @@ another replaces it.
 - **Screenshot…**: saves a picture of the app's screen. Roku only takes pictures of the
   pushed app.
 - **App log…**: what the app prints, and the error and the line it stopped at if it
-  crashes. Look here when an app won't start.
+  crashes. It shows what happens while it's open, so open it first, then push or open
+  the app. Look here when an app won't start.
 
 **Options:**
 
 - **Put the app back when it disappears from the TV** (on to start with): the TV can lose
   its pushed app, after a Roku update, say. TVFollow keeps a copy of the app you pushed
   last and puts it back the next time it turns the TV off with your monitors, while
-  nobody's looking at the screen. If developer mode itself was turned off, a notification
-  says so.
+  nobody's looking at the screen. If developer mode itself was turned off, or the app
+  couldn't go back, a notification says so.
 - **Push the app's folder again whenever a file in it is saved**: for making apps. Save
   a file, and a moment later the TV runs your new version.
 

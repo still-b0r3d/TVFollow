@@ -148,8 +148,8 @@ their settings. Untick a TV there to stop using it.
 
 ## The developer mode code does nothing
 
-Press it on the TV's own remote. The TV ignores the code when it comes over the network,
-so TVFollow's remote can't open that screen. Start from the Home
+Press it on the TV's own remote. The TV ignores the code when TVFollow sends it, so
+TVFollow's remote can't open that screen. Start from the Home
 screen and press the buttons quickly: **Home** 3 times, **Up** 2 times, then **Right,
 Left, Right, Left, Right**. If the screen asks you to, sign up for Roku's free developer
 program at developer.roku.com first, with the Roku account the TV uses.
@@ -158,21 +158,28 @@ program at developer.roku.com first, with the Roku account the TV uses.
 
 It's the password you picked on the TV when you turned developer mode on, and capitals
 count. Tick **Show** in the developer tools to see what's typed. If you've forgotten it,
-turn developer mode off and on again with the remote code, and pick a new one.
+turn developer mode off and on again with the remote code, and pick a new one. Turning it
+off takes the pushed app off the TV too, so push it again afterwards.
+
+## Pushing an app says the TV wants to check for an update
+
+Some Roku TVs won't take apps until they've looked for a Roku update. On the TV:
+**Settings → System → System update → Check now**, then push again.
 
 ## My pushed app disappeared from the TV
 
 A TV holds one pushed app, and a Roku update can clear it. With **Put the app back when
 it disappears from the TV** ticked, TVFollow puts the app you pushed last back the next
 time it turns the TV off with your monitors. If an update turned developer mode itself
-off, TVFollow says so in a notification: turn it on again with the remote code, then
-push the app once more.
+off, TVFollow says so in a notification: turn it on again with the remote code, type its
+password in the developer tools (it may be a new one), then push the app once more.
 
 ## A pushed app won't start
 
-Open **App log…** in the developer tools, then push the app again or open it. The log
-shows the app's error and the line it stopped at. If the developer tools say the TV
-refused the app with "Compilation Failed", the log has the line too.
+Open **App log…** in the developer tools first, then push the app again or open it. The
+log shows what happens while it's open: the app's error and the line it stopped at. If
+the developer tools say the TV refused the app with "Compilation Failed", the log shows
+the line too.
 
 ## Start over
 

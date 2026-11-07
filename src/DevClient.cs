@@ -31,21 +31,45 @@ namespace TVFollow
         DevModeOff,     // the TV answers, but developer mode is off
         OtherRoku,      // something else answers at the TV's address right now
         NoAnswer,       // the TV didn't answer
-        Refused         // the TV answered with an error of its own; Message has its words
+        InstallerSilent,// the TV answers, but its app installer didn't
+        TooSlow,        // the TV took too long to answer
+        UpdateCheck,    // the TV wants to look for a Roku update before it takes apps
+        Refused,        // the TV answered with an error of its own; Message has its words
+        Other           // something else went wrong; Message says what, in TVFollow's words
     }
 
     class DevResult
     {
+        public const int MaxWords = 300;
+
         public readonly DevOutcome Outcome;
-        public readonly string Message;  // the TV's own words, if it gave any
+        public readonly string Message;  // the TV's own words (or, for Other, TVFollow's), if any
 
         public DevResult(DevOutcome outcome, string message)
         {
             Outcome = outcome;
-            Message = message ?? "";
+            Message = OneLine(message);
         }
 
         public bool Ok { get { return Outcome == DevOutcome.Done || Outcome == DevOutcome.Same; } }
+
+        // the TV turned the app away because of its code: pushing again won't help
+        public bool CompileError { get { return Message.IndexOf("compil", StringComparison.OrdinalIgnoreCase) >= 0; } }
+
+        // The TV's words end up in the window, a notification and the log, so they're made one
+        // line (a reply can't write lines of its own into the log) and kept short.
+        static string OneLine(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            var line = new StringBuilder();
+            foreach (char c in text)
+            {
+                if (char.IsControl(c)) { if (line.Length > 0 && line[line.Length - 1] != ' ') line.Append(' '); }
+                else line.Append(c);
+                if (line.Length >= MaxWords) { line.Append("…"); break; }
+            }
+            return line.ToString().Trim();
+        }
 
         // why it didn't work, in words for the window; null when it did
         public string Problem
@@ -59,9 +83,12 @@ namespace TVFollow
                     case DevOutcome.DevModeOff: return "Developer mode is off on this TV. Turn it on first.";
                     case DevOutcome.OtherRoku: return "Another Roku answers at this TV's address right now. TVFollow finds your TV again the next time it turns it on or off.";
                     case DevOutcome.NoAnswer: return "The TV didn't answer. Is it on, and on this network?";
+                    case DevOutcome.InstallerSilent: return "The TV's app installer didn't answer. Try again in a moment.";
+                    case DevOutcome.TooSlow: return "The TV took too long to answer. Try again.";
+                    case DevOutcome.UpdateCheck: return "The TV wants to check for a Roku update before it takes apps. On the TV: Settings → System → System update → Check now. Then try again.";
                     case DevOutcome.Refused:
-                        return "The TV said: " + Message.TrimEnd('.') + "." +
-                            (Message.IndexOf("compil", StringComparison.OrdinalIgnoreCase) >= 0 ? " The app log shows why." : "");
+                        return "The TV said: " + Message.TrimEnd('.') + "." + (CompileError ? " Open App log…, then push it again to see why." : "");
+                    case DevOutcome.Other: return Message;
                     default: return null;
                 }
             }
@@ -88,26 +115,44 @@ namespace TVFollow
         }
 
         // The app (a zip with its manifest at the top) goes on the TV in place of the one there,
-        // and the TV opens it.
-        public DevResult Push(byte[] zip, int timeoutMs) { return Submit("plugin_install", "Replace", zip, timeoutMs).Result; }
+        // and the TV opens it. If the TV refuses Replace for anything but the app's code, it's
+        // tried once more as Install, as Roku's own tools do.
+        public DevResult Push(byte[] zip, int timeoutMs)
+        {
+            DevResult r = Submit("plugin_install", "Replace", zip, timeoutMs).Result;
+            if ((r.Outcome == DevOutcome.Refused || r.Outcome == DevOutcome.Other) && !r.CompileError)
+            {
+                DevResult again = Submit("plugin_install", "Install", zip, timeoutMs).Result;
+                if (again.Ok) return again;
+            }
+            return r;
+        }
 
         public DevResult Remove(int timeoutMs) { return Submit("plugin_install", "Delete", null, timeoutMs).Result; }
 
-        // the installer's own page, which only opens with the right password
+        // asks the installer whether the password is right, the way Roku's own tools do: HEAD on
+        // its page is 200 with the right password, 401 with a wrong one
         public DevResult CheckPassword(int timeoutMs)
         {
             if (password.Length == 0) return new DevResult(DevOutcome.NoPassword, "");
             try
             {
-                HttpWebRequest req = Request("", timeoutMs);
+                HttpWebRequest req = Request("plugin_install", timeoutMs);
+                req.Method = "HEAD";
                 using (RokuClient.Deadline(req, timeoutMs))
                 using (var resp = (HttpWebResponse)req.GetResponse())
-                using (Stream page = resp.GetResponseStream())
-                    ReadAll(page, MaxPage);
-                return new DevResult(DevOutcome.Done, "");
+                {
+                    int code = (int)resp.StatusCode;
+                    return code == 200 ? new DevResult(DevOutcome.Done, "") : Unexpected(code);
+                }
             }
             catch (WebException e) { return Failed(e); }
             catch (Exception e) { return new DevResult(DevOutcome.NoAnswer, e.Message); }
+        }
+
+        static DevResult Unexpected(int code)
+        {
+            return new DevResult(DevOutcome.Other, "The TV's app installer answered in a way TVFollow doesn't know (" + code + ").");
         }
 
         // A picture of the pushed app's screen (Roku only takes one of that app): its bytes and
@@ -121,7 +166,7 @@ namespace TVFollow
             Match link = Regex.Match(page.Body, "[\"'](pkgs/dev\\.(png|jpg)(\\?[^\"'<>]*)?)[\"']", RegexOptions.IgnoreCase);
             if (!link.Success)
             {
-                result = new DevResult(DevOutcome.Refused, result.Message.Length > 0 ? result.Message : "no picture came back. Is the app open on the TV");
+                result = new DevResult(DevOutcome.Other, "No picture came back. Is the app open on the TV?");
                 return null;
             }
             extension = link.Groups[2].Value.ToLowerInvariant();
@@ -130,10 +175,14 @@ namespace TVFollow
                 HttpWebRequest req = Request(link.Groups[1].Value, timeoutMs);
                 using (RokuClient.Deadline(req, timeoutMs))
                 using (var resp = (HttpWebResponse)req.GetResponse())
-                using (Stream picture = resp.GetResponseStream())
-                    return ReadAll(picture, MaxPicture);
+                {
+                    int code = (int)resp.StatusCode;
+                    if (code != 200) { result = Unexpected(code); return null; }
+                    using (Stream picture = resp.GetResponseStream()) return ReadAll(picture, MaxPicture);
+                }
             }
             catch (WebException e) { result = Failed(e); }
+            catch (InvalidDataException) { result = new DevResult(DevOutcome.Other, "The picture the TV sent was far too big."); }
             catch (Exception e) { result = new DevResult(DevOutcome.NoAnswer, e.Message); }
             return null;
         }
@@ -147,6 +196,16 @@ namespace TVFollow
                 IAsyncResult connecting = client.BeginConnect(ip, ConsolePort, null, null);
                 if (!connecting.AsyncWaitHandle.WaitOne(timeoutMs)) throw new TimeoutException("no answer");
                 client.EndConnect(connecting);
+                // A TV that loses power or its Wi-Fi never says goodbye, and the console only ever
+                // sends: keep-alive notices it's gone within about half a minute (10 s quiet, then
+                // Windows' 10 tries 2 s apart), so the window can reconnect.
+                client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+                var keepAlive = new byte[12];
+                BitConverter.GetBytes(1u).CopyTo(keepAlive, 0);
+                BitConverter.GetBytes(10000u).CopyTo(keepAlive, 4);
+                BitConverter.GetBytes(2000u).CopyTo(keepAlive, 8);
+                try { client.Client.IOControl(IOControlCode.KeepAliveValues, keepAlive, null); }
+                catch { }  // the plain keep-alive above still works, only slower
                 return client;
             }
             catch
@@ -179,17 +238,23 @@ namespace TVFollow
                 req.Method = "POST";
                 req.ContentType = "multipart/form-data; boundary=" + boundary;
                 req.ContentLength = body.Length;
+                int code;
                 using (RokuClient.Deadline(req, timeoutMs))
                 {
                     // kept in memory (the default), so it can go again once the TV asks for the password
                     using (Stream s = req.GetRequestStream()) s.Write(body, 0, body.Length);
                     using (var resp = (HttpWebResponse)req.GetResponse())
                     using (Stream page = resp.GetResponseStream())
+                    {
+                        code = (int)resp.StatusCode;
                         done.Body = Encoding.UTF8.GetString(ReadAll(page, MaxPage));
+                    }
                 }
-                done.Result = Judge(done.Body);
+                // only a plain 200 is the installer's own page (a redirect, say, is not)
+                done.Result = code == 200 ? Judge(done.Body) : Unexpected(code);
             }
             catch (WebException e) { done.Result = Failed(e); }
+            catch (InvalidDataException) { done.Result = new DevResult(DevOutcome.Other, "The TV's app installer sent back far too much."); }
             catch (Exception e) { done.Result = new DevResult(DevOutcome.NoAnswer, e.Message); }
             return done;
         }
@@ -235,12 +300,18 @@ namespace TVFollow
         static DevResult Failed(WebException e)
         {
             var resp = e.Response as HttpWebResponse;
-            if (resp == null) return new DevResult(DevOutcome.NoAnswer, e.Message);
+            if (resp == null)
+            {
+                // a time-out, or the deadline cutting a slow answer short
+                bool slow = e.Status == WebExceptionStatus.Timeout || e.Status == WebExceptionStatus.RequestCanceled;
+                return new DevResult(slow ? DevOutcome.TooSlow : DevOutcome.NoAnswer, e.Message);
+            }
             int code = (int)resp.StatusCode;
-            string words = resp.StatusDescription;
             resp.Close();
             if (code == 401) return new DevResult(DevOutcome.WrongPassword, "");
-            return new DevResult(DevOutcome.Refused, "it answered " + code + (string.IsNullOrEmpty(words) ? "" : " " + words));
+            // newer Roku OS turns apps away like this until the TV has looked for an update
+            if (code == 577) return new DevResult(DevOutcome.UpdateCheck, "");
+            return new DevResult(DevOutcome.Other, "The TV's app installer turned it away (error " + code + ").");
         }
 
         static byte[] ReadAll(Stream s, int max)
@@ -266,6 +337,8 @@ namespace TVFollow
         {
             if (page.IndexOf("Identical to previous version", StringComparison.OrdinalIgnoreCase) >= 0)
                 return new DevResult(DevOutcome.Same, "");
+            if (Regex.IsMatch(page, "[\"']\\s*Failed\\s*to\\s*check\\s*for\\s*software\\s*update\\s*[\"']", RegexOptions.IgnoreCase))
+                return new DevResult(DevOutcome.UpdateCheck, "");
             string error = null, other = null;
             foreach (KeyValuePair<string, string> message in Messages(page))
             {

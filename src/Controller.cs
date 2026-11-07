@@ -49,8 +49,13 @@ namespace TVFollow
 
         // Set by the developer tools: runs when the monitors went off and this TV, on and showing
         // the PC, is about to be turned off, in this TV's turn and before power off. An app that
-        // vanished from the TV is put back then, while nobody's looking at the screen.
-        public Action BeforeFollowOff;
+        // vanished from the TV is put back then, while nobody's looking at the screen. True when
+        // it did something (which takes a while, and leaves the TV showing the app).
+        public Func<bool> BeforeFollowOff;
+
+        // Set by the follower: do the monitors still want this TV off? (Someone may have come
+        // back while an app was being put back.)
+        public Func<bool> OffStillWanted;
 
         public Controller(Settings settings, TvSettings tv)
         {
@@ -220,11 +225,30 @@ namespace TVFollow
             if (!s.Reachable) { Say(tag + ": TV not answering"); return; }
             if (!s.IsOn) { Say(tag + ": already off"); return; }
             if (!force && s.App != tv.PcApp) { Say(tag + ": TV is showing " + Describe(s.App) + ", leaving it on"); return; }
-            Action before = BeforeFollowOff;
+            Func<bool> before = BeforeFollowOff;
+            bool pushed = false;
             if (!force && !quick && before != null)
             {
-                try { before(); }
+                try { pushed = before(); }
                 catch (Exception e) { Say("developer tools: " + e.Message); }
+            }
+            if (pushed)
+            {
+                // that took a while, and the TV now shows the app that went back on
+                Func<bool> stillOff = OffStillWanted;
+                if (stillOff != null && !stillOff())
+                {
+                    // back already: the TV stays on, showing the PC again
+                    TvState now = Query();
+                    if (now.IsOn && now.App != tv.PcApp) Say(tag + ": you're back, so the TV stays on; back to the PC -> " + client.Launch(tv.PcApp, 4000));
+                    else Say(tag + ": you're back, so the TV stays on");
+                    return;
+                }
+                s = Query();
+                if (!s.Reachable) { Say(tag + ": TV not answering"); return; }
+                if (!s.IsOn) { Say(tag + ": already off"); return; }
+                // someone picked something else with the TV's remote meanwhile
+                if (s.App != tv.PcApp && s.App != "dev") { Say(tag + ": TV is showing " + Describe(s.App) + " now, leaving it on"); return; }
             }
             Say(tag + ": sending power off"); // logged first: at shutdown the PC may stop before the reply
             Say(tag + ": power off -> " + client.Keypress("PowerOff", quick ? 800 : 4000));
