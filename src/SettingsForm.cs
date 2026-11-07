@@ -18,7 +18,8 @@ namespace TVFollow
         readonly Column body = new Column();
         readonly List<TvLines> tvs = new List<TvLines>();
         readonly Label mode, updateResult;
-        readonly CheckBox off, on, paused, startup, shortcuts, updates;
+        readonly CheckBox off, on, paused, startup, shortcuts, updates, developer;
+        readonly FlowLayoutPanel developerRow;
         readonly RadioButton classic, compact, strip;
         bool loading = true;
 
@@ -86,6 +87,12 @@ namespace TVFollow
             updateResult = new Label { AutoSize = true, Margin = new Padding(4, 8, 0, 0), ForeColor = SetupPage.Muted };
             updateRow.Controls.Add(updateResult);
 
+            // hidden until switched on: most people never need them
+            Heading("Developer");
+            developer = Check("Show the developer tools, for putting your own apps on the TV", delegate { DeveloperChanged(); });
+            developerRow = Row();
+            developerRow.Controls.Add(MakeButton("Developer tools…", delegate { tray.ShowDeveloperTools(null); }));
+
             Controls.Add(body);
             Controls.Add(Footer());
 
@@ -121,11 +128,10 @@ namespace TVFollow
             return lines;
         }
 
-        // With several TVs the window grows to show them all, as far as the screen allows; what
-        // doesn't fit scrolls.
+        // The window grows to show everything (several TVs, the developer tools' button), as far as
+        // the screen allows; what doesn't fit scrolls.
         void FitTvs()
         {
-            if (!settings.SeveralTvs) return;
             int footer = ClientSize.Height - body.Height;
             int wanted = body.GetPreferredSize(new Size(body.ClientSize.Width, 0)).Height + footer;
             int most = Screen.FromControl(this).WorkingArea.Height - (Height - ClientSize.Height) - 20;
@@ -237,6 +243,8 @@ namespace TVFollow
             startup.Checked = settings.StartWithWindows;
             shortcuts.Checked = settings.DesktopShortcuts;
             updates.Checked = settings.CheckUpdates;
+            developer.Checked = settings.DeveloperTools;
+            developerRow.Visible = settings.DeveloperTools;
             bool portable = Settings.IsPortable;
             mode.Text = portable
                 ? "Portable: settings are in the \"" + Settings.PortableFolderName + "\" folder next to TVFollow.exe."
@@ -348,6 +356,16 @@ namespace TVFollow
             tv.Tv.Input = item.Id.Substring("tvinput.".Length);
             Log.Write("settings: " + (settings.SeveralTvs ? settings.LabelOf(tv.Tv) + "'s " : "") + "input " + tv.Tv.Input);
             Save();
+        }
+
+        void DeveloperChanged()
+        {
+            settings.DeveloperTools = developer.Checked;
+            Log.Write(developer.Checked ? "settings: developer tools on" : "settings: developer tools off");
+            Save();
+            developerRow.Visible = developer.Checked;
+            FitTvs();
+            tray.DeveloperToolsChanged();
         }
 
         void ShowOnTv(TvSettings tv)

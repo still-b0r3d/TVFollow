@@ -34,6 +34,11 @@ namespace TVFollow
         RemoteForm remote;
         Controller remoteTv; // the TV the remote was last on, so it opens on it again
         SettingsForm settingsWindow;
+        DevForm devWindow;
+        readonly System.Threading.SynchronizationContext ui;  // the windows' thread, for messages from other threads
+
+        // the developer tools (Program sets them once the tray is up)
+        public DevTools Dev;
 
         public event Action<bool> PausedChanged = delegate { };
 
@@ -71,6 +76,7 @@ namespace TVFollow
             icon.BalloonTipClicked += delegate { if (balloonUrl != null) SetupForm.OpenUrl(balloonUrl); };
             Show();
             icon.Visible = true;
+            ui = System.Threading.SynchronizationContext.Current;  // there since the menu (a control) was made
         }
 
         public ContextMenuStrip Menu { get { return icon.ContextMenuStrip; } }
@@ -109,6 +115,18 @@ namespace TVFollow
             icon.ShowBalloonTip(10000, "TVFollow " + version + " is out",
                 "Click here to see what's new and download it. You're on " + Program.Version + ".", ToolTipIcon.Info);
             Log.Write("told about TVFollow " + version);
+        }
+
+        // a message in the taskbar corner, from any thread (the developer tools' background work)
+        public void Notify(string title, string text)
+        {
+            System.Threading.SendOrPostCallback show = delegate
+            {
+                balloonUrl = null;
+                icon.ShowBalloonTip(8000, title, text, ToolTipIcon.Info);
+            };
+            if (ui != null) ui.Post(show, null);
+            else show(null);
         }
 
         public void Greet()
@@ -179,6 +197,23 @@ namespace TVFollow
             settingsWindow.Activate();
         }
 
+        // One developer tools window at a time. tv: the TV it should open on, or null for the first.
+        public void ShowDeveloperTools(Controller tv)
+        {
+            if (Dev == null) return;
+            if (devWindow != null && !devWindow.IsDisposed) { devWindow.Activate(); return; }
+            devWindow = new DevForm(Dev, Dev.For(tv));
+            devWindow.Show();
+            devWindow.Activate();
+        }
+
+        // the switch in Settings: the background work starts or stops, and the window goes with it
+        public void DeveloperToolsChanged()
+        {
+            if (Dev != null) Dev.Refresh();
+            if (!follower.Settings.DeveloperTools && devWindow != null && !devWindow.IsDisposed) devWindow.Close();
+        }
+
         public static void OpenLog()
         {
             try
@@ -194,6 +229,7 @@ namespace TVFollow
         {
             if (remote != null && !remote.IsDisposed) remote.Close();
             if (settingsWindow != null && !settingsWindow.IsDisposed) settingsWindow.Close();
+            if (devWindow != null && !devWindow.IsDisposed) devWindow.Close();
             icon.Visible = false;
             icon.Dispose();
         }

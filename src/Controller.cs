@@ -47,6 +47,11 @@ namespace TVFollow
         public Func<string, string> GatewayMacFor = Discovery.GatewayMacFor;  // the router of the network an address is on
         public Func<bool> SameNumbers;                  // is the TV's last address in one of the PC's address ranges?
 
+        // Set by the developer tools: runs when the monitors went off and this TV, on and showing
+        // the PC, is about to be turned off, in this TV's turn and before power off. An app that
+        // vanished from the TV is put back then, while nobody's looking at the screen.
+        public Action BeforeFollowOff;
+
         public Controller(Settings settings, TvSettings tv)
         {
             this.settings = settings;
@@ -215,6 +220,12 @@ namespace TVFollow
             if (!s.Reachable) { Say(tag + ": TV not answering"); return; }
             if (!s.IsOn) { Say(tag + ": already off"); return; }
             if (!force && s.App != tv.PcApp) { Say(tag + ": TV is showing " + Describe(s.App) + ", leaving it on"); return; }
+            Action before = BeforeFollowOff;
+            if (!force && !quick && before != null)
+            {
+                try { before(); }
+                catch (Exception e) { Say("developer tools: " + e.Message); }
+            }
             Say(tag + ": sending power off"); // logged first: at shutdown the PC may stop before the reply
             Say(tag + ": power off -> " + client.Keypress("PowerOff", quick ? 800 : 4000));
         }

@@ -22,6 +22,7 @@ namespace TVFollow
         public string EthernetMac = "";
         public string ControlMode = "";
         public bool IsTv;
+        public bool DeveloperEnabled;  // developer mode is on: apps can be pushed to it
 
         // the address to wake: the TV's cable one if it's plugged in, else its Wi-Fi one
         public string WakeMac { get { return NetworkType == "ethernet" ? EthernetMac : WifiMac; } }
@@ -47,6 +48,7 @@ namespace TVFollow
             d.EthernetMac = Field(doc, "ethernet-mac");
             d.ControlMode = Field(doc, "ecp-setting-mode");
             d.IsTv = Field(doc, "is-tv") == "true";
+            d.DeveloperEnabled = Field(doc, "developer-enabled") == "true";
             return d;
         }
 
@@ -146,6 +148,23 @@ namespace TVFollow
             catch { return null; }
         }
 
+        // The app pushed in developer mode (its id is "dev"), or null if there's none or the TV
+        // didn't say: answered tells those two apart (the Limited setting hides the list).
+        public DevApp GetDevApp(int timeoutMs, out bool answered)
+        {
+            answered = false;
+            try
+            {
+                XmlDocument doc = SafeXml.Load(Get("query/apps", timeoutMs));
+                answered = true;
+                foreach (XmlElement app in doc.SelectNodes("/apps/app"))
+                    if (app.GetAttribute("id") == "dev")
+                        return new DevApp { Name = app.InnerText.Replace((char)0xA0, ' ').Trim(), Version = app.GetAttribute("version").Trim() };
+                return null;
+            }
+            catch { return null; }
+        }
+
         public int Keypress(string key, int timeoutMs) { return Post("keypress/" + key, timeoutMs); }
 
         public int Launch(string appId, int timeoutMs) { return Post("launch/" + appId, timeoutMs); }
@@ -165,7 +184,7 @@ namespace TVFollow
 
         // Timeout only covers getting the headers and ReadWriteTimeout each single read, so a
         // device trickling its answer could hold a request forever. This deadline covers it all.
-        static Timer Deadline(HttpWebRequest req, int timeoutMs)
+        internal static Timer Deadline(HttpWebRequest req, int timeoutMs)
         {
             return new Timer(state => { try { req.Abort(); } catch { } }, null, timeoutMs + 500, Timeout.Infinite);
         }

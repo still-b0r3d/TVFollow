@@ -282,7 +282,10 @@ namespace TVFollow
                     var follower = new Follower(settings, tvs);
                     follower.Start();
                     using (var tray = new Tray(follower))
+                    using (var dev = new DevTools(settings, tvs))
                     {
+                        dev.Notify = tray.Notify;
+                        tray.Dev = dev;
                         follower.SettingsRequested += tray.ShowSettings;
                         if (greet) tray.Greet();
                         var updates = new UpdateWatcher(tray, settings); // checks only while the setting is on

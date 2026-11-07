@@ -152,6 +152,8 @@ Start menu while it's running. Changes apply straight away.
 - **This PC:** start with Windows and the desktop shortcuts. Switching between installed
   and portable runs setup again.
 - **Updates:** the weekly check, and **Check now**.
+- **Developer:** shows the [developer tools](#developer-tools), for putting your own Roku
+  apps on the TV.
 
 If you ticked the desktop shortcuts option, **TV on**, **TV off** and **TV to PC** are on
 your desktop too.
@@ -186,6 +188,60 @@ More detail in [How it works](docs/HOW-IT-WORKS.md).
   Windows 10: **Settings → Apps → Apps & features**). That removes the program, its
   shortcuts, its settings and its log. Nothing on the TV changes.
 
+## Developer tools
+
+For making your own Roku apps, or trying one someone made for you: TVFollow can put an app
+on the TV straight from your PC, using the TV's **developer mode**. Most people never need
+this, so it's hidden until you switch it on: **Settings… → Show the developer tools**, then
+**Developer tools…**.
+
+**Turn developer mode on** (once for each TV). This takes the TV's own remote: the TV
+ignores the code when it comes over the network, so TVFollow's remote can't do it.
+
+1. Press **Home** 3 times, **Up** 2 times, then **Right, Left, Right, Left, Right**.
+2. On the **Developer settings** screen, choose **Enable installer and restart**, agree
+   to Roku's license, and pick a password.
+3. The TV restarts. Type the same password into the developer tools.
+
+If the TV asks, first sign up for Roku's free developer program at
+[developer.roku.com](https://developer.roku.com), with the Roku account the TV uses. The
+developer tools say when developer mode is on. To turn it off, press the same code and
+choose **Disable installer and restart**.
+
+**Push an app:**
+
+- **Push a .zip…**: an app as a zip, with its `manifest` file at the top.
+- **Push a folder…**: your app's own folder, the one with the `manifest` file. TVFollow
+  zips it for you, leaving out things like `.git`, `Thumbs.db` and editors' temporary
+  files. If the app is one folder down (you picked the folder around it, or the zip has
+  the app in a folder), TVFollow finds it there.
+- **Push the example app**: a small app built into TVFollow, to check it all works. It
+  shows "It works!", the TV's name and a clock. Its source is in
+  [examples/tvfollow-example](examples/tvfollow-example), a place to start your own.
+
+The TV opens an app as soon as it has it. It holds one pushed app at a time, so pushing
+another replaces it.
+
+- **Open on the TV** and **Remove**: start the app, or take it off the TV.
+- **Screenshot…**: saves a picture of the app's screen. Roku only takes pictures of the
+  pushed app.
+- **App log…**: what the app prints, and the error and the line it stopped at if it
+  crashes. Look here when an app won't start.
+
+**Options:**
+
+- **Put the app back when it disappears from the TV** (on to start with): the TV can lose
+  its pushed app, after a Roku update, say. TVFollow keeps a copy of the app you pushed
+  last and puts it back the next time it turns the TV off with your monitors, while
+  nobody's looking at the screen. If developer mode itself was turned off, a notification
+  says so.
+- **Push the app's folder again whenever a file in it is saved**: for making apps. Save
+  a file, and a moment later the TV runs your new version.
+
+While developer mode is on, the TV's app installer is open on your home network behind
+your password, and the app log is open to anyone on it. That's how Roku made developer
+mode, so turn it off when you're done if that bothers you.
+
 ## Privacy
 
 TVFollow talks to your TV over your home network. The only time it goes on the internet
@@ -194,6 +250,9 @@ TVFollow release is. That request carries nothing about you or your TV beyond wh
 web request does (your internet address, and that it's TVFollow asking). It never
 downloads or installs anything by itself. Untick **Tell me when there's a new version**
 in **Settings…** to switch it off. TVFollow doesn't collect anything else.
+
+The developer tools only talk to your TV too. The password you give them is kept encrypted
+for your Windows account, and it never goes over the network as you typed it.
 
 Its settings and log are in `%APPDATA%\TVFollow`. The log shows your TV's local network
 address, so look it over before you share it.

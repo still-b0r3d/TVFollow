@@ -1,0 +1,18 @@
+# TVFollow example: a small Roku app to try pushing apps from TVFollow, and a place to
+# start your own. Change what you like, then use "Push a folder..." in TVFollow's
+# developer tools on this folder. Raise build_version each time you change it.
+title=TVFollow example
+major_version=1
+minor_version=0
+build_version=1
+
+# the tile on the TV's home screen, and the picture while the app starts
+mm_icon_focus_fhd=pkg:/images/icon_focus_fhd.png
+mm_icon_focus_hd=pkg:/images/icon_focus_hd.png
+splash_screen_fhd=pkg:/images/splash_fhd.png
+splash_screen_hd=pkg:/images/splash_hd.png
+splash_color=#14213D
+splash_min_time=800
+
+# the screen is laid out for a 1920 x 1080 picture; the TV scales it to its own
+ui_resolutions=fhd

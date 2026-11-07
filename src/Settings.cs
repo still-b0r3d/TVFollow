@@ -18,6 +18,19 @@ namespace TVFollow
         public string GatewayMac = "";  // the home router the TV was last seen behind, to tell its network from a look-alike
         public string Name = "";        // what the TV calls itself, for the menus and the log
 
+        // developer mode (the developer tools): the password chosen on the TV, kept as DevSecret
+        // seals it; the app's folder last pushed; and the two options
+        public string DevPasswordSealed = "";
+        public string DevFolder = "";
+        public bool DevPushBack = true;  // put the pushed app back when it disappears from the TV
+        public bool DevOnSave;           // push DevFolder again when a file in it is saved
+
+        public string DevPassword
+        {
+            get { return DevSecret.Open(DevPasswordSealed); }
+            set { DevPasswordSealed = DevSecret.Seal(value); }
+        }
+
         public bool IsComplete { get { return Ip.Length > 0 && Serial.Length > 0; } }
 
         // the app id the TV reports while it shows this PC
@@ -89,6 +102,7 @@ namespace TVFollow
         public bool CheckUpdates = true;
         public bool Paused;  // set from the tray; kept across restarts until resumed
         public string RemoteLayout = "classic";  // classic, compact or strip
+        public bool DeveloperTools;  // the developer tools are shown, and do their work in the background
 
         public bool IsComplete { get { return Tvs.Count > 0 && Tvs.TrueForAll(t => t.IsComplete); } }
 
@@ -163,8 +177,8 @@ namespace TVFollow
                     TvSettings tv;
                     if (number == 1) tv = first ?? (first = new TvSettings());
                     else if (!more.TryGetValue(number, out tv)) more[number] = tv = new TvSettings();
-                    // a TV's name can have a # in it ("Den #2"), so it's read whole
-                    ReadTv(tv, field, field == "name" ? whole : value, key);
+                    // a TV's name can have a # in it ("Den #2"), and so can a folder, so they're read whole
+                    ReadTv(tv, field, field == "name" || field == "dev_folder" ? whole : value, key);
                     continue;
                 }
                 switch (key)
@@ -179,6 +193,7 @@ namespace TVFollow
                     case "desktop_shortcuts": s.DesktopShortcuts = !IsNo(value); break;
                     case "check_updates": s.CheckUpdates = !IsNo(value); break;
                     case "paused": s.Paused = !IsNo(value); break;
+                    case "developer_tools": s.DeveloperTools = !IsNo(value); break;
                     case "remote_layout":
                         value = value.ToLowerInvariant();
                         if (value == "classic" || value == "compact" || value == "strip") s.RemoteLayout = value;
@@ -213,7 +228,9 @@ namespace TVFollow
             }
             switch (key)
             {
-                case "ip": case "serial": case "input": case "wake_mac": case "mac": case "gateway_mac": case "name": return key;
+                case "ip": case "serial": case "input": case "wake_mac": case "mac": case "gateway_mac": case "name":
+                case "dev_password": case "dev_folder": case "dev_push_back": case "dev_on_save":
+                    return key;
                 default: return null;
             }
         }
@@ -234,6 +251,10 @@ namespace TVFollow
                 case "mac": tv.WakeMac = value; break;
                 case "gateway_mac": tv.GatewayMac = value; break;
                 case "name": tv.Name = value; break;
+                case "dev_password": tv.DevPasswordSealed = value; break;
+                case "dev_folder": tv.DevFolder = value; break;
+                case "dev_push_back": tv.DevPushBack = !IsNo(value); break;
+                case "dev_on_save": tv.DevOnSave = !IsNo(value); break;
             }
         }
 
@@ -258,6 +279,7 @@ namespace TVFollow
                 "check_updates=" + (CheckUpdates ? "yes" : "no") + "\r\n" +
                 "remote_layout=" + OneLine(RemoteLayout) + "\r\n" +
                 (Paused ? "paused=yes\r\n" : "") +
+                (DeveloperTools ? "developer_tools=yes\r\n" : "") +
                 (Port != DefaultPort ? "port=" + Port + "\r\n" : ""));
             if (Tvs.Count > 1) text.Append("# the other TVs\r\n");
             for (int i = 1; i < Tvs.Count; i++) WriteTv(text, "tv" + (i + 1) + ".", Tvs[i]);
@@ -276,6 +298,11 @@ namespace TVFollow
                 prefix + "wake_mac=" + OneLine(tv.WakeMac) + "\r\n" +
                 prefix + "gateway_mac=" + OneLine(tv.GatewayMac) + "\r\n" +
                 prefix + "name=" + OneLine(tv.Name) + "\r\n");
+            // the developer tools' lines only once they're used
+            if (tv.DevPasswordSealed.Length > 0) text.Append(prefix + "dev_password=" + OneLine(tv.DevPasswordSealed) + "\r\n");
+            if (tv.DevFolder.Length > 0) text.Append(prefix + "dev_folder=" + OneLine(tv.DevFolder) + "\r\n");
+            if (!tv.DevPushBack) text.Append(prefix + "dev_push_back=no\r\n");
+            if (tv.DevOnSave) text.Append(prefix + "dev_on_save=yes\r\n");
         }
 
         // Some values come from the TV's own answers (its serial, its network card, its input

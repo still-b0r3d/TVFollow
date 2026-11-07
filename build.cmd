@@ -19,14 +19,18 @@ if not exist "%CSC%" (
 )
 
 rem /codepage:65001 reads the source as UTF-8 (it has a few non-ASCII characters)
-set "OPTS=/nologo /debug- /codepage:65001 /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Runtime.Serialization.dll /r:System.Windows.Forms.dll /r:System.Xml.dll"
+set "OPTS=/nologo /debug- /codepage:65001 /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.Runtime.Serialization.dll /r:System.Security.dll /r:System.Windows.Forms.dll /r:System.Xml.dll"
 set "ICONS=/resource:assets\tv.ico,TVFollow.tv.ico /resource:assets\tv-paused.ico,TVFollow.tv-paused.ico /resource:assets\tv-on.ico,TVFollow.tv-on.ico /resource:assets\tv-off.ico,TVFollow.tv-off.ico /resource:assets\tv-pc.ico,TVFollow.tv-pc.ico"
+rem the example app, file by file: TVFollow zips it when it's pushed. A test checks every file
+rem in the folder is here.
+set "EX=examples\tvfollow-example"
+set "EXAMPLE=/resource:%EX%\manifest,example/manifest /resource:%EX%\source\main.brs,example/source/main.brs /resource:%EX%\components\MainScene.xml,example/components/MainScene.xml /resource:%EX%\components\MainScene.brs,example/components/MainScene.brs /resource:%EX%\images\icon_focus_fhd.png,example/images/icon_focus_fhd.png /resource:%EX%\images\icon_focus_hd.png,example/images/icon_focus_hd.png /resource:%EX%\images\splash_fhd.png,example/images/splash_fhd.png /resource:%EX%\images\splash_hd.png,example/images/splash_hd.png"
 if not exist bin mkdir bin
 
-"%CSC%" %OPTS% %ICONS% /optimize+ /target:winexe /win32icon:assets\tv.ico /win32manifest:assets\TVFollow.manifest /out:bin\TVFollow.exe src\*.cs
+"%CSC%" %OPTS% %ICONS% %EXAMPLE% /optimize+ /target:winexe /win32icon:assets\tv.ico /win32manifest:assets\TVFollow.manifest /out:bin\TVFollow.exe src\*.cs
 if errorlevel 1 exit /b 1
 
-"%CSC%" %OPTS% %ICONS% /target:exe /win32manifest:assets\TVFollow.manifest /main:TVFollow.Tests.TestMain /out:bin\TVFollowTests.exe src\*.cs tests\*.cs
+"%CSC%" %OPTS% %ICONS% %EXAMPLE% /target:exe /win32manifest:assets\TVFollow.manifest /main:TVFollow.Tests.TestMain /out:bin\TVFollowTests.exe src\*.cs tests\*.cs
 if errorlevel 1 exit /b 1
 
 echo Built bin\TVFollow.exe

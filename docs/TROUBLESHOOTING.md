@@ -146,6 +146,34 @@ their settings. Untick a TV there to stop using it.
 - **One TV's button for scripts:** `TVFollow.exe on 2` does TV 2 alone, numbered as the
   Settings window lists them, and so do `off` and `pc`. A TV's name works too.
 
+## The developer mode code does nothing
+
+Press it on the TV's own remote. The TV ignores the code when it comes over the network,
+so TVFollow's remote can't open that screen. Start from the Home
+screen and press the buttons quickly: **Home** 3 times, **Up** 2 times, then **Right,
+Left, Right, Left, Right**. If the screen asks you to, sign up for Roku's free developer
+program at developer.roku.com first, with the Roku account the TV uses.
+
+## Pushing an app says the password is wrong
+
+It's the password you picked on the TV when you turned developer mode on, and capitals
+count. Tick **Show** in the developer tools to see what's typed. If you've forgotten it,
+turn developer mode off and on again with the remote code, and pick a new one.
+
+## My pushed app disappeared from the TV
+
+A TV holds one pushed app, and a Roku update can clear it. With **Put the app back when
+it disappears from the TV** ticked, TVFollow puts the app you pushed last back the next
+time it turns the TV off with your monitors. If an update turned developer mode itself
+off, TVFollow says so in a notification: turn it on again with the remote code, then
+push the app once more.
+
+## A pushed app won't start
+
+Open **App log…** in the developer tools, then push the app again or open it. The log
+shows the app's error and the line it stopped at. If the developer tools say the TV
+refused the app with "Compilation Failed", the log has the line too.
+
 ## Start over
 
 Right-click the TV icon → **Settings…** → **Add or change TVs…** and go through setup

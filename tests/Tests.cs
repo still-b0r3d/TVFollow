@@ -59,6 +59,7 @@ namespace TVFollow.Tests
             Run("updates: reading GitHub's answer and the weekly timing", UpdateParsingAndTiming);
             Run("updates: remembering the last check", UpdateState);
             RunReviewFixes();
+            RunDevTests();
             Run("version matches the exe's version", VersionMatches);
             Run("the version line fits beside the buttons", VersionLineFits);
 

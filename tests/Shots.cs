@@ -129,6 +129,7 @@ namespace TVFollow.Tests
                     SaveTrayMenu(folder, settings);
                     SaveTwoTvs(folder, tv);
                 }
+                SaveDeveloperTools(folder, tv);
             }
             if (backdrop != null) backdrop.Close();
             try { Directory.Delete(Settings.Dir, true); } catch { }
@@ -257,6 +258,65 @@ namespace TVFollow.Tests
                 remote.Close();
                 remote.Dispose();
             }
+        }
+
+        // The Settings window with the developer tools switched on, and the developer tools window
+        // on the living-room TV in developer mode with the example app on it.
+        static void SaveDeveloperTools(string folder, FakeTv tv)
+        {
+            using (var installer = new FakeInstaller(tv, 0))
+            {
+                tv.ControlMode = "enabled";
+                tv.PowerMode = "PowerOn";
+                tv.App = "tvinput.hdmi1";
+                tv.DeveloperEnabled = true;
+                tv.DevAppName = "TVFollow example";
+                tv.DevAppVersion = "1.0.1";
+                DevClient.InstallerPort = installer.Port;
+                var s = new Settings { Port = tv.Port, DeveloperTools = true };
+                s.Tvs.Add(new TvSettings { Ip = tv.Ip, Serial = tv.Serial, Input = "hdmi1", Name = tv.Name, DevPassword = installer.Password });
+                SettingsForm.ShownAddress = ShownTv.Shown;
+                List<Controller> tvs = Controller.For(s);
+                var follower = new Follower(s, tvs); // not started
+                Rectangle area = Screen.PrimaryScreen.WorkingArea;
+                using (var tray = new Tray(follower))
+                using (var dev = new DevTools(s, tvs))
+                {
+                    tray.Dev = dev;
+                    using (var window = new SettingsForm(s, follower, tray))
+                    {
+                        Place(window, area);
+                        window.Show();
+                        WaitFor(() => Text(window).Contains("Living Room TV") && Text(window).Contains("showing this PC"));
+                        Save(window, folder, onScreen ? "15-settings-developer" : "10-settings");
+                        window.Close();
+                    }
+                    using (var window = new DevForm(dev, dev.Tvs[0]))
+                    {
+                        Place(window, area);
+                        window.Show();
+                        WaitFor(() => Text(window).Contains("Developer mode is on.") && Text(window).Contains("On the TV now"));
+                        Save(window, folder, "16-developer-tools");
+                        // and before developer mode is on: the steps
+                        tv.DeveloperEnabled = false;
+                        DateTime until = DateTime.UtcNow.AddMilliseconds(DevForm.PollMs + 1500);
+                        WaitFor(() => Text(window).Contains("Developer mode is off.") || DateTime.UtcNow > until);
+                        Save(window, folder, "17-developer-mode-off");
+                        window.Close();
+                    }
+                }
+            }
+        }
+
+        static void Place(Form window, Rectangle area)
+        {
+            window.StartPosition = FormStartPosition.Manual;
+            if (onScreen)
+            {
+                window.TopMost = true;
+                window.Location = new Point(area.Left + 80, area.Top + 20);
+            }
+            else window.Location = new Point(-20000, -20000);
         }
 
         public static int Probe()

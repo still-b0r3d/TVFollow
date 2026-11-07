@@ -30,6 +30,9 @@ namespace TVFollow.Tests
         public bool RefusePowerOn;                // say OK to PowerOn but stay off
         public bool IgnoreInput;                  // say OK to input changes but don't switch
         public string RedirectTo;                 // answer everything with "302 Found, go here" (no TV does this)
+        public bool DeveloperEnabled;             // developer mode is on (its FakeInstaller takes apps)
+        public string DevAppName;                 // the pushed app (id "dev") the TV lists, or null for none
+        public string DevAppVersion = "";
 
         public readonly string Ip;
         public readonly int Port;
@@ -64,6 +67,12 @@ namespace TVFollow.Tests
         public List<string> Requests()
         {
             lock (requests) return new List<string>(requests);
+        }
+
+        // something its installer did, in among the requests (to check what came first)
+        public void Record(string what)
+        {
+            lock (requests) requests.Add(what);
         }
 
         public void Dispose() { listener.Stop(); }
@@ -144,6 +153,7 @@ namespace TVFollow.Tests
                 for (int i = InputNames.Length; i >= 1; i--)
                     apps.Append("\t<app id=\"tvinput.hdmi" + i + "\" type=\"tvin\" version=\"1.0.0\">" + InputNames[i - 1] + "</app>\n");
                 apps.Append("\t<app id=\"tvinput.cvbs\" type=\"tvin\" version=\"1.0.0\">AV</app>\n");
+                if (DevAppName != null) apps.Append("\t<app id=\"dev\" type=\"appl\" version=\"" + DevAppVersion + "\">" + DevAppName + "</app>\n");
                 apps.Append("\t<app id=\"12\" type=\"appl\" version=\"5.2.0\">Some channel</app>\n</apps>");
                 body = apps.ToString();
                 return;
@@ -171,6 +181,7 @@ namespace TVFollow.Tests
                 "\t<user-device-location>" + Location + "</user-device-location>\n" +
                 "\t<power-mode>" + PowerMode + "</power-mode>\n" +
                 "\t<ecp-setting-mode>" + ControlMode + "</ecp-setting-mode>\n" +
+                "\t<developer-enabled>" + (DeveloperEnabled ? "true" : "false") + "</developer-enabled>\n" +
                 "</device-info>";
         }
     }

@@ -2,6 +2,29 @@
 
 ## 1.3 (not released yet)
 
+Developer tools, for putting your own Roku apps on the TV.
+
+- **Settings… → Show the developer tools** (off to start with) adds a **Developer
+  tools…** button. The tray menu is as it was.
+- The developer tools window says whether the TV's developer mode is on and, while it's
+  off, gives the steps to turn it on with the TV's own remote. The TV ignores the code
+  when it comes over the network, so TVFollow's remote can't do it. The window keeps
+  checking and says when it's on.
+- The password chosen on the TV is typed in once and kept encrypted for your Windows
+  account (`dev_password=` in settings.ini). **Check** tries it on the TV.
+- **Push a .zip…**, **Push a folder…** (TVFollow zips it, leaving out `.git`, `Thumbs.db`
+  and editors' temporary files) and **Push the example app**, a small app built into
+  TVFollow whose source is in `examples/tvfollow-example`. An app one folder down is found.
+  The TV's own words say how it went.
+- **Open on the TV**, **Remove**, **Screenshot…** (saves a picture of the app's screen)
+  and **App log…** (the app's console: what it prints, and where it stopped if it
+  crashed).
+- **Put the app back when it disappears from the TV** (on to start with): TVFollow keeps
+  a copy of the app pushed last and puts it back, if the TV lost it, just before it turns
+  the TV off with your monitors. If developer mode itself went off, a notification says
+  so, once.
+- **Push the app's folder again whenever a file in it is saved**, for making apps.
+- The Settings window grows to fit what it shows, as far as the screen allows.
 - The version and the build are shown apart: `TVFollow v1.3 · Build: abc1234` at the bottom
   of the setup and Settings windows (on two lines there now), in the log and in
   `TVFollow.exe --version`. The exe's **Product version** says `1.3 build abc1234`.

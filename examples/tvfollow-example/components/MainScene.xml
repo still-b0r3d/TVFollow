@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- The example's one screen, laid out for a 1920 x 1080 picture (ui_resolutions=fhd). -->
+<component name="MainScene" extends="Scene">
+    <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
+    <children>
+        <Rectangle id="background" width="1920" height="1080" color="0x14213DFF" />
+        <Poster id="logo" uri="pkg:/images/icon_focus_fhd.png" width="540" height="405" translation="[690,110]" />
+        <Label id="title" text="It works!" width="1920" horizAlign="center" translation="[0,560]"
+            font="font:LargeBoldSystemFont" color="0xFFFFFFFF" />
+        <Label id="detail" width="1920" horizAlign="center" translation="[0,650]"
+            font="font:MediumSystemFont" color="0xC9D6F2FF" />
+        <Label id="clock" width="1920" horizAlign="center" translation="[0,740]"
+            font="font:LargeSystemFont" color="0xFFFFFFFF" />
+        <Label id="hint" text="Press Home on your remote to leave." width="1920" horizAlign="center"
+            translation="[0,920]" font="font:SmallSystemFont" color="0x9FB3D9FF" />
+        <Timer id="tick" repeat="true" duration="1" />
+    </children>
+</component>
