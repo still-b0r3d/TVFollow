@@ -270,8 +270,8 @@ namespace TVFollow.Tests
                 tv.PowerMode = "PowerOn";
                 tv.App = "tvinput.hdmi1";
                 tv.DeveloperEnabled = true;
-                tv.DevAppName = "TVFollow example";
-                tv.DevAppVersion = "1.0.1";
+                tv.DevAppName = TestMain.ExampleTitle;
+                tv.DevAppVersion = TestMain.ExampleVersion;
                 DevClient.InstallerPort = installer.Port;
                 var s = new Settings { Port = tv.Port, DeveloperTools = true };
                 s.Tvs.Add(new TvSettings { Ip = tv.Ip, Serial = tv.Serial, Input = "hdmi1", Name = tv.Name, DevPassword = installer.Password });

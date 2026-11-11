@@ -85,6 +85,35 @@ namespace TVFollow.Tests
             using (var w = new StreamWriter(archive.CreateEntry(name).Open())) w.Write(text);
         }
 
+        // The example app's name and version as its manifest gives them, read here the plain way,
+        // apart from DevPackage. The example is b0r3d TV, so they change with each new version of it.
+        internal static string ExampleTitle { get { return ExampleManifest("title"); } }
+
+        internal static string ExampleVersion
+        {
+            get
+            {
+                string minor = ExampleManifest("minor_version"), build = ExampleManifest("build_version");
+                return ExampleManifest("major_version") + "." + (minor.Length > 0 ? minor : "0") + (build.Length > 0 ? "." + build : "");
+            }
+        }
+
+        // as TVFollow shows it: the name, then the version
+        static string ExampleShown { get { return ExampleTitle + " " + ExampleVersion; } }
+
+        static string ExampleManifest(string key)
+        {
+            using (Stream s = typeof(DevPackage).Assembly.GetManifestResourceStream(DevPackage.ExamplePrefix + "manifest"))
+            {
+                if (s == null) return "";
+                using (var reader = new StreamReader(s))
+                {
+                    Match m = Regex.Match(reader.ReadToEnd(), "^" + key + "=(.*)$", RegexOptions.Multiline);
+                    return m.Success ? m.Groups[1].Value.Trim() : "";
+                }
+            }
+        }
+
         static void CheckThrows(Action action, string words)
         {
             try { action(); }
@@ -267,20 +296,32 @@ namespace TVFollow.Tests
         static void DevExampleBuiltIn()
         {
             DevPackage p = DevPackage.Example();
-            Check(p.Title == "TVFollow example" && p.Version == "1.0.1", "the example is " + p);
+            // the name and version its manifest gives (and a version that's numbers)
+            Check(ExampleTitle.Length > 0 && Regex.IsMatch(ExampleVersion, "^[0-9]+[.][0-9]+([.][0-9]+)?$") &&
+                p.Title == ExampleTitle && p.Version == ExampleVersion, "the example is " + p + ", its manifest says " + ExampleShown);
             List<string> names = Entries(p.Zip);
-            foreach (string need in new[] { "manifest", "source/main.brs", "components/MainScene.xml", "components/MainScene.brs",
-                "images/icon_focus_fhd.png", "images/icon_focus_hd.png", "images/splash_fhd.png", "images/splash_hd.png" })
+            // the files a Roku app starts from, and b0r3d TV's licenses and build stamp beside them
+            foreach (string need in new[] { "manifest", "source/main.brs", "components/AsideScene.xml", "components/AsideScene.brs",
+                "images/icon_focus_fhd.png", "images/icon_focus_hd.png", "images/splash_fhd.png", "images/splash_hd.png",
+                "LICENSE", "LICENSE-ASSETS", "build.txt" })
                 Check(names.Contains(need), "the example has no " + need);
             using (var archive = new ZipArchive(new MemoryStream(p.Zip), ZipArchiveMode.Read))
             {
-                // every file the manifest and the code point at is in it
-                foreach (string from in new[] { "manifest", "components/MainScene.xml", "source/main.brs", "components/MainScene.brs" })
+                // every file the manifest and the code point at is in it: each pkg:/ path in the
+                // manifest and in every .brs and .xml file, and for a path the code finishes itself
+                // ("pkg:/sounds/" + name + ".wav"), a file it starts
+                foreach (string from in names)
                 {
+                    if (from != "manifest" && !from.EndsWith(".brs", StringComparison.Ordinal) && !from.EndsWith(".xml", StringComparison.Ordinal)) continue;
                     string text;
                     using (var reader = new StreamReader(archive.GetEntry(from).Open())) text = reader.ReadToEnd();
-                    foreach (Match m in Regex.Matches(text, "pkg:/([\\w./-]+)"))
-                        Check(archive.GetEntry(m.Groups[1].Value) != null, from + " points at a missing " + m.Groups[1].Value);
+                    foreach (Match m in Regex.Matches(text, "pkg:/([\\w./-]+)(\"\\s*\\+)?"))
+                    {
+                        string path = m.Groups[1].Value;
+                        bool started = m.Groups[2].Success;
+                        Check(started ? names.Exists(n => n.StartsWith(path, StringComparison.Ordinal)) : archive.GetEntry(path) != null,
+                            from + " points at a missing " + path + (started ? "..." : ""));
+                    }
                 }
                 // the pictures are the sizes Roku asks for
                 CheckPicture(archive, "images/icon_focus_fhd.png", 540, 405);
@@ -345,12 +386,12 @@ namespace TVFollow.Tests
                 DevTools tools = DevToolsFor(s);
                 DevTv dev = tools.Tvs[0];
                 DevReport r = dev.Push(DevPackage.Example(), "pushed");
-                Check(r.Ok && r.Text.StartsWith("Pushed TVFollow example 1.0.1"), "push: " + r.Text);
-                Check(tv.DevAppName == "TVFollow example" && tv.DevAppVersion == "1.0.1" && tv.App == "dev", "the TV didn't get the app");
+                Check(r.Ok && r.Text.StartsWith("Pushed " + ExampleShown), "push: " + r.Text);
+                Check(tv.DevAppName == ExampleTitle && tv.DevAppVersion == ExampleVersion && tv.App == "dev", "the TV didn't get the app");
                 Check(installer.Installs == 1 && !installer.SawBasic, "installs " + installer.Installs + ", the password offered as it is: " + installer.SawBasic);
                 Check(dev.HasKept, "no copy kept to put back");
                 DevStatus st = dev.Status(2000);
-                Check(st.Answering && st.DevMode && st.AppKnown && st.App != null && st.App.ToString() == "TVFollow example 1.0.1", "the state after the push");
+                Check(st.Answering && st.DevMode && st.AppKnown && st.App != null && st.App.ToString() == ExampleShown, "the state after the push");
 
                 // the same files again: the TV keeps them, and TVFollow opens the app
                 tv.App = "tvinput.hdmi1";
@@ -358,7 +399,7 @@ namespace TVFollow.Tests
                 Check(r.Ok && r.Text.Contains("already had these very files") && installer.Installs == 1 && tv.Count("POST /launch/dev") == 1 && tv.App == "dev",
                     "the same files again: " + r.Text);
                 string log = LogText();
-                Check(log.Contains("developer tools: pushed TVFollow example 1.0.1"), "the push isn't in the log: " + log);
+                Check(log.Contains("developer tools: pushed " + ExampleShown), "the push isn't in the log: " + log);
                 Check(!log.Contains(installer.Password), "the password got into the log");
                 tools.Dispose();
             }
@@ -396,7 +437,7 @@ namespace TVFollow.Tests
                 // Replace turned away for another reason: once more as Install, like Roku's tools
                 installer.RefuseReplace = true;
                 r = dev.Push(app, "pushed");
-                Check(r.Ok && tv.Requests().Contains("INSTALLER Install") && tv.DevAppName == "TVFollow example", "Install after a refused Replace: " + r.Text);
+                Check(r.Ok && tv.Requests().Contains("INSTALLER Install") && tv.DevAppName == ExampleTitle, "Install after a refused Replace: " + r.Text);
                 installer.RefuseReplace = false;
 
                 // a TV that wants an update check first, said either way
@@ -484,7 +525,7 @@ namespace TVFollow.Tests
                 tv.DevAppName = null;
                 tv.App = "tvinput.hdmi1";
                 c.TurnOff(false, false);
-                Check(tv.DevAppName == "TVFollow example" && installer.Installs == 2, "not put back");
+                Check(tv.DevAppName == ExampleTitle && installer.Installs == 2, "not put back");
                 List<string> order = tv.Requests();
                 int put = order.LastIndexOf("INSTALLER Replace"), off = order.IndexOf("POST /keypress/PowerOff");
                 Check(put >= 0 && off > put && !tv.IsOn, "put back at " + put + ", power off at " + off);
@@ -561,7 +602,7 @@ namespace TVFollow.Tests
                 tv.PowerMode = "PowerOn";
                 tv.App = "tvinput.hdmi1";
                 c.TurnOff(false, false);
-                Check(tv.DevAppName == "TVFollow example" && tv.IsOn && tv.App == "tvinput.hdmi1" && tv.Count("POST /launch/tvinput.hdmi1") == 1,
+                Check(tv.DevAppName == ExampleTitle && tv.IsOn && tv.App == "tvinput.hdmi1" && tv.Count("POST /launch/tvinput.hdmi1") == 1,
                     "back during the put-back: on " + tv.IsOn + ", showing " + tv.App);
                 tools.Dispose();
             }
@@ -686,8 +727,8 @@ namespace TVFollow.Tests
             using (var installer = new FakeInstaller(tv, 0))
             {
                 tv.DeveloperEnabled = true;
-                tv.DevAppName = "TVFollow example";
-                tv.DevAppVersion = "1.0.1";
+                tv.DevAppName = ExampleTitle;
+                tv.DevAppVersion = ExampleVersion;
                 Settings s = DevSettings(tv, installer);
                 DevTools tools = DevToolsFor(s);
                 int pollBefore = DevForm.PollMs, settleBefore = DevTv.SettleMs;
@@ -702,7 +743,7 @@ namespace TVFollow.Tests
                         window.Location = new Point(-20000, -20000);
                         window.ShowInTaskbar = false;
                         window.Show();
-                        Pump(() => AllText(window).Contains("Developer mode is on.") && AllText(window).Contains("On the TV now: TVFollow example 1.0.1"), 10);
+                        Pump(() => AllText(window).Contains("Developer mode is on.") && AllText(window).Contains("On the TV now: " + ExampleShown), 10);
                         Check(FindButton(window, "Push the example app").Enabled && FindButton(window, "Remove").Enabled, "the buttons are off with developer mode on");
                         TextBox box = FindControl<TextBox>(window, b => b.UseSystemPasswordChar);
                         Check(box != null && box.Text == installer.Password, "the password box doesn't have the saved password");
@@ -732,7 +773,7 @@ namespace TVFollow.Tests
                         Pump(() => AllText(window).Contains("Pushed Inner app 1.0.2"), 15);
                         // the example: the folder is forgotten, and so is watching it
                         window.PushApp(() => DevPackage.Example(), "");
-                        Pump(() => AllText(window).Contains("Pushed TVFollow example 1.0.1"), 10);
+                        Pump(() => AllText(window).Contains("Pushed " + ExampleShown), 10);
                         Check(Tv(s).DevFolder == "" && !tools.Tvs[0].Watching, "the example's push kept the folder: " + Tv(s).DevFolder);
                         // a folder push that fails (no password yet) still remembers the folder
                         Tv(s).DevOnSave = false;

@@ -13,9 +13,14 @@ Developer tools, for putting your own Roku apps on the TV.
 - The password chosen on the TV is typed in once and kept encrypted for your Windows
   account (`dev_password=` in settings.ini). **Check** tries it on the TV.
 - **Push a .zip…**, **Push a folder…** (TVFollow zips it, leaving out `.git`, `Thumbs.db`
-  and editors' temporary files) and **Push the example app**, a small app built into
-  TVFollow whose source is in `examples/tvfollow-example`. An app one folder down is found.
-  When the TV refuses an app, its own words say why.
+  and editors' temporary files) and **Push the example app**. An app one folder down is
+  found. When the TV refuses an app, its own words say why.
+- The example app is b0r3d TV 0.71 (Build: 1e8f154), b0r3d's channel guide for Roku TVs
+  that looks like an old cable box, with three games, a radio station and late-night
+  commercials. With **Let the app switch the TV's inputs** ticked, the TV's inputs are
+  channels in its guide. Its source is in `examples/tvfollow-example`, under its own
+  license. Once it's on the TV, it uses b0r3d's online high-score boards and streams
+  b0r3d FM; the README's Privacy section says what goes where.
 - **Open on the TV**, **Remove**, **Screenshot…** (saves a picture of the app's screen)
   and **App log…** (the app's console: what it prints, and where it stopped if it
   crashed).

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- The stand-in screen while b0r3d TV steps aside for the TV's own screensaver (StepAside in
+     source/saver.brs): b0r3d TV's splash picture, small, drifting slowly over black so nothing
+     stays in one spot. Any key sets keyPressed, which Main watches to bring its 2D screen back. -->
+<component name="AsideScene" extends="Scene">
+    <interface>
+        <field id="keyPressed" type="string" alwaysNotify="true" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/AsideScene.brs" />
+    <children>
+        <Poster id="logo" uri="pkg:/images/splash_hd.png" />
+        <Animation id="drift" duration="90" repeat="true" easeFunction="linear">
+            <Vector2DFieldInterpolator id="path" key="[0.0, 0.25, 0.5, 0.75, 1.0]" fieldToInterp="logo.translation" />
+        </Animation>
+    </children>
+</component>

@@ -217,9 +217,15 @@ choose **Disable installer and restart**.
   zips it for you, leaving out things like `.git`, `Thumbs.db` and editors' temporary
   files. If the app is one folder down (you picked the folder around it, or the zip has
   the app in a folder), TVFollow finds it there.
-- **Push the example app**: a small app built into TVFollow, to check it all works. It
-  shows "It works!", the TV's name and a clock. Its source is in
-  [examples/tvfollow-example](examples/tvfollow-example), a place to start your own.
+- **Push the example app**: [b0r3d TV](https://github.com/still-b0r3d/b0r3d-TV), built
+  into TVFollow, to check it all works: a channel guide like an old cable box's, where
+  your TV's apps are channels next to b0r3d's own: three games, a radio station and
+  late-night commercials. With **Let the app switch the TV's inputs** ticked (below), the
+  TV's inputs show up in its guide as channels a few seconds after it opens, and opening
+  one switches the TV: the asking described below, at work, in its `source/tvfollow.brs`.
+  Its source is in [examples/tvfollow-example](examples/tvfollow-example), under its own
+  license (see [License](#license)). Once it's on the TV, it goes on the internet by
+  itself (see [Privacy](#privacy)).
 
 The TV opens an app as soon as it has it. It holds one pushed app at a time, so pushing
 another replaces it.
@@ -290,8 +296,17 @@ in **Settings…** to switch it off. TVFollow doesn't collect anything else.
 The developer tools only talk to your TV too. The password you give them is kept encrypted
 for your Windows account, and it never goes over the network as you typed it.
 
-Its settings and log are in `%APPDATA%\TVFollow`. The log shows your TV's local network
-address, so look it over before you share it.
+The example app is different: once you push it, it's an app on your TV, and it goes on the
+internet by itself, without TVFollow. Its games (Stuck Pixels' Marathon, Test Pattern and
+Snake) use b0r3d's online high-score boards at still.b0r3d.org: a run asks the board for a
+token as it starts, a score that makes the TV's own top 10 goes up with your three initials,
+and a game's high-score page asks for the board's table when it opens. Those requests name
+b0r3d TV and its version, and send nothing else about you or your TV. b0r3d FM streams its
+songs from b0r3d.download while you listen. Like any web request, both see your internet
+address. Remove the app from the TV (**Remove** in the developer tools) and it all stops.
+
+TVFollow's settings and log are in `%APPDATA%\TVFollow`. The log shows your TV's local
+network address, so look it over before you share it.
 
 ## Problems?
 
@@ -336,5 +351,13 @@ TVFollow is free. Use it, change it and share it, at home or at work, under the 
 License with the [Commons Clause](https://commonsclause.com/): the one thing nobody may
 do is sell it, or sell something whose value comes mostly from it. See
 [LICENSE](LICENSE). Made by [b0r3d.org](https://b0r3d.org).
+
+The example app in [examples/tvfollow-example](examples/tvfollow-example) is b0r3d TV, with
+terms of its own in that folder. Its code is under the same MIT License with the Commons
+Clause ([its LICENSE](examples/tvfollow-example/LICENSE)). Its pixel art, music, sounds,
+writing, names, game data and the character Rukus aren't: they're all rights reserved
+([LICENSE-ASSETS](examples/tvfollow-example/LICENSE-ASSETS)), so they can go on your TV
+with the app, and nowhere else without b0r3d's permission. Its fonts keep their own
+licenses, in the OFL files beside them.
 
 Roku is a trademark of Roku, Inc. TVFollow isn't affiliated with or endorsed by Roku.

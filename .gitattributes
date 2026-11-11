@@ -3,7 +3,13 @@
 *.ps1 text eol=crlf
 *.ico binary
 *.png binary
-# the example Roku app's text files: plain LF, like the Roku tools write them
+*.wav binary
+*.ttf binary
+*.otf binary
+# the example Roku app's text files: plain LF, like the Roku tools write them, so the app built
+# into TVFollow is the same byte for byte wherever it was checked out
 examples/**/manifest text eol=lf
 examples/**/*.brs text eol=lf
 examples/**/*.xml text eol=lf
+examples/**/*.txt text eol=lf
+examples/**/LICENSE* text eol=lf
