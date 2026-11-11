@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -20,13 +21,18 @@ namespace TVFollow
     // prints, and the error and the line it stopped at when it crashes. The TV lets one program
     // read it at a time, so each TV has one connection, shared by the app log window and the
     // app's asks for inputs. It's open while anything listens, connects again a few seconds
-    // after it drops, and keeps the recent text for a listener that comes later.
+    // after it drops, and keeps the recent text for a listener that comes later. Whatever it
+    // reads also goes into a file (SavePath), so a crash can be read afterwards and test
+    // scripts can follow the app.
     class DevConsole
     {
         public static int RetryMs = 3000;
         public const int KeepChars = 32000;
+        public static long SaveMaxBytes = 2 * 1024 * 1024;   // past this the file keeps its newer half
 
         readonly Func<string> address;   // the TV's address as it is now (it can change while TVFollow runs)
+        public Func<string> SavePath;    // the file the text is saved in; null saves nothing
+        bool toldSave;                   // a file that couldn't be written is said once (the reader's own)
         readonly object gate = new object();
         readonly List<ConsoleListener> listeners = new List<ConsoleListener>();
         readonly StringBuilder recent = new StringBuilder();
@@ -107,6 +113,7 @@ namespace TVFollow
                         foreach (ConsoleListener l in listeners.ToArray()) l.Connected();
                     }
                     wasConnected = true;
+                    Save("\r\n---- TVFollow connected to the app log, " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " ----\r\n");
                     NetworkStream stream = c.GetStream();
                     int n;
                     while ((n = stream.Read(bytes, 0, bytes.Length)) > 0)
@@ -120,6 +127,7 @@ namespace TVFollow
                             if (recent.Length > KeepChars) recent.Remove(0, recent.Length - KeepChars / 2);
                             foreach (ConsoleListener l in listeners.ToArray()) l.Text(chunk);
                         }
+                        Save(chunk);
                     }
                 }
                 catch (Exception e)
@@ -164,6 +172,38 @@ namespace TVFollow
         void Tell(string words)
         {
             lock (gate) foreach (ConsoleListener l in listeners.ToArray()) l.Trouble(words);
+        }
+
+        // Adds the text to the saved file (on the reader's thread, the only one that writes it).
+        // A file grown past SaveMaxBytes keeps its newer half. Other programs can read it meanwhile.
+        void Save(string text)
+        {
+            Func<string> where = SavePath;
+            if (where == null) return;
+            try
+            {
+                string path = where();
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                var info = new FileInfo(path);
+                if (info.Exists && info.Length > SaveMaxBytes)
+                {
+                    byte[] all = File.ReadAllBytes(path);
+                    int from = all.Length - (int)(SaveMaxBytes / 2);
+                    // from the start of a line, so no character is cut in half
+                    while (from < all.Length && all[from - 1] != (byte)'\n') from++;
+                    using (var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
+                        file.Write(all, from, all.Length - from);
+                }
+                byte[] bytes = Encoding.UTF8.GetBytes(text);
+                using (var file = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+                    file.Write(bytes, 0, bytes.Length);
+                toldSave = false;
+            }
+            catch (Exception e)
+            {
+                if (!toldSave) Log.Write("developer tools: couldn't save the app log: " + e.Message);
+                toldSave = true;
+            }
         }
 
         // The text, without the telnet commands a console can send: IAC (255), then a command, an

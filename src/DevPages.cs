@@ -7,9 +7,11 @@ using System.Windows.Forms;
 
 namespace TVFollow
 {
-    // The developer tools window (Developer tools… in Settings or the tray menu): developer mode on
-    // one TV, the password chosen on it, the app pushed to it, and the three background options.
-    class DevForm : Form
+    // The developer tools, as parts of the Settings window: developer mode and its password on
+    // one TV (on the Developer tools page, under the switch), the app pushed to it (App on the
+    // TV), and what TVFollow does for that app (App options). With several TVs each page has a
+    // TV picker, and the three stay on the same TV.
+    class DevPages : IDisposable
     {
         const string Steps =
             "To turn it on, use the TV's own remote. The TV ignores the code below when TVFollow sends it, " +
@@ -23,57 +25,42 @@ namespace TVFollow
 
         const string OffSteps = "To turn it off, press the same code on the TV's remote and choose Disable installer and restart.";
 
+        // how often the TV is asked about developer mode and its app while a page shows them
         public static int PollMs = 4000;
 
         readonly DevTools tools;
         readonly Settings settings;
-        DevTv tv;   // the TV the window is on
-        readonly Column body = new Column();
-        readonly ComboBox picker;   // several TVs only
+        readonly Form owner;
+        DevTv tv;   // the TV the pages are on
+        Column building;
+        readonly List<Control> modePart = new List<Control>();   // shown while the switch is on
+        readonly List<ComboBox> pickers = new List<ComboBox>();  // several TVs only
         readonly Label modeState, modeSteps, passwordResult, appState, result, folderLine;
         readonly TextBox password;
-        readonly CheckBox showPassword, pushBack, onSave, inputs;
+        readonly CheckBox showPassword, pushBack, onSave, inputs, home;
         readonly Button check, pushZip, pushFolder, pushExample, open, remove, screenshot, appLog;
         readonly Timer poll = new Timer();
         readonly List<KeyValuePair<DevTv, Action<DevReport>>> hooks = new List<KeyValuePair<DevTv, Action<DevReport>>>();
-        bool loading, asking, busy;
+        bool loading, asking, busy, active, closed;
         DevStatus last;
         DevLogForm log;
 
-        public DevForm(DevTools tools, DevTv first)
+        public DevPages(DevTools tools, Form owner, Column modePage, Column appPage, Column optionsPage, DevTv first)
         {
             this.tools = tools;
+            this.owner = owner;
             settings = tools.Settings;
             tv = first;
 
-            SuspendLayout();
-            Text = "TVFollow developer tools";
-            Font = SystemFonts.MessageBoxFont;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(580, 700);
-            BackColor = SystemColors.Window;
-            try { Icon = AppIcons.Load("tv.ico", SystemInformation.IconSize); } catch { }
-            body.Padding = new Padding(24, 16, 24, 8);
-
-            if (tools.Tvs.Count > 1)
-            {
-                FlowLayoutPanel row = Row();
-                row.Controls.Add(new Label { Text = "TV:", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
-                picker = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 320, Margin = new Padding(0, 2, 0, 0) };
-                foreach (DevTv t in tools.Tvs) picker.Items.Add(t.Label);
-                picker.SelectedIndex = Math.Max(0, tools.Tvs.IndexOf(tv));
-                picker.SelectedIndexChanged += delegate { if (!loading && picker.SelectedIndex >= 0) Switch(tools.Tvs[picker.SelectedIndex]); };
-                row.Controls.Add(picker);
-            }
+            // the Developer tools page, under the switch
+            building = modePage;
+            int start = modePage.Controls.Count;
+            Picker();
             Muted(Line("Developer mode lets you put your own Roku apps on the TV. While it's on, the TV runs an app " +
                 "installer on your home network, which only opens with the password you choose."));
-
             Heading("Developer mode");
             modeState = Line("Asking the TV…");
             modeSteps = Muted(Line(""));
-
             Heading("Password");
             Muted(Line("The one you chose on the TV when you turned developer mode on. TVFollow keeps it encrypted " +
                 "for your Windows account."));
@@ -87,9 +74,15 @@ namespace TVFollow
             passwordRow.Controls.Add(showPassword);
             passwordRow.Controls.Add(check);
             passwordResult = Line("");
+            for (int i = start; i < modePage.Controls.Count; i++) modePart.Add(modePage.Controls[i]);
 
-            Heading("App on the TV");
+            // App on the TV
+            building = appPage;
+            Picker();
             appState = Line("");
+            appState.Font = new Font(owner.Font, FontStyle.Bold);
+            appState.Margin = new Padding(0, 0, 0, 12);
+            Heading("Put an app on the TV");
             FlowLayoutPanel pushRow = Row();
             pushZip = MakeButton("Push a .zip…", delegate { PushZip(); });
             pushFolder = MakeButton("Push a folder…", delegate { PushFolder(); });
@@ -97,6 +90,7 @@ namespace TVFollow
             pushRow.Controls.Add(pushZip);
             pushRow.Controls.Add(pushFolder);
             pushRow.Controls.Add(pushExample);
+            Heading("The app that's on it");
             FlowLayoutPanel appRow = Row();
             open = MakeButton("Open on the TV", delegate { Run(t => t.Open(), result); });
             remove = MakeButton("Remove", delegate { Remove(); });
@@ -107,15 +101,34 @@ namespace TVFollow
             appRow.Controls.Add(screenshot);
             appRow.Controls.Add(appLog);
             result = Line("");
+            result.Margin = new Padding(0, 6, 0, 6);
 
-            Heading("Options");
+            // App options
+            building = optionsPage;
+            Picker();
+            home = Check("Open the app whenever the TV goes to Roku's home screen", delegate
+            {
+                tv.Tv.DevHome = home.Checked;
+                Save();
+                tools.Refresh();
+            });
+            Note("Makes the app the TV's home screen: turning the TV on or backing out of another app lands in it. " +
+                "Press Home twice in a row to stay on Roku's home screen.");
+            inputs = Check("Let the app switch the TV's inputs", delegate
+            {
+                tv.Tv.DevInputs = inputs.Checked;
+                Save();
+                tools.Refresh();
+            });
+            Note("A Roku TV won't let an app switch its inputs, so the app asks TVFollow, which does it. " +
+                "How an app asks is in How the developer tools work, in Help.");
             pushBack = Check("Put the app back when it disappears from the TV", delegate
             {
                 tv.Tv.DevPushBack = pushBack.Checked;
                 Save();
             });
-            Muted(Line("TVFollow keeps a copy of the app you pushed last. If the TV loses it (after a Roku update, say), " +
-                "TVFollow puts it back the next time it turns the TV off with your monitors.")).Margin = new Padding(20, 0, 0, 8);
+            Note("TVFollow keeps a copy of the app you pushed last. If the TV loses it (after a Roku update, say), " +
+                "TVFollow puts it back the next time it turns the TV off with your monitors.");
             onSave = Check("Push the app's folder again whenever a file in it is saved", delegate
             {
                 tv.Tv.DevOnSave = onSave.Checked;
@@ -123,64 +136,98 @@ namespace TVFollow
                 tools.Refresh();
                 ShowFolder();
             });
-            folderLine = Muted(Line(""));
-            folderLine.Margin = new Padding(20, 0, 0, 8);
-            inputs = Check("Let the app switch the TV's inputs", delegate
-            {
-                tv.Tv.DevInputs = inputs.Checked;
-                Save();
-                tools.Refresh();
-            });
-            Muted(Line("A Roku TV won't let an app switch its inputs, so the app asks TVFollow, which does it while " +
-                "this PC is on. How an app asks is in How the developer tools work, below.")).Margin = new Padding(20, 0, 0, 8);
-
-            Controls.Add(body);
-            Controls.Add(Footer());
-            AutoScaleDimensions = new SizeF(96F, 96F);
-            AutoScaleMode = AutoScaleMode.Dpi;
-            ResumeLayout(false);
-            PerformLayout();
+            folderLine = Note("");
+            Muted(Line("These work while this PC is on and TVFollow is running.")).Margin = new Padding(0, 10, 0, 0);
 
             Fill();
             foreach (DevTv t in tools.Tvs) Hook(t);
             poll.Interval = PollMs;
             poll.Tick += delegate { Ask(); };
-            Load += delegate
-            {
-                // on a small screen, as tall as fits; the rest scrolls
-                int most = Screen.FromControl(this).WorkingArea.Height - (Height - ClientSize.Height) - 20;
-                if (ClientSize.Height > most)
-                {
-                    ClientSize = new Size(ClientSize.Width, Math.Max(360, most));
-                    if (StartPosition == FormStartPosition.CenterScreen) CenterToScreen();
-                }
-                Ask();
-                poll.Start();
-            };
-            // not straight into the password box with it all selected
-            Shown += delegate { ActiveControl = null; };
-            FormClosed += delegate
-            {
-                poll.Stop();
-                poll.Dispose();
-                foreach (var pair in hooks) pair.Key.Background -= pair.Value;
-                if (log != null && !log.IsDisposed) log.Close();
-            };
         }
 
         public DevTv Tv { get { return tv; } }
 
+        // A page with the developer tools on it is showing: the TV is asked now and every few
+        // seconds until none is.
+        public bool Active
+        {
+            get { return active; }
+            set
+            {
+                if (closed || value == active) return;
+                active = value;
+                if (active)
+                {
+                    poll.Interval = PollMs;
+                    Ask();
+                    poll.Start();
+                }
+                else poll.Stop();
+            }
+        }
+
+        // the switch changed: the developer mode part of its page shows or hides with it
+        public void ShowModePart(bool on)
+        {
+            foreach (Control c in modePart) c.Visible = on;
+            if (!on && log != null && !log.IsDisposed) log.Close();
+        }
+
+        // the pages move to another TV (a picker, or the tray's menu for one TV)
+        public void ShowTv(DevTv to)
+        {
+            if (to == null || to == tv) return;
+            tv = to;
+            loading = true;
+            foreach (ComboBox picker in pickers) picker.SelectedIndex = tools.Tvs.IndexOf(tv);
+            loading = false;
+            Fill();
+            if (active) Ask();
+        }
+
+        public void Dispose()
+        {
+            if (closed) return;
+            closed = true;
+            poll.Stop();
+            poll.Dispose();
+            foreach (var pair in hooks) pair.Key.Background -= pair.Value;
+            if (log != null && !log.IsDisposed) log.Close();
+        }
+
         // ---- building ----
+
+        void Picker()
+        {
+            if (tools.Tvs.Count < 2) return;
+            FlowLayoutPanel row = Row();
+            row.Controls.Add(new Label { Text = "TV:", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+            var picker = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 320, Margin = new Padding(0, 2, 0, 0) };
+            foreach (DevTv t in tools.Tvs) picker.Items.Add(t.Label);
+            picker.SelectedIndex = Math.Max(0, tools.Tvs.IndexOf(tv));
+            picker.SelectedIndexChanged += delegate { if (!loading && picker.SelectedIndex >= 0) ShowTv(tools.Tvs[picker.SelectedIndex]); };
+            row.Controls.Add(picker);
+            row.Margin = new Padding(0, 0, 0, 12);
+            pickers.Add(picker);
+        }
 
         void Heading(string text)
         {
-            body.Controls.Add(new Label { Text = text, AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, 8, 0, 6) });
+            building.Controls.Add(new Label { Text = text, AutoSize = true, Font = new Font(owner.Font, FontStyle.Bold), Margin = new Padding(0, 8, 0, 6) });
         }
 
         Label Line(string text)
         {
             var label = new Label { Text = text, AutoSize = true, Margin = new Padding(0, 0, 0, 6), UseMnemonic = false };
-            body.Controls.Add(label);
+            building.Controls.Add(label);
+            return label;
+        }
+
+        // a muted line under a tick box, lined up with its words
+        Label Note(string text)
+        {
+            Label label = Muted(Line(text));
+            label.Margin = new Padding(20, 0, 0, 12);
             return label;
         }
 
@@ -193,7 +240,7 @@ namespace TVFollow
         FlowLayoutPanel Row()
         {
             var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 8) };
-            body.Controls.Add(row);
+            building.Controls.Add(row);
             return row;
         }
 
@@ -201,7 +248,7 @@ namespace TVFollow
         {
             var box = new CheckBox { Text = text, AutoSize = true, Margin = new Padding(0, 0, 0, 2) };
             box.CheckedChanged += (s, e) => { if (!loading) changed(s, e); };
-            body.Controls.Add(box);
+            building.Controls.Add(box);
             return box;
         }
 
@@ -210,28 +257,6 @@ namespace TVFollow
             var b = new Button { Text = text, AutoSize = true, MinimumSize = new Size(0, 28), Padding = new Padding(6, 0, 6, 0), UseVisualStyleBackColor = true, Margin = new Padding(0, 0, 8, 0) };
             b.Click += click;
             return b;
-        }
-
-        Control Footer()
-        {
-            var footer = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = Color.FromArgb(243, 243, 243) };
-            var help = new LinkLabel
-            {
-                AutoSize = true,
-                Location = new Point(20, 18),
-                Text = "How the developer tools work",
-                LinkColor = SetupPage.Muted,
-                ActiveLinkColor = SystemColors.HotTrack,
-                LinkBehavior = LinkBehavior.HoverUnderline
-            };
-            help.LinkClicked += delegate { SetupForm.OpenUrl(SetupForm.HelpUrl + "#developer-tools"); };
-            var close = new Button { Text = "Close", AutoSize = true, MinimumSize = new Size(92, 30), UseVisualStyleBackColor = true, Anchor = AnchorStyles.Right | AnchorStyles.Top };
-            close.Location = new Point(footer.Width - 112, 11);
-            close.Click += delegate { Close(); };
-            CancelButton = close;
-            footer.Controls.Add(help);
-            footer.Controls.Add(close);
-            return footer;
         }
 
         // ---- filling in ----
@@ -243,12 +268,13 @@ namespace TVFollow
             pushBack.Checked = tv.Tv.DevPushBack;
             onSave.Checked = tv.Tv.DevOnSave;
             inputs.Checked = tv.Tv.DevInputs;
+            home.Checked = tv.Tv.DevHome;
             loading = false;
             last = null;
             modeState.Text = "Asking the TV…";
             modeState.ForeColor = SetupPage.Muted;
             modeSteps.Text = "";
-            appState.Text = "";
+            appState.Text = "Asking the TV…";
             passwordResult.Text = "";
             result.Text = "";
             ShowFolder();
@@ -264,16 +290,16 @@ namespace TVFollow
                 : (tv.Tv.DevOnSave && tv.Watching ? "Watching " : "The folder: ") + folder;
         }
 
-        // the TV's state, asked every few seconds while the window is open
+        // the TV's state, asked every few seconds while a page shows it
         async void Ask()
         {
-            if (asking || IsDisposed) return;
+            if (asking || closed || owner.IsDisposed) return;
             asking = true;
             DevTv on = tv;
             DevStatus s = await Task.Run(() => on.Status(2500));
             asking = false;
-            if (IsDisposed) return;
-            // the window moved to another TV meanwhile: ask about that one
+            if (closed || owner.IsDisposed) return;
+            // the pages moved to another TV meanwhile: ask about that one
             if (on != tv) { Ask(); return; }
             last = s;
             ShowStatus(s);
@@ -287,8 +313,8 @@ namespace TVFollow
             else Set(modeState, null, "Developer mode is off.");
             modeSteps.Text = !s.Answering ? "" : s.DevMode ? OffSteps : Steps;
 
-            if (!s.Answering) appState.Text = "";
-            else if (!s.DevMode) appState.Text = "Apps can be pushed once developer mode is on.";
+            if (s.OtherRoku || !s.Answering) appState.Text = "The TV isn't answering right now.";
+            else if (!s.DevMode) appState.Text = "Apps can be pushed once developer mode is on (on the Developer tools page).";
             else if (!s.AppKnown) appState.Text = "The TV won't say which app is on it" + (s.Limited ? " while Network access is on Limited." : " right now.");
             else appState.Text = s.App == null ? "No pushed app on the TV." : "On the TV now: " + s.App;
             ShowFolder();
@@ -316,13 +342,6 @@ namespace TVFollow
 
         // ---- changes ----
 
-        void Switch(DevTv to)
-        {
-            tv = to;
-            Fill();
-            Ask();
-        }
-
         void Save()
         {
             try { settings.Save(); }
@@ -341,12 +360,12 @@ namespace TVFollow
         {
             Action<DevReport> shown = r =>
             {
-                if (IsDisposed || !IsHandleCreated) return;
+                if (closed || owner.IsDisposed || !owner.IsHandleCreated) return;
                 try
                 {
-                    BeginInvoke((Action)(() =>
+                    owner.BeginInvoke((Action)(() =>
                     {
-                        if (IsDisposed || t != tv) return;
+                        if (closed || owner.IsDisposed || t != tv) return;
                         Show(result, r);
                         Ask();
                     }));
@@ -367,7 +386,7 @@ namespace TVFollow
             DevTv on = tv;
             DevReport r = await Task.Run(() => work(on));
             busy = false;
-            if (IsDisposed) return;
+            if (closed || owner.IsDisposed) return;
             if (on == tv) Show(where, r);
             UpdateButtons();
             Ask();
@@ -377,7 +396,7 @@ namespace TVFollow
         {
             using (var dialog = new OpenFileDialog { Title = "Push an app to the TV", Filter = "Roku app (*.zip)|*.zip|All files (*.*)|*.*" })
             {
-                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                if (dialog.ShowDialog(owner) != DialogResult.OK) return;
                 string path = dialog.FileName;
                 PushApp(() => DevPackage.FromZip(path), "");
             }
@@ -388,7 +407,7 @@ namespace TVFollow
             using (var dialog = new FolderBrowserDialog { Description = "Pick your app's folder: the one with the manifest file in it.", ShowNewFolderButton = false })
             {
                 if (tv.Tv.DevFolder.Length > 0 && Directory.Exists(tv.Tv.DevFolder)) dialog.SelectedPath = tv.Tv.DevFolder;
-                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                if (dialog.ShowDialog(owner) != DialogResult.OK) return;
                 string path = dialog.SelectedPath;
                 PushApp(() => DevPackage.FromFolder(path), null);
             }
@@ -417,7 +436,7 @@ namespace TVFollow
             if (app == null) r = new DevReport(false, problem);
             else
             {
-                if (!IsDisposed && on == tv)
+                if (!closed && !owner.IsDisposed && on == tv)
                 {
                     Set(result, null, "Pushing " + app + " (" + DevPackage.Size(app.Zip.Length) + ")…");
                     result.ForeColor = SetupPage.Muted;
@@ -429,7 +448,7 @@ namespace TVFollow
                 tools.Refresh();
             }
             busy = false;
-            if (IsDisposed) return;
+            if (closed || owner.IsDisposed) return;
             if (on == tv) Show(result, r);
             ShowFolder();
             UpdateButtons();
@@ -439,7 +458,7 @@ namespace TVFollow
         void Remove()
         {
             string what = last != null && last.App != null ? last.App.ToString() : "the app";
-            if (MessageBox.Show(this, "Take " + what + " off the TV? TVFollow forgets its copy too, so it won't put it back.",
+            if (MessageBox.Show(owner, "Take " + what + " off the TV? TVFollow forgets its copy too, so it won't put it back.",
                 "TVFollow", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             Run(t => t.Remove(), result);
         }
@@ -465,20 +484,20 @@ namespace TVFollow
                 return got;
             });
             busy = false;
-            if (IsDisposed) return;
+            if (closed || owner.IsDisposed) return;
             UpdateButtons();
-            if (on != tv) return;   // the window moved to another TV meanwhile
+            if (on != tv) return;   // the pages moved to another TV meanwhile
             if (!r.Ok) { Show(result, r); return; }
-            string name = FileSafe(appName) + " " + DateTime.Now.ToString("yyyy-MM-dd HH.mm.ss") + "." + extension;
+            string name = DevTv.PictureName(appName, extension);
             using (var dialog = new SaveFileDialog
             {
                 Title = "Save the picture",
-                FileName = name.Trim(),
+                FileName = name,
                 Filter = extension == "png" ? "PNG picture (*.png)|*.png" : "JPEG picture (*.jpg)|*.jpg",
                 InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures)
             })
             {
-                if (dialog.ShowDialog(this) != DialogResult.OK) { result.Text = ""; return; }
+                if (dialog.ShowDialog(owner) != DialogResult.OK) { result.Text = ""; return; }
                 try
                 {
                     File.WriteAllBytes(dialog.FileName, picture);
@@ -486,12 +505,6 @@ namespace TVFollow
                 }
                 catch (Exception e) { Show(result, new DevReport(false, "Couldn't save it: " + e.Message)); }
             }
-        }
-
-        static string FileSafe(string name)
-        {
-            foreach (char c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
-            return name.Length > 0 ? name : "App";
         }
 
         void ShowLog()

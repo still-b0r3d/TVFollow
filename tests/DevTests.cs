@@ -32,6 +32,9 @@ namespace TVFollow.Tests
             Run("dev: the app log shows the TV's console", DevAppLog);
             Run("dev: the pushed app asks TVFollow to switch the TV's input", DevAppSwitchesInputs);
             Run("dev: nobody reads the app's console for asks unless switched on, and only on this TV", DevInputsOnlyWhenOn);
+            Run("dev: the app opens when the TV goes to Roku's home screen, and Home twice stays home", DevHomeOpensApp);
+            Run("dev: the app log is saved in a file while it's read", DevAppLogSaved);
+            Run("dev: push and screenshot from the command line, with the saved password", DevCommandLine);
             Run("dev: the developer window shows the TV's state", DevWindow);
             Run("dev: Settings shows the developer tools only when switched on", DevSettingsSwitch);
             Run("dev: the tray menu has Developer tools… only when switched on, and it opens them", DevTrayItem);
@@ -162,19 +165,20 @@ namespace TVFollow.Tests
             Tv(s).DevFolder = "C:\\Apps\\Den #2 app";
             Tv(s).DevOnSave = true;
             Tv(s).DevInputs = true;
-            s.Tvs.Add(new TvSettings { Ip = "192.168.1.51", Serial = "X000000002", DevPushBack = false });
+            s.Tvs.Add(new TvSettings { Ip = "192.168.1.51", Serial = "X000000002", DevPushBack = false, DevHome = true });
             s.DeveloperTools = true;
             s.Save();
             string file = File.ReadAllText(Settings.FilePath);
             Check(!file.Contains(password), "the password is in settings.ini as typed");
             Check(file.Contains("dev_password=dpapi:"), "the password isn't sealed: " + file);
             Check(file.Contains("\ndev_inputs=yes") && !file.Contains("tv2.dev_inputs"), "the inputs option's lines: " + file);
+            Check(file.Contains("\ntv2.dev_home=yes") && !file.Contains("\ndev_home"), "the home screen option's lines: " + file);
             Settings t = Settings.Load();
             Check(t.DeveloperTools, "the switch was lost");
             Check(Tv(t).DevPassword == password, "the password didn't come back");
             Check(Tv(t).DevFolder == "C:\\Apps\\Den #2 app", "the folder lost its #: " + Tv(t).DevFolder);
-            Check(Tv(t).DevOnSave && Tv(t).DevPushBack && Tv(t).DevInputs, "the first TV's options were lost");
-            Check(!t.Tvs[1].DevPushBack && !t.Tvs[1].DevOnSave && !t.Tvs[1].DevInputs && t.Tvs[1].DevPassword == "", "the second TV's options were lost");
+            Check(Tv(t).DevOnSave && Tv(t).DevPushBack && Tv(t).DevInputs && !Tv(t).DevHome, "the first TV's options were lost");
+            Check(!t.Tvs[1].DevPushBack && !t.Tvs[1].DevOnSave && !t.Tvs[1].DevInputs && t.Tvs[1].DevHome && t.Tvs[1].DevPassword == "", "the second TV's options were lost");
 
             // a TV that never used the tools gets no lines for them
             var plain = new Settings();
@@ -731,67 +735,87 @@ namespace TVFollow.Tests
                 tv.DevAppVersion = ExampleVersion;
                 Settings s = DevSettings(tv, installer);
                 DevTools tools = DevToolsFor(s);
-                int pollBefore = DevForm.PollMs, settleBefore = DevTv.SettleMs;
-                DevForm.PollMs = 200;
+                var follower = new Follower(s, tools.Tvs.ConvertAll(t => t.Controller)); // not started
+                int pollBefore = DevPages.PollMs, settleBefore = DevTv.SettleMs;
+                DevPages.PollMs = 200;
                 DevTv.SettleMs = 300;
                 string parent = TempFolder("Window apps");
                 try
                 {
-                    using (var window = new DevForm(tools, tools.Tvs[0]))
+                    using (var tray = new Tray(follower))
                     {
-                        window.StartPosition = FormStartPosition.Manual;
-                        window.Location = new Point(-20000, -20000);
-                        window.ShowInTaskbar = false;
-                        window.Show();
-                        Pump(() => AllText(window).Contains("Developer mode is on.") && AllText(window).Contains("On the TV now: " + ExampleShown), 10);
-                        Check(FindButton(window, "Push the example app").Enabled && FindButton(window, "Remove").Enabled, "the buttons are off with developer mode on");
-                        TextBox box = FindControl<TextBox>(window, b => b.UseSystemPasswordChar);
-                        Check(box != null && box.Text == installer.Password, "the password box doesn't have the saved password");
-                        box.Text = "another-pass";
-                        Check(Tv(s).DevPassword == "another-pass" && Tv(Settings.Load()).DevPassword == "another-pass", "a typed password wasn't saved");
-                        box.Text = installer.Password;
+                        tray.Dev = tools;
+                        using (var window = new SettingsForm(s, follower, tray))
+                        {
+                            OffScreen(window);
+                            window.Show();
+                            // switched on: the two app pages are listed
+                            Check(window.ListedPages.Contains(SettingsForm.AppPage) && window.ListedPages.Contains(SettingsForm.AppOptionsPage),
+                                "the app pages aren't listed: " + string.Join(", ", window.ListedPages.ToArray()));
+                            window.ShowPage(SettingsForm.DeveloperPage);
+                            Pump(() => AllText(window).Contains("Developer mode is on."), 10);
+                            TextBox box = FindControl<TextBox>(window, b => b.UseSystemPasswordChar);
+                            Check(box != null && box.Text == installer.Password, "the password box doesn't have the saved password");
+                            box.Text = "another-pass";
+                            Check(Tv(s).DevPassword == "another-pass" && Tv(Settings.Load()).DevPassword == "another-pass", "a typed password wasn't saved");
+                            box.Text = installer.Password;
 
-                        // letting the app switch inputs: ticked, saved, looked for; unticked, stopped
-                        CheckBox inputsBox = FindBox(window, "Let the app switch the TV's inputs");
-                        Check(inputsBox != null && !inputsBox.Checked && !tools.Tvs[0].LookingForAsks, "no unticked inputs option");
-                        inputsBox.Checked = true;
-                        Check(Tv(s).DevInputs && Tv(Settings.Load()).DevInputs && tools.Tvs[0].LookingForAsks, "ticking the inputs option");
-                        inputsBox.Checked = false;
-                        Check(!Tv(s).DevInputs && !Tv(Settings.Load()).DevInputs && !tools.Tvs[0].LookingForAsks, "unticking the inputs option");
+                            window.ShowPage(SettingsForm.AppPage);
+                            Pump(() => AllText(window).Contains("On the TV now: " + ExampleShown), 10);
+                            Check(FindButton(window, "Push the example app").Enabled && FindButton(window, "Remove").Enabled, "the buttons are off with developer mode on");
 
-                        // a folder around the app: the app's own folder is pushed, and remembered
-                        WriteFile(parent, "inner/manifest", "title=Inner app\nmajor_version=1\nminor_version=0\nbuild_version=1\n");
-                        WriteFile(parent, "inner/source/main.brs", "sub Main()\nend sub\n");
-                        string inner = Path.Combine(parent, "inner");
-                        window.PushApp(() => DevPackage.FromFolder(parent), null);
-                        Pump(() => AllText(window).Contains("Pushed Inner app 1.0.1"), 10);
-                        Check(Tv(s).DevFolder == inner && tv.DevAppName == "Inner app", "the folder pushed: " + Tv(s).DevFolder);
-                        // pushing on save, ticked in the window; a save's push shows in the window
-                        FindBox(window, "Push the app's folder again").Checked = true;
-                        Check(Tv(s).DevOnSave && tools.Tvs[0].Watching, "not watching after ticking the option");
-                        WriteFile(parent, "inner/manifest", "title=Inner app\nmajor_version=1\nminor_version=0\nbuild_version=2\n");
-                        Pump(() => AllText(window).Contains("Pushed Inner app 1.0.2"), 15);
-                        // the example: the folder is forgotten, and so is watching it
-                        window.PushApp(() => DevPackage.Example(), "");
-                        Pump(() => AllText(window).Contains("Pushed " + ExampleShown), 10);
-                        Check(Tv(s).DevFolder == "" && !tools.Tvs[0].Watching, "the example's push kept the folder: " + Tv(s).DevFolder);
-                        // a folder push that fails (no password yet) still remembers the folder
-                        Tv(s).DevOnSave = false;
-                        box.Text = "";
-                        window.PushApp(() => DevPackage.FromFolder(inner), null);
-                        Pump(() => AllText(window).Contains("Type the password"), 10);
-                        Check(Tv(s).DevFolder == inner, "a failed push forgot the folder");
-                        box.Text = installer.Password;
+                            // letting the app switch inputs: ticked, saved, looked for; unticked, stopped
+                            window.ShowPage(SettingsForm.AppOptionsPage);
+                            CheckBox inputsBox = FindBox(window, "Let the app switch the TV's inputs");
+                            Check(inputsBox != null && !inputsBox.Checked && !tools.Tvs[0].LookingForAsks, "no unticked inputs option");
+                            inputsBox.Checked = true;
+                            Check(Tv(s).DevInputs && Tv(Settings.Load()).DevInputs && tools.Tvs[0].LookingForAsks, "ticking the inputs option");
+                            inputsBox.Checked = false;
+                            Check(!Tv(s).DevInputs && !Tv(Settings.Load()).DevInputs && !tools.Tvs[0].LookingForAsks, "unticking the inputs option");
+                            // opening the app when the TV goes home: the same
+                            CheckBox homeBox = FindBox(window, "Open the app whenever the TV goes to Roku's home screen");
+                            Check(homeBox != null && !homeBox.Checked, "no unticked home screen option");
+                            homeBox.Checked = true;
+                            Check(Tv(s).DevHome && Tv(Settings.Load()).DevHome && tools.Tvs[0].LookingForAsks, "ticking the home screen option");
+                            homeBox.Checked = false;
+                            Check(!Tv(s).DevHome && !Tv(Settings.Load()).DevHome && !tools.Tvs[0].LookingForAsks, "unticking the home screen option");
 
-                        tv.DeveloperEnabled = false;
-                        Pump(() => AllText(window).Contains("Developer mode is off.") && AllText(window).Contains("Press Home 3 times"), 10);
-                        Check(!FindButton(window, "Push the example app").Enabled, "pushing stays on with developer mode off");
-                        window.Close();
+                            // a folder around the app: the app's own folder is pushed, and remembered
+                            window.ShowPage(SettingsForm.AppPage);
+                            WriteFile(parent, "inner/manifest", "title=Inner app\nmajor_version=1\nminor_version=0\nbuild_version=1\n");
+                            WriteFile(parent, "inner/source/main.brs", "sub Main()\nend sub\n");
+                            string inner = Path.Combine(parent, "inner");
+                            window.Dev.PushApp(() => DevPackage.FromFolder(parent), null);
+                            Pump(() => AllText(window).Contains("Pushed Inner app 1.0.1"), 10);
+                            Check(Tv(s).DevFolder == inner && tv.DevAppName == "Inner app", "the folder pushed: " + Tv(s).DevFolder);
+                            // pushing on save, ticked on App options; a save's push shows on App on the TV
+                            FindBox(window, "Push the app's folder again").Checked = true;
+                            Check(Tv(s).DevOnSave && tools.Tvs[0].Watching, "not watching after ticking the option");
+                            WriteFile(parent, "inner/manifest", "title=Inner app\nmajor_version=1\nminor_version=0\nbuild_version=2\n");
+                            Pump(() => AllText(window).Contains("Pushed Inner app 1.0.2"), 15);
+                            // the example: the folder is forgotten, and so is watching it
+                            window.Dev.PushApp(() => DevPackage.Example(), "");
+                            Pump(() => AllText(window).Contains("Pushed " + ExampleShown), 10);
+                            Check(Tv(s).DevFolder == "" && !tools.Tvs[0].Watching, "the example's push kept the folder: " + Tv(s).DevFolder);
+                            // a folder push that fails (no password yet) still remembers the folder
+                            Tv(s).DevOnSave = false;
+                            box.Text = "";
+                            window.Dev.PushApp(() => DevPackage.FromFolder(inner), null);
+                            Pump(() => AllText(window).Contains("Type the password"), 10);
+                            Check(Tv(s).DevFolder == inner, "a failed push forgot the folder");
+                            box.Text = installer.Password;
+
+                            tv.DeveloperEnabled = false;
+                            window.ShowPage(SettingsForm.DeveloperPage);
+                            Pump(() => AllText(window).Contains("Developer mode is off.") && AllText(window).Contains("Press Home 3 times"), 10);
+                            Check(!FindButton(window, "Push the example app").Enabled, "pushing stays on with developer mode off");
+                            window.Close();
+                        }
                     }
                 }
                 finally
                 {
-                    DevForm.PollMs = pollBefore;
+                    DevPages.PollMs = pollBefore;
                     DevTv.SettleMs = settleBefore;
                     tools.Dispose();
                     File.Delete(Settings.FilePath);
@@ -835,15 +859,29 @@ namespace TVFollow.Tests
                         // as it opens for real: centred. From here on the window stays where it is.
                         window.StartPosition = FormStartPosition.CenterScreen;
                         Point where = window.Location;
-                        Check(!AllText(window).Contains("Developer tools…"), "the developer tools' button shows while they're off");
-                        CheckBox box = FindBox(window, "Show the developer tools");
+                        Check(window.CurrentPage == SettingsForm.TvsPage, "it opened on " + window.CurrentPage);
+                        Check(!window.ListedPages.Contains(SettingsForm.AppPage) && !window.ListedPages.Contains(SettingsForm.AppOptionsPage),
+                            "the app pages are listed while the tools are off");
+                        // an app page asked for while they're off: the page with their switch
+                        window.ShowPage(SettingsForm.AppPage);
+                        Check(window.CurrentPage == SettingsForm.DeveloperPage, "asking for an app page opened " + window.CurrentPage);
+                        Check(!FindButton(window, "Check").Visible, "developer mode's part shows while the tools are off");
+                        CheckBox box = FindBox(window, "Turn on the developer tools");
                         Check(box != null && !box.Checked, "no switch for the developer tools");
                         box.Checked = true;
                         Check(s.DeveloperTools && Settings.Load().DeveloperTools, "switching them on wasn't saved");
-                        Check(AllText(window).Contains("Developer tools…"), "the button didn't show");
+                        Check(window.ListedPages.Contains(SettingsForm.AppPage) && window.ListedPages.Contains(SettingsForm.AppOptionsPage),
+                            "the app pages didn't show up: " + string.Join(", ", window.ListedPages.ToArray()));
+                        Check(FindButton(window, "Check").Visible, "developer mode's part didn't show");
+                        Check(window.CurrentPage == SettingsForm.DeveloperPage, "the switch moved the window to " + window.CurrentPage);
                         Check(window.Location == where, "the window moved to " + window.Location + " when the switch changed");
+                        // switched off while an app page is open: back to the switch's page
+                        window.ShowPage(SettingsForm.AppOptionsPage);
+                        Check(window.CurrentPage == SettingsForm.AppOptionsPage, "App options didn't open");
                         box.Checked = false;
-                        Check(!s.DeveloperTools && !AllText(window).Contains("Developer tools…"), "switching them off");
+                        Check(!s.DeveloperTools && !window.ListedPages.Contains(SettingsForm.AppPage), "switching them off");
+                        Check(window.CurrentPage == SettingsForm.DeveloperPage, "switching them off left " + window.CurrentPage + " open");
+                        Check(!FindButton(window, "Check").Visible, "developer mode's part stayed");
                         window.Close();
                     }
                 }
@@ -869,30 +907,30 @@ namespace TVFollow.Tests
                         ToolStripItem item = TrayItem(tray, "Developer tools…");
                         Check(item != null, "no Developer tools… in the tray menu at all");
                         Check(ShownItems(tray).Contains("| Settings… | Open log |"), "the tray menu while they're off: " + ShownItems(tray));
-                        using (var window = new SettingsForm(s, follower, tray))
-                        {
-                            OffScreen(window);
-                            window.Show();
-                            CheckBox box = FindBox(window, "Show the developer tools");
-                            box.Checked = true;
-                            Check(ShownItems(tray).Contains("| Settings… | Developer tools… | Open log |"), "ticking the switch: " + ShownItems(tray));
+                        tray.ShowSettings();
+                        Check(OpenWindows<SettingsForm>().Count == 1, "Settings… didn't open the Settings window");
+                        SettingsForm window = OpenWindows<SettingsForm>()[0];
+                        Check(window.Location.X < -10000, "the Settings window opened on the screen, at " + window.Location);
+                        CheckBox box = FindBox(window, "Turn on the developer tools");
+                        box.Checked = true;
+                        Check(ShownItems(tray).Contains("| Settings… | Developer tools… | Open log |"), "ticking the switch: " + ShownItems(tray));
 
-                            item.PerformClick();
-                            Check(OpenWindows<DevForm>().Count == 1, "the tray item didn't open the developer tools");
-                            DevForm opened = OpenWindows<DevForm>()[0];
-                            Check(opened.Location.X < -10000, "the developer tools opened on the screen, at " + opened.Location);
-                            // once more: the same window comes back, even from minimized
-                            MinimizeOffScreen(opened);
-                            Check(opened.WindowState == FormWindowState.Minimized && IsIconic(opened.Handle), "the test couldn't minimize the window");
-                            item.PerformClick();
-                            Check(OpenWindows<DevForm>().Count == 1 && OpenWindows<DevForm>()[0] == opened, "a second click opened a second window");
-                            Check(opened.WindowState == FormWindowState.Normal && !IsIconic(opened.Handle), "a minimized developer tools window stayed minimized");
+                        // the item opens the same window, on App on the TV
+                        window.ShowPage(SettingsForm.TvsPage);
+                        item.PerformClick();
+                        Check(OpenWindows<SettingsForm>().Count == 1 && OpenWindows<SettingsForm>()[0] == window, "the tray item opened a second window");
+                        Check(window.CurrentPage == SettingsForm.AppPage, "the tray item opened " + window.CurrentPage);
+                        // once more from minimized: the same window comes back
+                        MinimizeOffScreen(window);
+                        Check(window.WindowState == FormWindowState.Minimized && IsIconic(window.Handle), "the test couldn't minimize the window");
+                        item.PerformClick();
+                        Check(OpenWindows<SettingsForm>().Count == 1 && OpenWindows<SettingsForm>()[0] == window, "a second click opened a second window");
+                        Check(window.WindowState == FormWindowState.Normal && !IsIconic(window.Handle), "a minimized Settings window stayed minimized");
 
-                            box.Checked = false;
-                            Check(opened.IsDisposed, "switching them off left the developer tools open");
-                            Check(ShownItems(tray).Contains("| Settings… | Open log |"), "switching them off left the tray item: " + ShownItems(tray));
-                            window.Close();
-                        }
+                        box.Checked = false;
+                        Check(window.CurrentPage == SettingsForm.DeveloperPage, "switching them off left " + window.CurrentPage + " open");
+                        Check(ShownItems(tray).Contains("| Settings… | Open log |"), "switching them off left the tray item: " + ShownItems(tray));
+                        window.Close();
                     }
                     // switched on before TVFollow starts: the item is there from the start
                     s.DeveloperTools = true;
@@ -902,9 +940,162 @@ namespace TVFollow.Tests
                 finally
                 {
                     Tray.PlaceWindow = place;
-                    foreach (DevForm left in OpenWindows<DevForm>()) left.Close();
+                    foreach (SettingsForm left in OpenWindows<SettingsForm>()) left.Close();
                 }
                 File.Delete(Settings.FilePath);
+            }
+        }
+
+        static void DevHomeOpensApp()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            using (var console = new FakeConsole("127.0.0.1", 0))
+            using (new InputTimings(console, 100))
+            {
+                int settle = DevTv.HomeSettleMs, stay = DevTv.StayHomeMs;
+                DevTv.HomeSettleMs = 100;
+                DevTv.StayHomeMs = 1500;
+                try
+                {
+                    tv.ModernHome = true;
+                    tv.DeveloperEnabled = true;
+                    tv.DevAppName = "Home app";
+                    tv.App = "";
+                    // Roku OS 15 shows its home screen as an app of type "home": it's still the home screen
+                    Check(new RokuClient(tv.Ip, tv.Port).GetActiveApp(2000) == "", "the home screen read as an app");
+                    Settings s = SettingsFor(tv);
+                    s.DeveloperTools = true;
+                    Tv(s).DevHome = true;
+                    using (DevTools tools = DevToolsFor(s))
+                    {
+                        // on the home screen: the app opens
+                        Until(tv, () => tv.App == "dev", "the app opening from the home screen");
+                        Until(tv, () => LogText().Contains("the TV went to Roku's home screen, so Home app opened"), "the log line");
+                        // Home pressed right after: the TV stays home
+                        Check(new RokuClient(tv.Ip, tv.Port).Keypress("Home", 2000) == 200 && tv.App == "", "pressing Home");
+                        Until(tv, () => LogText().Contains("right after the app opened, so the TV stays there"), "staying home");
+                        Thread.Sleep(600);
+                        Check(tv.App == "" && tv.Count("POST /launch/dev") == 1, "it opened again after Home twice: " + tv.Count("POST /launch/dev"));
+                        // another app, then backing out of it to the home screen: the app opens again
+                        tv.App = "12";
+                        Thread.Sleep(400);
+                        tv.App = "";
+                        Until(tv, () => tv.App == "dev" && tv.Count("POST /launch/dev") == 2, "the app after backing out of another");
+                        // a long while in the app, then Home: it opens again; Home once more: it stays
+                        Thread.Sleep(DevTv.StayHomeMs + 200);
+                        tv.App = "";
+                        Until(tv, () => tv.App == "dev" && tv.Count("POST /launch/dev") == 3, "the app after a while in it");
+                        tv.App = "";
+                        Thread.Sleep(800);
+                        Check(tv.App == "" && tv.Count("POST /launch/dev") == 3, "Home twice didn't stay home");
+                        // turned off on the home screen: nothing opens; turned on, landing home: it opens
+                        tv.PowerMode = "DisplayOff";
+                        Thread.Sleep(600);
+                        Check(tv.Count("POST /launch/dev") == 3, "the app opened on a TV that's off");
+                        tv.PowerMode = "PowerOn";
+                        Until(tv, () => tv.App == "dev" && tv.Count("POST /launch/dev") == 4, "the app after turning the TV on");
+                        // paused: the TV is left alone
+                        s.Paused = true;
+                        tv.App = "12";
+                        Thread.Sleep(300);
+                        tv.App = "";
+                        Thread.Sleep(800);
+                        Check(tv.App == "" && tv.Count("POST /launch/dev") == 4, "the app opened while paused");
+                        s.Paused = false;
+                        // no pushed app: nothing to open, and it says so
+                        tv.DevAppName = null;
+                        tv.App = "12";
+                        Thread.Sleep(300);
+                        tv.App = "";
+                        Until(tv, () => LogText().Contains("but there's no pushed app to open"), "saying there's no app");
+                        Check(tv.Count("POST /launch/dev") == 4, "opened an app that isn't there");
+                        // unticked: the looks stop
+                        Tv(s).DevHome = false;
+                        tools.Refresh();
+                        Check(!tools.Tvs[0].LookingForAsks, "still looking with the option off");
+                    }
+                }
+                finally
+                {
+                    DevTv.HomeSettleMs = settle;
+                    DevTv.StayHomeMs = stay;
+                }
+            }
+        }
+
+        static void DevAppLogSaved()
+        {
+            using (var console = new FakeConsole("127.0.0.1", 0))
+            {
+                int before = DevClient.ConsolePort;
+                long max = DevConsole.SaveMaxBytes;
+                DevClient.ConsolePort = console.Port;
+                string dir = TempFolder("App log");
+                string path = Path.Combine(dir, "X000000001 app log.txt");
+                try
+                {
+                    var shared = new DevConsole(() => "127.0.0.1") { SavePath = () => path };
+                    var reader = new ConsoleListener();
+                    shared.Listen(reader);
+                    Pump(() => console.Connections == 1, 5);
+                    console.Say("TVFollow example: a saved line");
+                    Pump(() => File.Exists(path) && ReadShared(path).Contains("TVFollow example: a saved line"), 10);
+                    string text = ReadShared(path);
+                    Check(text.Contains("---- TVFollow connected to the app log, ") && text.Contains("Welcome to the pretend app console."), "the saved log: " + text);
+                    // past the most it keeps, the file keeps its newer half
+                    DevConsole.SaveMaxBytes = 4000;
+                    for (int i = 0; i < 60; i++) console.Say("line " + i + " " + new string('x', 80));
+                    Pump(() => ReadShared(path).Contains("line 59 "), 10);
+                    console.Say("after the trim");
+                    Pump(() => ReadShared(path).Contains("after the trim"), 10);
+                    long size = new FileInfo(path).Length;
+                    Check(!ReadShared(path).Contains("a saved line") && size < 4000 + 4096, "the file wasn't trimmed: " + size + " bytes");
+                    shared.Unlisten(reader);
+                }
+                finally
+                {
+                    DevClient.ConsolePort = before;
+                    DevConsole.SaveMaxBytes = max;
+                    Directory.Delete(Path.GetDirectoryName(dir), true);
+                }
+            }
+        }
+
+        static string ReadShared(string path)
+        {
+            using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var reader = new StreamReader(file)) return reader.ReadToEnd();
+        }
+
+        static void DevCommandLine()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            using (var installer = new FakeInstaller(tv, 0))
+            {
+                tv.DeveloperEnabled = true;
+                Settings s = DevSettings(tv, installer);
+                var tvs = new List<Controller> { Fast(FirstTv(s)) };
+                string parent = TempFolder("Command line");
+                try
+                {
+                    WriteFile(parent, "app/manifest", "title=Command app\nmajor_version=2\nminor_version=0\nbuild_version=1\n");
+                    WriteFile(parent, "app/source/main.brs", "sub Main()\nend sub\n' " + new string('x', 700) + "\n");
+                    string app = Path.Combine(parent, "app");
+                    // the developer tools switched off: nothing happens
+                    s.DeveloperTools = false;
+                    Check(Program.DevCommand(s, tvs, "push", new[] { "push", app }) == 2 && tv.DevAppName == null, "pushed with the tools off");
+                    s.DeveloperTools = true;
+                    Check(Program.DevCommand(s, tvs, "push", new[] { "push" }) == 2, "a push of nothing");
+                    Check(Program.DevCommand(s, tvs, "push", new[] { "push", Path.Combine(parent, "missing") }) == 1, "a push of a folder that isn't there");
+                    // a folder, then a picture saved into a folder
+                    Check(Program.DevCommand(s, tvs, "push", new[] { "push", app }) == 0 && tv.DevAppName == "Command app", "the push: " + tv.DevAppName);
+                    Check(LogText().Contains("developer tools: pushed (command line) Command app"), "the push's log line");
+                    Check(Tv(s).DevFolder == "", "the command line changed the folder pushed on save: " + Tv(s).DevFolder);
+                    Check(Program.DevCommand(s, tvs, "screenshot", new[] { "screenshot", parent }) == 0, "the picture");
+                    string[] pictures = Directory.GetFiles(parent, "*.jpg");
+                    Check(pictures.Length == 1 && File.ReadAllBytes(pictures[0]).Length > 100, "the picture's file: " + pictures.Length);
+                }
+                finally { Directory.Delete(Path.GetDirectoryName(parent), true); }
             }
         }
 

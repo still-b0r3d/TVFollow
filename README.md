@@ -101,7 +101,7 @@ TVFollow runs from a small TV icon in the taskbar corner. You might need to clic
   paused.
 - **Settings…**: the Settings window (below). Double-clicking the icon does the same.
 - **Developer tools…**: only there once you've switched on the
-  [developer tools](#developer-tools) in Settings.
+  [developer tools](#developer-tools) in Settings. It opens Settings on their pages.
 - **Open log**: what TVFollow did and when, handy if something seems off.
 - **Quit TVFollow**: stops it. It starts again when you sign in (if it starts with
   Windows) or when you open TVFollow from the Start menu.
@@ -142,7 +142,8 @@ Settings**, then the arrows.
 ### Settings
 
 Right-click the icon → **Settings…**, double-click the icon, or open TVFollow from the
-Start menu while it's running. Changes apply straight away.
+Start menu while it's running. Pick a page from the list down the left (the arrow keys work
+too). Changes apply straight away.
 
 ![The Settings window](docs/images/10-settings.png)
 
@@ -154,8 +155,9 @@ Start menu while it's running. Changes apply straight away.
 - **This PC:** start with Windows and the desktop shortcuts. Switching between installed
   and portable runs setup again.
 - **Updates:** the weekly check, and **Check now**.
-- **Developer:** shows the [developer tools](#developer-tools), for putting your own Roku
-  apps on the TV.
+- **Developer tools:** their switch, for putting your own Roku apps on the TV. Switched
+  on, this page shows the TV's developer mode and its password, and two more pages come
+  up under it: **App on the TV** and **App options** (see [Developer tools](#developer-tools)).
 
 If you ticked the desktop shortcuts option, **TV on**, **TV off** and **TV to PC** are on
 your desktop too.
@@ -194,8 +196,9 @@ More detail in [How it works](docs/HOW-IT-WORKS.md).
 
 For making your own Roku apps, or trying one someone made for you: TVFollow can put an app
 on the TV straight from your PC, using the TV's **developer mode**. Most people never need
-this, so it's hidden until you switch it on: **Settings… → Show the developer tools**, then
-**Developer tools…**, there in Settings or straight from the tray menu.
+this, so it's hidden until you switch it on: **Settings… → Developer tools → Turn on the
+developer tools**. Its pages are then in Settings (**Developer tools**, **App on the TV**
+and **App options**), and **Developer tools…** in the tray menu opens them.
 
 **Turn developer mode on** (once for each TV). This takes the TV's own remote: the TV
 ignores the code when TVFollow sends it, so TVFollow's remote can't do it.
@@ -210,7 +213,7 @@ If the TV asks, first sign up for Roku's free developer program at
 developer tools say when developer mode is on. To turn it off, press the same code and
 choose **Disable installer and restart**.
 
-**Push an app:**
+**Push an app** (on **App on the TV**):
 
 - **Push a .zip…**: an app as a zip, with its `manifest` file at the top.
 - **Push a folder…**: your app's own folder, the one with the `manifest` file. TVFollow
@@ -235,10 +238,20 @@ another replaces it.
   pushed app.
 - **App log…**: what the app prints, and the error and the line it stopped at if it
   crashes. It shows what happens while it's open, so open it first, then push or open
-  the app. Look here when an app won't start.
+  the app. Look here when an app won't start. Whatever TVFollow reads of the app log
+  (for this window, or for the inputs option below) also goes into a file,
+  `%APPDATA%\TVFollow\dev\<the TV's serial number> app log.txt`, so a crash can be read
+  afterwards. It keeps the newest 2 MB or so.
 
-**Options:**
+**Options** (on **App options**):
 
+- **Open the app whenever the TV goes to Roku's home screen** (off to start with): makes
+  the app the TV's home screen. Turning the TV on, or backing out of another app (Back out
+  of YouTube, say), lands in your app instead of Roku's home screen, a few seconds later.
+  Press **Home** twice in a row to stay on Roku's home screen: going home again right after
+  TVFollow opened the app means you wanted it, and the TV stays there until it shows
+  something else or turns off. It works while this PC is on and TVFollow runs, never while
+  following is paused, and only on a TV that's on.
 - **Put the app back when it disappears from the TV** (on to start with): the TV can lose
   its pushed app, after a Roku update, say. TVFollow keeps a copy of the app you pushed
   last and puts it back the next time it turns the TV off with your monitors, while
@@ -305,7 +318,8 @@ b0r3d TV and its version, and send nothing else about you or your TV. b0r3d FM s
 songs from b0r3d.download while you listen. Like any web request, both see your internet
 address. Remove the app from the TV (**Remove** in the developer tools) and it all stops.
 
-TVFollow's settings and log are in `%APPDATA%\TVFollow`. The log shows your TV's local
+TVFollow's settings and log are in `%APPDATA%\TVFollow` (with the developer tools, so are
+the copy of the app pushed last and the app log it read). The log shows your TV's local
 network address, so look it over before you share it.
 
 ## Problems?
@@ -326,6 +340,8 @@ TVFollow also takes commands, for hotkeys, Stream Deck buttons or scripts:
 | `TVFollow.exe setup` | Opens the setup window |
 | `TVFollow.exe uninstall` | Removes TVFollow (`--quiet` skips the questions) |
 | `TVFollow.exe --version` | Prints the version and the build, which is the commit it was built from (`TVFollow v1.3 · Build: abc1234`) |
+| `TVFollow.exe push <folder or .zip>` | With the [developer tools](#developer-tools) on: pushes an app to the TV, like **Push a folder…**, with the password saved in them (it never leaves TVFollow). For test scripts: it prints how it went, and ends with 0 when it worked, 1 when it didn't, 2 for a wrong command. A TV's number or name after it picks the TV |
+| `TVFollow.exe screenshot <picture or folder>` | With the developer tools on: saves a picture of the TV's screen (the pushed app's), into that file, or into that folder under the time. Prints and ends like `push` |
 
 After setup, TVFollow lives in `%LOCALAPPDATA%\Programs\TVFollow`.
 

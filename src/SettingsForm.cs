@@ -7,23 +7,35 @@ using System.Windows.Forms;
 
 namespace TVFollow
 {
-    // The Settings window of the running TVFollow (tray → Settings…, or opening TVFollow again).
+    // The Settings window of the running TVFollow (tray → Settings…, or opening TVFollow again):
+    // a page for each part, picked from the list down its left side, like Windows' own Settings.
     // Every change applies and saves right away. Adding, removing or changing TVs, or switching
-    // between installed and portable, runs the setup wizard.
+    // between installed and portable, runs the setup wizard. The developer tools are pages here
+    // too (DevPages): the Developer tools page has their switch, and the two app pages are listed
+    // only while it's on.
     class SettingsForm : Form
     {
+        public const string TvsPage = "tvs", FollowingPage = "following", RemotePage = "remote", PcPage = "pc",
+            UpdatesPage = "updates", DeveloperPage = "developer", AppPage = "app", AppOptionsPage = "options";
+
         readonly Settings settings;
         readonly Follower follower;
         readonly Tray tray;
-        readonly Column body = new Column();
+        readonly NavList nav = new NavList();
+        readonly Panel pages = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
+        readonly Dictionary<string, Column> pageOf = new Dictionary<string, Column>();
+        readonly List<NavList.Page> allPages = new List<NavList.Page>();
         readonly List<TvLines> tvs = new List<TvLines>();
-        readonly Label mode, updateResult;
+        readonly Label mode, updateResult, developerAbout;
         readonly CheckBox off, on, paused, startup, shortcuts, updates, developer;
-        readonly FlowLayoutPanel developerRow;
         readonly RadioButton classic, compact, strip;
+        readonly Font titleFont;
+        readonly DevPages dev;   // null when there are no developer tools to show (some tests)
+        Column building;         // the page the helpers below add to
+        string shown;            // the page on show
         bool loading = true;
 
-        // one TV's part of the window: its name and address, how it is right now, and its input
+        // one TV's part of the TVs page: its name and address, how it is right now, and its input
         class TvLines
         {
             public TvSettings Tv;
@@ -47,17 +59,18 @@ namespace TVFollow
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(520, 640);
+            ClientSize = new Size(780, 560);
             BackColor = SystemColors.Window;
             try { Icon = AppIcons.Load("tv.ico", SystemInformation.IconSize); } catch { }
-            body.Padding = new Padding(24, 16, 24, 8);
+            titleFont = TitleFont(Font);
 
             bool several = settings.SeveralTvs;
-            Heading(several ? "TVs" : "TV");
+            Page(TvsPage, several ? "TVs" : "TV", (char)0xE7F4,
+                several ? "The TVs that turn on and off with this PC's monitors." : "The TV that turns on and off with this PC's monitors.");
             for (int i = 0; i < settings.Tvs.Count; i++) tvs.Add(AddTv(settings.Tvs[i], several ? (i + 1) + ".  " : ""));
             Row().Controls.Add(MakeButton("Add or change TVs…", delegate { RunSetup(); }));
 
-            Heading("Following");
+            Page(FollowingPage, "Following", (char)0xE7E8, "What " + (several ? "the TVs do" : "the TV does") + " when this PC's monitors turn off and on.");
             off = Check(several ? "Turn the TVs off when this PC's monitors turn off" : "Turn the TV off when this PC's monitors turn off",
                 delegate { settings.OffWithMonitors = off.Checked; follower.Rules.OffWithMonitors = off.Checked; Save(); });
             on = Check(several ? "Turn the TVs on and switch them to this PC when you come back" : "Turn the TV on and switch it to this PC when you come back",
@@ -65,35 +78,53 @@ namespace TVFollow
             paused = Check(several ? "Paused (leave the TVs alone until resumed)" : "Paused (leave the TV alone until resumed)",
                 delegate { if (paused.Checked != follower.Rules.Paused) tray.SetPaused(paused.Checked); });
 
-            Heading("Remote");
+            Page(RemotePage, "Remote", (char)0xE8EA, "The remote that opens from the TV icon in the taskbar corner.");
+            Heading("Layout");
             FlowLayoutPanel layouts = Row();
             classic = Choice(layouts, "Classic (tall)", RemoteForm.Classic);
             compact = Choice(layouts, "Compact (square)", RemoteForm.Compact);
             strip = Choice(layouts, "Wide strip", RemoteForm.Strip);
-            Row().Controls.Add(MakeButton("Open remote", delegate { tray.ShowRemote(null); }));
+            FlowLayoutPanel openRow = Row();
+            openRow.Margin = new Padding(0, 12, 0, 8);
+            openRow.Controls.Add(MakeButton("Open remote", delegate { tray.ShowRemote(null); }));
 
-            Heading("This PC");
+            Page(PcPage, "This PC", (char)0xE770, "How TVFollow is set up on this PC.");
             mode = Line("");
             startup = Check("Start TVFollow when you sign in to Windows", delegate { settings.StartWithWindows = startup.Checked; Save(); ApplyInstall(); });
             shortcuts = Check("Put TV on, TV off and TV to PC shortcuts on the desktop", delegate { settings.DesktopShortcuts = shortcuts.Checked; Save(); ApplyInstall(); });
-            var setupLink = new LinkLabel { Text = "Switch between installed and portable: run setup again", AutoSize = true, Margin = new Padding(0, 2, 0, 12) };
+            var setupLink = new LinkLabel { Text = "Switch between installed and portable: run setup again", AutoSize = true, Margin = new Padding(0, 10, 0, 12) };
             setupLink.LinkClicked += delegate { RunSetup(); };
-            body.Controls.Add(setupLink);
+            building.Controls.Add(setupLink);
 
-            Heading("Updates");
+            Page(UpdatesPage, "Updates", (char)0xE895, "New versions of TVFollow come from its page on GitHub.");
             updates = Check("Tell me when there's a new version (checks GitHub once a week)", delegate { settings.CheckUpdates = updates.Checked; Save(); });
             FlowLayoutPanel updateRow = Row();
+            updateRow.Margin = new Padding(0, 8, 0, 8);
             updateRow.Controls.Add(MakeButton("Check now", delegate { CheckNow(); }));
             updateResult = new Label { AutoSize = true, Margin = new Padding(4, 8, 0, 0), ForeColor = SetupPage.Muted };
             updateRow.Controls.Add(updateResult);
 
-            // hidden until switched on: most people never need them
-            Heading("Developer");
-            developer = Check("Show the developer tools, for putting your own apps on the TV", delegate { DeveloperChanged(); });
-            developerRow = Row();
-            developerRow.Controls.Add(MakeButton("Developer tools…", delegate { tray.ShowDeveloperTools(null); }));
+            Page(DeveloperPage, "Developer tools", (char)0xEC7A, "For putting your own apps on the TV. Most people never need them.");
+            developer = Check("Turn on the developer tools", delegate { DeveloperChanged(); });
+            developerAbout = Line("");
+            developerAbout.ForeColor = SetupPage.Muted;
+            developerAbout.Margin = new Padding(20, 0, 0, 10);
+            if (tray.Dev != null)
+            {
+                Column app = Page(AppPage, "App on the TV", (char)0xE7B8, "The app you put on the TV in developer mode.");
+                Column options = Page(AppOptionsPage, "App options", (char)0xE713, "What TVFollow does for the app while this PC is on.");
+                dev = new DevPages(tray.Dev, this, pageOf[DeveloperPage], app, options, tray.Dev.Tvs[0]);
+            }
 
-            Controls.Add(body);
+            var side = new Panel { Dock = DockStyle.Left, Width = 200, BackColor = NavList.Back, Padding = new Padding(8, 12, 8, 8) };
+            nav.Dock = DockStyle.Fill;
+            nav.Font = Font;
+            nav.SelectedIndexChanged += delegate { if (nav.Selected != null) Reveal(nav.Selected.Key); };
+            side.Controls.Add(nav);
+
+            // docked in reverse: the footer across the bottom, then the list down the left, then the pages
+            Controls.Add(pages);
+            Controls.Add(side);
             Controls.Add(Footer());
 
             AutoScaleDimensions = new SizeF(96F, 96F);
@@ -102,21 +133,110 @@ namespace TVFollow
             PerformLayout();
 
             Fill();
+            ListPages();
+            ShowPage(TvsPage);
             tray.PausedChanged += SyncPause;
-            FormClosed += delegate { tray.PausedChanged -= SyncPause; };
-            Load += delegate
+            FormClosed += delegate
             {
-                FitTvs(true);
-                foreach (TvLines tv in tvs) LoadTv(tv);
+                tray.PausedChanged -= SyncPause;
+                if (dev != null) dev.Dispose();
             };
+            Load += delegate { foreach (TvLines tv in tvs) LoadTv(tv); };
+            // the list has the focus, so the arrow keys move between pages straight away
+            Shown += delegate { nav.Focus(); };
         }
 
+        // the pages' titles: Segoe UI Semibold where Windows has it
+        static Font TitleFont(Font body)
+        {
+            var font = new Font("Segoe UI Semibold", 15f);
+            if (font.Name == "Segoe UI Semibold") return font;
+            font.Dispose();
+            return new Font(body.FontFamily, 15f, FontStyle.Bold);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) titleFont.Dispose();
+            base.Dispose(disposing);
+        }
+
+        // ---- pages ----
+
+        // the pages listed down the left: all of them, but the app pages only while the developer
+        // tools are switched on
+        void ListPages()
+        {
+            string was = shown;
+            nav.BeginUpdate();
+            nav.Items.Clear();
+            foreach (NavList.Page page in allPages)
+                if (settings.DeveloperTools || (page.Key != AppPage && page.Key != AppOptionsPage)) nav.Items.Add(page);
+            nav.EndUpdate();
+            if (was != null) ShowPage(pageOf.ContainsKey(was) && Listed(was) ? was : DeveloperPage);
+        }
+
+        bool Listed(string key)
+        {
+            foreach (NavList.Page page in nav.Pages) if (page.Key == key) return true;
+            return false;
+        }
+
+        // Shows a page (the tray's Developer tools… opens on one). An app page while the tools are
+        // switched off opens the Developer tools page, where their switch is.
+        public void ShowPage(string key)
+        {
+            if (!Listed(key)) key = pageOf.ContainsKey(key) ? DeveloperPage : TvsPage;
+            for (int i = 0; i < nav.Items.Count; i++)
+                if (((NavList.Page)nav.Items[i]).Key == key && nav.SelectedIndex != i) nav.SelectedIndex = i;
+            Reveal(key);
+        }
+
+        void Reveal(string key)
+        {
+            if (key == shown) return;
+            shown = key;
+            SuspendLayout();
+            foreach (KeyValuePair<string, Column> pair in pageOf) pair.Value.Visible = pair.Key == key;
+            ResumeLayout(true);
+            if (dev != null) dev.Active = key == DeveloperPage || key == AppPage || key == AppOptionsPage;
+        }
+
+        // for the tray: the developer tools on one TV (null for the one already shown)
+        public void ShowDeveloperTools(Controller tv)
+        {
+            if (dev != null && tv != null) dev.ShowTv(tray.Dev.For(tv));
+            ShowPage(settings.DeveloperTools ? AppPage : DeveloperPage);
+        }
+
+        // for the tests and the screenshots
+        public string CurrentPage { get { return shown; } }
+        public List<string> ListedPages { get { return nav.Pages.ConvertAll(p => p.Key); } }
+        public DevPages Dev { get { return dev; } }
+
         // ---- building ----
+
+        // a new page, with its title and a line about it, listed down the left; the helpers
+        // below add to it from here on
+        Column Page(string key, string name, char icon, string about)
+        {
+            var page = new Column { Padding = new Padding(28, 18, 28, 12), Visible = false, BackColor = SystemColors.Window };
+            pageOf[key] = page;
+            allPages.Add(new NavList.Page(key, name, icon));
+            pages.Controls.Add(page);
+            building = page;
+            page.Controls.Add(new Label { Text = name, AutoSize = true, Font = titleFont, UseMnemonic = false, Margin = new Padding(0, 0, 0, 4) });
+            Label line = Line(about);
+            line.ForeColor = SetupPage.Muted;
+            line.Margin = new Padding(0, 0, 0, 16);
+            return page;
+        }
 
         TvLines AddTv(TvSettings tv, string number)
         {
             var lines = new TvLines { Tv = tv, Number = number };
             lines.Name = Line("");
+            lines.Name.Font = new Font(Font, FontStyle.Bold);
             lines.State = Line("");
             FlowLayoutPanel inputRow = Row();
             inputRow.Controls.Add(new Label { Text = "Input this PC is on:", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
@@ -124,48 +244,35 @@ namespace TVFollow
             lines.Input.SelectedIndexChanged += delegate { InputChanged(lines); };
             inputRow.Controls.Add(lines.Input);
             inputRow.Controls.Add(MakeButton("Show it on the TV", delegate { ShowOnTv(lines.Tv); }));
-            if (number.Length > 0) inputRow.Margin = new Padding(0, 0, 0, 14); // a gap before the next TV
+            inputRow.Margin = new Padding(0, 0, 0, 18); // a gap before the next TV, or the button
             return lines;
-        }
-
-        // The window grows to show everything (several TVs, the developer tools' button), as far as
-        // the screen allows; what doesn't fit scrolls. center: when it opens (later, a window the
-        // user moved stays where it is).
-        void FitTvs(bool center)
-        {
-            int footer = ClientSize.Height - body.Height;
-            int wanted = body.GetPreferredSize(new Size(body.ClientSize.Width, 0)).Height + footer;
-            int most = Screen.FromControl(this).WorkingArea.Height - (Height - ClientSize.Height) - 20;
-            ClientSize = new Size(ClientSize.Width, Math.Max(ClientSize.Height, Math.Min(wanted, most)));
-            if (center && StartPosition == FormStartPosition.CenterScreen) CenterToScreen();
         }
 
         void Heading(string text)
         {
-            var label = new Label { Text = text, AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, 6, 0, 6) };
-            body.Controls.Add(label);
+            building.Controls.Add(new Label { Text = text, AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, 6, 0, 6) });
         }
 
         Label Line(string text)
         {
             // UseMnemonic off: a TV named "Tom & Jerry" keeps its &
             var label = new Label { Text = text, AutoSize = true, Margin = new Padding(0, 0, 0, 6), UseMnemonic = false };
-            body.Controls.Add(label);
+            building.Controls.Add(label);
             return label;
         }
 
         FlowLayoutPanel Row()
         {
             var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 8) };
-            body.Controls.Add(row);
+            building.Controls.Add(row);
             return row;
         }
 
         CheckBox Check(string text, EventHandler changed)
         {
-            var box = new CheckBox { Text = text, AutoSize = true, Margin = new Padding(0, 0, 0, 4) };
+            var box = new CheckBox { Text = text, AutoSize = true, Margin = new Padding(0, 0, 0, 8) };
             box.CheckedChanged += (s, e) => { if (!loading) changed(s, e); };
-            body.Controls.Add(box);
+            building.Controls.Add(box);
             return box;
         }
 
@@ -245,13 +352,23 @@ namespace TVFollow
             shortcuts.Checked = settings.DesktopShortcuts;
             updates.Checked = settings.CheckUpdates;
             developer.Checked = settings.DeveloperTools;
-            developerRow.Visible = settings.DeveloperTools;
+            ShowDeveloperState();
             bool portable = Settings.IsPortable;
             mode.Text = portable
                 ? "Portable: settings are in the \"" + Settings.PortableFolderName + "\" folder next to TVFollow.exe."
                 : "Installed for this Windows account.";
             startup.Enabled = shortcuts.Enabled = !portable;
             loading = false;
+        }
+
+        // the line under the switch, and the developer mode part of the page with it
+        void ShowDeveloperState()
+        {
+            bool on = settings.DeveloperTools;
+            developerAbout.Text = on
+                ? "Their other pages, App on the TV and App options, are listed on the left. The tray menu's Developer tools… opens them too."
+                : "Turned on, they help with the TV's developer mode, put your app on the TV, and can open the app or switch the TV's inputs for it.";
+            if (dev != null) dev.ShowModePart(on);
         }
 
         void SyncPause(bool value)
@@ -302,6 +419,7 @@ namespace TVFollow
                     "Advanced system settings → Control by mobile apps → Network access → Enabled.");
             else if (!info.IsOn) SetState(tv, null, "Off right now.");
             else if (showing == tv.Tv.PcApp) SetState(tv, true, "On, showing this PC.");
+            else if (showing == "") SetState(tv, null, "On, showing Roku's home screen.");
             else SetState(tv, null, "On, showing something else.");
             if (inputs != null && inputs.Count > 0)
             {
@@ -364,8 +482,8 @@ namespace TVFollow
             settings.DeveloperTools = developer.Checked;
             Log.Write(developer.Checked ? "settings: developer tools on" : "settings: developer tools off");
             Save();
-            developerRow.Visible = developer.Checked;
-            FitTvs(false);
+            ShowDeveloperState();
+            ListPages();
             tray.DeveloperToolsChanged();
         }
 

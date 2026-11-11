@@ -15,6 +15,7 @@ namespace TVFollow.Tests
         public string Serial = "X000000001";
         public string PowerMode = "PowerOn";      // "PowerOn", or "DisplayOff" when off
         public string App = "tvinput.hdmi1";      // "" = the Roku home screen
+        public bool ModernHome;                   // the home screen as Roku OS 15 shows it: an app of type "home"
         public string ControlMode = "enabled";    // "limited" refuses button presses
         public string NetworkType = "wifi";
         public string Name = "Test TV";
@@ -141,9 +142,11 @@ namespace TVFollow.Tests
             }
             if (method == "GET" && path == "/query/active-app")
             {
-                body = App.Length == 0
-                    ? "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<active-app>\n\t<app>Roku</app>\n</active-app>"
-                    : "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<active-app>\n\t<app id=\"" + App + "\" type=\"tvin\">PC</app>\n</active-app>";
+                body = App.Length > 0
+                    ? "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<active-app>\n\t<app id=\"" + App + "\" type=\"tvin\">PC</app>\n</active-app>"
+                    : ModernHome
+                    ? "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<active-app>\n\t<app id=\"562859\" type=\"home\" version=\"26.40.12\">Roku Dynamic Menu</app>\n</active-app>"
+                    : "<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n<active-app>\n\t<app>Roku</app>\n</active-app>";
                 return;
             }
             if (method == "GET" && path == "/query/apps")
@@ -165,6 +168,7 @@ namespace TVFollow.Tests
             else if (path == "/keypress/PowerOn") { if (!RefusePowerOn) PowerMode = "PowerOn"; }
             else if (path.StartsWith("/keypress/InputHDMI")) { if (IsOn && !IgnoreInput) App = "tvinput.hdmi" + path.Substring("/keypress/InputHDMI".Length); }
             else if (path.StartsWith("/launch/")) { if (IsOn && !IgnoreInput) App = path.Substring("/launch/".Length); }
+            else if (path == "/keypress/Home") { if (IsOn) App = ""; }
             else if (!path.StartsWith("/keypress/")) status = 404; // any other remote key is fine, like a real TV
         }
 

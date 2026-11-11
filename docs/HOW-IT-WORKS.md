@@ -114,13 +114,13 @@ delete that file to make it check again at the next start.
 
 ## The developer tools
 
-Shown only once **Show the developer tools** is ticked in Settings; nothing below runs while
-it isn't.
+Shown only once **Turn on the developer tools** is ticked on Settings' Developer tools page;
+nothing below runs while it isn't.
 
 - **Developer mode** is read from `query/device-info`'s `developer-enabled`. TVFollow can't
   switch it on: the TV ignored the remote code (Home ×3, Up ×2, Right, Left, Right, Left,
-  Right) when TVFollow sent it as ECP key presses, so the window gives the steps for the
-  TV's own remote and checks every few seconds.
+  Right) when TVFollow sent it as ECP key presses, so the page gives the steps for the
+  TV's own remote and checks every few seconds while a developer tools page is open.
 - **The installer** is the TV's developer web page on port 80, user `rokudev`, behind the
   password chosen on the TV. TVFollow answers its HTTP digest challenge only, never Basic,
   so the password itself never crosses the network. Before anything goes there, TVFollow
@@ -136,7 +136,7 @@ it isn't.
   files in name order with their own times, junk left out, so the same files always make
   the same zip. Only an answer of 200 counts. The page says how it went in its script
   (`Roku.Message` calls on older Roku OS, `JSON.parse` on newer); when the TV refuses an
-  app, its own words go in the window (control characters dropped, 300 characters at
+  app, its own words go on the App on the TV page (control characters dropped, 300 characters at
   most). "Identical to previous version" means the TV kept the app it had, so TVFollow
   opens it with `launch/dev`. An answer of 577 (or "Failed to check for software update")
   means the TV wants to look for a Roku update first. The app on the TV is read from
@@ -161,6 +161,21 @@ it isn't.
   is open, so open it before pushing or opening the app. TVFollow keeps one connection to
   it for each TV, shared with the app's asks for inputs (below); a window opened while
   that's connected starts with the recent text (the last 32,000 characters at most).
+  Everything read also goes into `dev\<serial> app log.txt` in the settings folder, with a
+  line marking each new connection (the TV repeats its recent lines to every new reader,
+  so some lines come twice). Past 2 MB the file keeps its newer half. Other programs can
+  read it while TVFollow writes.
+- **Opening the app from the home screen:** with **Open the app whenever the TV goes to
+  Roku's home screen** ticked, the same looks as for inputs (below: every 3 seconds, only
+  on the TV's network) notice the home screen: an app of type `home` in
+  `query/active-app` (Roku OS 15 calls it "Roku Dynamic Menu"), or one with no id on older
+  TVs. Then TVFollow checks the TV is on (`power-mode` `PowerOn`, so a TV in standby isn't
+  woken), looks again 1.2 seconds later (a moment's home screen between two apps doesn't
+  count), checks `query/apps` still lists a `dev` app, and sends `launch/dev`. Back on the
+  home screen within a minute of that, with nothing else in between, means someone pressed
+  Home again: the TV stays home until it shows something else or turns off. That also
+  stops an app that crashes as it starts from being opened over and over. Nothing happens
+  while following is paused or while TVFollow is turning that TV on or off.
 - **Letting the app switch inputs:** a Roku TV answers 403 when an app sends its own
   remote-control service a key press or a launch (at `127.0.0.1` or the TV's own address),
   and its app manager won't open `tvinput.*`, so an app can't switch the TV's input itself.
@@ -198,7 +213,7 @@ it isn't.
 | Settings | `%APPDATA%\TVFollow\settings.ini` |
 | Log | `%APPDATA%\TVFollow\TVFollow.log` (kept under 256 KB, one older copy) |
 | Update check | `%APPDATA%\TVFollow\updates.ini` (when it last asked, the newest version seen) |
-| Pushed apps' copies | `%APPDATA%\TVFollow\dev\` (developer tools only: the app pushed last to each TV) |
+| Pushed apps' copies | `%APPDATA%\TVFollow\dev\` (developer tools only: the app pushed last to each TV, and the app log read from it) |
 | Start with Windows | `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`, value `TVFollow` |
 | Apps list entry | `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\TVFollow` |
 | Start menu | `TVFollow` |
@@ -237,7 +252,7 @@ remote_layout=classic
 | `developer_tools` | Only there while the developer tools are switched on (`developer_tools=yes`) |
 | `dev_password` | The developer mode password, encrypted for your Windows account (`dpapi:` and Windows' own encryption). Copied to another PC or account, it can't be read, and the password box is empty again |
 | `dev_folder` | The app's folder pushed last (empty after pushing a zip or the example) |
-| `dev_push_back`, `dev_on_save`, `dev_inputs` | The developer tools' three options (`dev_push_back=no`, `dev_on_save=yes` and `dev_inputs=yes` are only written when set that way) |
+| `dev_push_back`, `dev_on_save`, `dev_inputs`, `dev_home` | The developer tools' four options (`dev_push_back=no`, `dev_on_save=yes`, `dev_inputs=yes` and `dev_home=yes` are only written when set that way) |
 
 **Several TVs:** the first TV uses the keys above, the way TVFollow 1.1 wrote them, so an
 older TVFollow reading the file still finds that one. Each other TV has the same six keys

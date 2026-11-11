@@ -10,6 +10,10 @@
 //                           do it to that TV alone
 //   TVFollow.exe uninstall  remove TVFollow from this PC (--quiet: don't ask)
 //   TVFollow.exe --version  print the version and the commit it was built from
+// With the developer tools switched on in Settings, for test scripts (they print how it went):
+//   TVFollow.exe push <app folder or .zip> [TV]       push an app to the TV, with the password
+//                                                    saved in the developer tools
+//   TVFollow.exe screenshot <picture or folder> [TV] save a picture of the TV's screen
 // Used by TVFollow itself: --startup (at sign-in, quietly) and follow (after setup).
 using System;
 using System.Collections.Generic;
@@ -118,12 +122,76 @@ namespace TVFollow
                 return ok ? 0 : 1;
             }
 
+            if (cmd == "push" || cmd == "screenshot") return DevCommand(settings, tvs, cmd, args);
             if (cmd == "--startup") return Follow(settings, tvs, false, false);
             if (cmd == "follow") return Follow(settings, tvs, true, true);
             if (cmd.Length == 0) return Follow(settings, tvs, false, true);
 
             MessageBox.Show("Unknown command: " + args[0] + "\n\nUse setup, on, off, pc, uninstall or --version.", "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return 2;
+        }
+
+        // TVFollow.exe push <folder or .zip> [TV] and screenshot <picture or folder> [TV]: the
+        // developer tools' Push and Screenshot… for test scripts, done with the password the
+        // developer tools keep, which never leaves TVFollow. Only while the developer tools are
+        // switched on. They print how it went; 0 when it worked, 1 when it didn't, 2 for a wrong
+        // command. The TVFollow in the taskbar corner carries on as it was.
+        internal static int DevCommand(Settings settings, List<Controller> tvs, string cmd, string[] args)
+        {
+            AttachConsole(-1);
+            if (!settings.DeveloperTools)
+            {
+                Console.WriteLine("TVFollow: switch on the developer tools in Settings first.");
+                return 2;
+            }
+            if (args.Length < 2 || args[1].Trim().Length == 0)
+            {
+                Console.WriteLine(cmd == "push" ? "TVFollow: push what? TVFollow.exe push <app folder or .zip> [TV]"
+                    : "TVFollow: save it where? TVFollow.exe screenshot <picture or folder> [TV]");
+                return 2;
+            }
+            string name = args.Length > 2 ? string.Join(" ", args, 2, args.Length - 2) : null;
+            List<Controller> which = string.IsNullOrEmpty(name) ? new List<Controller> { tvs[0] } : Pick(tvs, name);
+            if (which == null || which.Count != 1)
+            {
+                Console.WriteLine("TVFollow: no TV called " + name + ". Give a TV's number (1 to " + tvs.Count + ") or its name.");
+                return 2;
+            }
+            using (DevTools tools = DevTools.ForCommandLine(settings, which))
+            {
+                DevTv tv = tools.Tvs[0];
+                string target = Path.GetFullPath(args[1].Trim());
+                return cmd == "push" ? PushCommand(tv, target) : ScreenshotCommand(tv, target);
+            }
+        }
+
+        static int PushCommand(DevTv tv, string path)
+        {
+            DevPackage app;
+            try { app = Directory.Exists(path) ? DevPackage.FromFolder(path) : DevPackage.FromZip(path); }
+            catch (DevPackageException e) { Console.WriteLine("TVFollow: " + e.Message); return 1; }
+            catch (Exception e) { Console.WriteLine("TVFollow: couldn't read " + path + ": " + e.Message); return 1; }
+            DevReport r = tv.Push(app, "pushed (command line)");
+            Console.WriteLine("TVFollow: " + r.Text);
+            return r.Ok ? 0 : 1;
+        }
+
+        static int ScreenshotCommand(DevTv tv, string path)
+        {
+            byte[] picture;
+            string extension;
+            DevReport r = tv.Screenshot(out picture, out extension);
+            if (!r.Ok || picture == null)
+            {
+                Console.WriteLine("TVFollow: " + (r.Text.Length > 0 ? r.Text : "no picture came back."));
+                return 1;
+            }
+            // a folder gets the picture under the app's name and the time
+            if (Directory.Exists(path)) path = Path.Combine(path, DevTv.PictureName("TV", extension));
+            try { File.WriteAllBytes(path, picture); }
+            catch (Exception e) { Console.WriteLine("TVFollow: couldn't save it: " + e.Message); return 1; }
+            Console.WriteLine("TVFollow: saved the picture: " + path);
+            return 0;
         }
 
         // The TVs a command is for: every TV, or the one named after the command, by its number

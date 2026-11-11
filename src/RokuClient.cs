@@ -105,14 +105,16 @@ namespace TVFollow
         }
 
         // the app on screen ("tvinput.hdmi1" for an HDMI input), "" for the Roku home screen,
-        // null if the TV didn't answer
+        // null if the TV didn't answer. Older TVs show the home screen as an app with no id,
+        // newer ones as an app of type "home" ("Roku Dynamic Menu" on Roku OS 15).
         public string GetActiveApp(int timeoutMs)
         {
             try
             {
                 XmlDocument doc = SafeXml.Load(Get("query/active-app", timeoutMs));
                 var app = doc.SelectSingleNode("/active-app/app") as XmlElement;
-                return app == null ? "" : app.GetAttribute("id");
+                if (app == null || app.GetAttribute("type") == "home") return "";
+                return app.GetAttribute("id");
             }
             catch { return null; }
         }

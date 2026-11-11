@@ -59,10 +59,11 @@ namespace TVFollow
         }
     }
 
-    // The developer tools of every TV. Three jobs run in the background while TVFollow follows the
+    // The developer tools of every TV. Four jobs run in the background while TVFollow follows the
     // monitors: putting a pushed app back when it vanished from its TV, pushing an app's folder
-    // again when a file in it is saved, and switching the TV's input when the pushed app asks.
-    // None of them runs while the tools are switched off in Settings.
+    // again when a file in it is saved, switching the TV's input when the pushed app asks, and
+    // opening the app when the TV goes to Roku's home screen. None of them runs while the tools
+    // are switched off in Settings.
     class DevTools : IDisposable
     {
         readonly Settings settings;
@@ -71,12 +72,22 @@ namespace TVFollow
         // a message in the taskbar corner (the tray fills this in): title, text
         public Action<string, string> Notify = delegate { };
 
-        public DevTools(Settings settings, List<Controller> controllers)
+        public DevTools(Settings settings, List<Controller> controllers) : this(settings, controllers, true) { }
+
+        DevTools(Settings settings, List<Controller> controllers, bool background)
         {
             this.settings = settings;
             Tvs = controllers.ConvertAll(c => new DevTv(this, settings, c));
+            if (!background) return;
             foreach (DevTv tv in Tvs) tv.Controller.BeforeFollowOff = tv.BeforeOff;
             Refresh();
+        }
+
+        // For TVFollow.exe push and screenshot: the tools with none of the background jobs, which
+        // stay with the TVFollow in the taskbar corner.
+        public static DevTools ForCommandLine(Settings settings, List<Controller> controllers)
+        {
+            return new DevTools(settings, controllers, false);
         }
 
         public Settings Settings { get { return settings; } }
@@ -109,6 +120,8 @@ namespace TVFollow
         public static int RetryMs = 3000;      // looking again for a watched folder that went away
         public static int InputsIdleMs = 3000; // how often TVFollow looks whether the pushed app is on screen
         public static int HelloAfterMs = 500;  // the console has to stay connected this long before the hello
+        public static int HomeSettleMs = 1200; // the home screen has to stay this long before the app opens
+        public static int StayHomeMs = 60000;  // back home this soon after the app opened: the TV stays home
 
         // what the pushed app prints on its console: "TVFollow hello" for a hello, and
         // "TVFollow ask <token> tvinput.hdmi2" to switch, with the token from the last hello
@@ -146,6 +159,11 @@ namespace TVFollow
         int missed;                   // the looks in a row the TV didn't answer
         bool toldNoInputs;
         string lastRefused;           // the last ask that wasn't carried out, said once in a row
+        DateTime openedAt = DateTime.MinValue;  // when the home screen last made TVFollow open the app
+        bool stayHome;                // the TV went home again right after: it stays there until it shows something else
+        bool toldNoApp;               // said that there's no pushed app to open
+        // under watchLock: what the log last said about the two options that need the looks
+        bool saidInputs, saidHome;
         // under listenLock
         bool listening;               // reading the console for the app's asks
         int connection;               // goes up with each connection to the console, each loss of one, and each start and stop
@@ -172,6 +190,7 @@ namespace TVFollow
             this.settings = settings;
             Controller = controller;
             Console = new DevConsole(() => Tv.Ip);
+            Console.SavePath = () => AppLogPath;
             asks.Connected = ConsoleConnected;
             asks.Text = ConsoleText;
             asks.Trouble = delegate { ConsoleLost(); };
@@ -185,6 +204,17 @@ namespace TVFollow
         public string KeptPath { get { return Path.Combine(Path.Combine(Settings.Dir, "dev"), FileName(Tv.Serial) + ".zip"); } }
 
         public bool HasKept { get { return File.Exists(KeptPath); } }
+
+        // where the app log is saved while TVFollow reads it (DevConsole writes it)
+        public string AppLogPath { get { return Path.Combine(Path.Combine(Settings.Dir, "dev"), FileName(Tv.Serial) + " app log.txt"); } }
+
+        // the name a picture of the TV's screen is saved under: the app's name and the time
+        public static string PictureName(string appName, string extension)
+        {
+            foreach (char c in Path.GetInvalidFileNameChars()) appName = appName.Replace(c, '_');
+            if (appName.Trim().Length == 0) appName = "App";
+            return (appName.Trim() + " " + DateTime.Now.ToString("yyyy-MM-dd HH.mm.ss") + "." + extension).Trim();
+        }
 
         static string FileName(string serial)
         {
@@ -585,28 +615,43 @@ namespace TVFollow
         // the TV repeats its recent console lines to a new reader. TVFollow only ever talks to
         // the TV here: nothing on this PC listens for the app.
 
-        // Starts or stops the looking, as the settings now say.
+        // Starts or stops the looking, as the settings now say: it's for letting the app switch
+        // inputs, and for opening the app when the TV goes home.
         void RefreshInputs()
         {
-            bool wanted = settings.DeveloperTools && Tv.DevInputs;
+            bool inputsOn = settings.DeveloperTools && Tv.DevInputs;
+            bool homeOn = settings.DeveloperTools && Tv.DevHome;
+            bool wanted = inputsOn || homeOn;
+            bool tellInputs, tellHome;
             lock (watchLock)
             {
-                if (closed || wanted == (inputsTimer != null)) return;
-                if (wanted)
+                if (closed) return;
+                tellInputs = inputsOn != saidInputs;
+                tellHome = homeOn != saidHome;
+                saidInputs = inputsOn;
+                saidHome = homeOn;
+                if (wanted != (inputsTimer != null))
                 {
-                    inputsRun++;
-                    inputsTimer = new Timer(delegate { LookForAsks(); });
-                    inputsTimer.Change(0, Timeout.Infinite);
-                }
-                else
-                {
-                    inputsTimer.Dispose();
-                    inputsTimer = null;
+                    if (wanted)
+                    {
+                        inputsRun++;
+                        inputsTimer = new Timer(delegate { LookForAsks(); });
+                        inputsTimer.Change(0, Timeout.Infinite);
+                    }
+                    else
+                    {
+                        inputsTimer.Dispose();
+                        inputsTimer = null;
+                    }
                 }
             }
-            if (!wanted) StopListening();
-            Controller.Say(wanted ? "developer tools: the app on the TV can ask for the TV's inputs now"
-                : "developer tools: the app on the TV can't ask for the TV's inputs any more");
+            if (!inputsOn) StopListening();
+            if (tellInputs)
+                Controller.Say(inputsOn ? "developer tools: the app on the TV can ask for the TV's inputs now"
+                    : "developer tools: the app on the TV can't ask for the TV's inputs any more");
+            if (tellHome)
+                Controller.Say(homeOn ? "developer tools: the app opens whenever the TV goes to Roku's home screen"
+                    : "developer tools: the app doesn't open by itself any more when the TV goes home");
         }
 
         public bool LookingForAsks
@@ -641,7 +686,8 @@ namespace TVFollow
                 {
                     // started again: nothing seen before counts
                     lookedRun = run;
-                    appShown = toldNoInputs = false;
+                    appShown = toldNoInputs = stayHome = toldNoApp = false;
+                    openedAt = DateTime.MinValue;
                     missed = 0;
                     lastRefused = null;
                 }
@@ -674,7 +720,8 @@ namespace TVFollow
                 return InputsIdleMs * 5;
             }
             missed = 0;
-            if (app != "dev")
+            if (Tv.DevHome) HomeLook(ecp, app);
+            if (!Tv.DevInputs || app != "dev")
             {
                 Gone();
                 return InputsIdleMs;
@@ -701,6 +748,63 @@ namespace TVFollow
         {
             appShown = false;
             StopListening();
+        }
+
+        // ---- the app as the TV's home screen ----
+        //
+        // The TV went to Roku's home screen (backing out of another app, say, or turned on), so
+        // the pushed app opens. Going home again right after TVFollow opened it, with nothing in
+        // between, means someone wants the home screen: pressing Home twice in a row. The TV then
+        // stays home until it shows something else or turns off. Not while TVFollow is paused,
+        // not while it's turning the TV on or off, and only on a TV that's on, since opening the
+        // app could turn the screen on. (Under inputsLock.)
+        void HomeLook(RokuClient ecp, string app)
+        {
+            if (app != "")
+            {
+                stayHome = false;
+                // something besides the app came on: the next trip home opens the app again
+                if (app != "dev") openedAt = DateTime.MinValue;
+                return;
+            }
+            DeviceInfo info = ecp.GetDeviceInfo(AskMs);
+            if (info == null || (Tv.Serial.Length > 0 && info.Serial != Tv.Serial)) return;
+            if (!info.IsOn)
+            {
+                // off: turned on again and landing home, it opens the app
+                stayHome = false;
+                openedAt = DateTime.MinValue;
+                return;
+            }
+            if (stayHome || settings.Paused || Controller.Busy) return;
+            if (DateTime.UtcNow - openedAt < TimeSpan.FromMilliseconds(StayHomeMs))
+            {
+                stayHome = true;
+                Controller.Say("developer tools: back on Roku's home screen right after the app opened, so the TV stays there");
+                return;
+            }
+            // a moment's home screen between two apps isn't a trip home
+            Thread.Sleep(HomeSettleMs);
+            if (ecp.GetActiveApp(AskMs) != "") return;
+            bool answered;
+            DevApp pushed = ecp.GetDevApp(AskMs, out answered);
+            if (answered && pushed == null)
+            {
+                if (!toldNoApp) Controller.Say("developer tools: the TV went to Roku's home screen, but there's no pushed app to open");
+                toldNoApp = true;
+                return;
+            }
+            toldNoApp = false;
+            // still wanted after the wait (not unticked, paused or busy meanwhile)
+            if (!settings.DeveloperTools || !Tv.DevHome || settings.Paused || Controller.Busy) return;
+            int code = ecp.Launch("dev", AskMs);
+            bool opened = code >= 200 && code < 300;
+            openedAt = DateTime.UtcNow;
+            string name = pushed != null ? Clean(pushed.Name) : "the app";
+            Controller.Say(opened ? "developer tools: the TV went to Roku's home screen, so " + name + " opened"
+                : "developer tools: the TV went to Roku's home screen, but " + name + " didn't open" + (code == 0 ? " (no answer)" : " (the TV said " + code + ")"));
+            // a TV that won't open it isn't asked again until it shows something else
+            if (!opened) stayHome = true;
         }
 
         // Each whole, under switching: an untick or Close in the middle of a look always wins.

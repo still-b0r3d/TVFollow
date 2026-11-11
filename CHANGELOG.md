@@ -2,13 +2,18 @@
 
 ## 1.3 (not released yet)
 
-Developer tools, for putting your own Roku apps on the TV.
+A new Settings window, and developer tools for putting your own Roku apps on the TV.
 
-- **Settings… → Show the developer tools** (off to start with) adds **Developer tools…**
-  to Settings and to the tray menu (right under **Settings…**).
-- The developer tools window says whether the TV's developer mode is on and, while it's
+- **The Settings window has a page for each part**, picked from a list down its left side,
+  like Windows' own Settings: TV, Following, Remote, This PC, Updates and Developer tools.
+  It keeps one size; a page with more than fits scrolls.
+- **Settings… → Developer tools → Turn on the developer tools** (off to start with) adds
+  two pages, **App on the TV** and **App options**, and **Developer tools…** to the tray
+  menu (right under **Settings…**), which opens Settings on them. There's no separate
+  developer tools window.
+- The Developer tools page says whether the TV's developer mode is on and, while it's
   off, gives the steps to turn it on with the TV's own remote. The TV ignores the code
-  when TVFollow sends it, so TVFollow's remote can't do it. The window keeps checking and
+  when TVFollow sends it, so TVFollow's remote can't do it. The page keeps checking and
   says when it's on.
 - The password chosen on the TV is typed in once and kept encrypted for your Windows
   account (`dev_password=` in settings.ini). **Check** tries it on the TV.
@@ -23,7 +28,16 @@ Developer tools, for putting your own Roku apps on the TV.
   b0r3d FM; the README's Privacy section says what goes where.
 - **Open on the TV**, **Remove**, **Screenshot…** (saves a picture of the app's screen)
   and **App log…** (the app's console: what it prints, and where it stopped if it
-  crashed).
+  crashed). Whatever TVFollow reads of the app log also goes into
+  `%APPDATA%\TVFollow\dev\<serial> app log.txt`, the newest 2 MB or so.
+- **Open the app whenever the TV goes to Roku's home screen** (off to start with): the app
+  becomes the TV's home screen while this PC is on. Turning the TV on or backing out of
+  another app lands in it. Pressing **Home** twice in a row stays on Roku's home screen.
+  Not while following is paused, and never on a TV that's off.
+- `TVFollow.exe push <folder or .zip>` and `TVFollow.exe screenshot <picture or folder>`,
+  with the developer tools on: **Push a folder…** and **Screenshot…** for test scripts,
+  with the saved password, which never leaves TVFollow. They print how it went and end
+  with 0, 1 or 2.
 - **Put the app back when it disappears from the TV** (on to start with): TVFollow keeps
   a copy of the app pushed last and puts it back, if the TV lost it, just before it turns
   the TV off with your monitors. If developer mode itself went off, or the app couldn't
@@ -32,7 +46,6 @@ Developer tools, for putting your own Roku apps on the TV.
 - **Let the app switch the TV's inputs** (off to start with): a Roku TV won't let an app
   switch its inputs, so the pushed app can ask TVFollow, which switches the TV while this
   PC is on. The README says how an app asks.
-- The Settings window grows to fit what it shows, as far as the screen allows.
 - **Settings…** in the tray menu, double-clicking the icon and opening TVFollow again all
   bring a minimized Settings window back up. Before, it stayed down in the taskbar.
 - The version and the build are shown apart: `TVFollow v1.3 · Build: abc1234` at the bottom

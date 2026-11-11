@@ -113,6 +113,17 @@ namespace TVFollow
             lock (gate) TurnOnNow(mode);
         }
 
+        // a sequence is turning this TV on or off right now (the developer tools stay out of its way)
+        public bool Busy
+        {
+            get
+            {
+                if (!Monitor.TryEnter(gate)) return true;
+                Monitor.Exit(gate);
+                return false;
+            }
+        }
+
         void TurnOnNow(TurnOnMode mode)
         {
             string tag = mode == TurnOnMode.Follow ? "on" : mode == TurnOnMode.ToPc ? "pc" : "on (button)";

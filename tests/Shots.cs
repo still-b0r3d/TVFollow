@@ -260,8 +260,9 @@ namespace TVFollow.Tests
             }
         }
 
-        // The Settings window with the developer tools switched on, and the developer tools window
-        // on the living-room TV in developer mode with the example app on it.
+        // The Settings window with the developer tools switched on, a picture of each page, on the
+        // living-room TV in developer mode with the example app on it; its options ticked the way
+        // b0r3d TV uses them. Then developer mode off, with the steps.
         static void SaveDeveloperTools(string folder, FakeTv tv)
         {
             using (var installer = new FakeInstaller(tv, 0))
@@ -274,7 +275,7 @@ namespace TVFollow.Tests
                 tv.DevAppVersion = TestMain.ExampleVersion;
                 DevClient.InstallerPort = installer.Port;
                 var s = new Settings { Port = tv.Port, DeveloperTools = true };
-                s.Tvs.Add(new TvSettings { Ip = tv.Ip, Serial = tv.Serial, Input = "hdmi1", Name = tv.Name, DevPassword = installer.Password });
+                s.Tvs.Add(new TvSettings { Ip = tv.Ip, Serial = tv.Serial, Input = "hdmi1", Name = tv.Name, DevPassword = installer.Password, DevInputs = true, DevHome = true });
                 SettingsForm.ShownAddress = ShownTv.Shown;
                 List<Controller> tvs = Controller.For(s);
                 var follower = new Follower(s, tvs); // not started
@@ -288,19 +289,24 @@ namespace TVFollow.Tests
                         Place(window, area);
                         window.Show();
                         WaitFor(() => Text(window).Contains("Living Room TV") && Text(window).Contains("showing this PC"));
-                        Save(window, folder, onScreen ? "15-settings-developer" : "10-settings");
-                        window.Close();
-                    }
-                    using (var window = new DevForm(dev, dev.Tvs[0]))
-                    {
-                        Place(window, area);
-                        window.Show();
-                        WaitFor(() => Text(window).Contains("Developer mode is on.") && Text(window).Contains("On the TV now"));
-                        Save(window, folder, "16-developer-tools");
+                        Save(window, folder, "10-settings");
+                        string[] pages =
+                        {
+                            SettingsForm.FollowingPage, SettingsForm.RemotePage, SettingsForm.PcPage, SettingsForm.UpdatesPage,
+                            SettingsForm.DeveloperPage, SettingsForm.AppPage, SettingsForm.AppOptionsPage
+                        };
+                        for (int i = 0; i < pages.Length; i++)
+                        {
+                            window.ShowPage(pages[i]);
+                            if (pages[i] == SettingsForm.DeveloperPage) WaitFor(() => Text(window).Contains("Developer mode is on."));
+                            if (pages[i] == SettingsForm.AppPage) WaitFor(() => Text(window).Contains("On the TV now"));
+                            Save(window, folder, "15-settings-" + (i + 1) + "-" + pages[i]);
+                        }
                         // and before developer mode is on: the steps
                         tv.DeveloperEnabled = false;
+                        window.ShowPage(SettingsForm.DeveloperPage);
                         WaitFor(() => Text(window).Contains("Developer mode is off."));
-                        Save(window, folder, "17-developer-mode-off");
+                        Save(window, folder, "16-developer-mode-off");
                         window.Close();
                     }
                 }

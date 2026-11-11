@@ -35,14 +35,12 @@ namespace TVFollow
         RemoteForm remote;
         Controller remoteTv; // the TV the remote was last on, so it opens on it again
         SettingsForm settingsWindow;
-        DevForm devWindow;
         readonly System.Threading.SynchronizationContext ui;  // the windows' thread, for messages from other threads
 
         // the developer tools (Program sets them once the tray is up)
         public DevTools Dev;
 
-        // runs on the Settings or developer tools window just before it first shows (the tests move
-        // it off the screen)
+        // runs on the Settings window just before it first shows (the tests move it off the screen)
         public static Action<Form> PlaceWindow = delegate { };
 
         public event Action<bool> PausedChanged = delegate { };
@@ -209,15 +207,13 @@ namespace TVFollow
             settingsWindow.Activate();
         }
 
-        // One developer tools window at a time. tv: the TV it should open on, or null for the first.
+        // The developer tools are pages of the Settings window: it opens (or comes back) on them.
+        // tv: the TV they should be on, or null for the one they're on.
         public void ShowDeveloperTools(Controller tv)
         {
             if (Dev == null) return;
-            if (devWindow != null && !devWindow.IsDisposed) { BringBack(devWindow); return; }
-            devWindow = new DevForm(Dev, Dev.For(tv));
-            PlaceWindow(devWindow);
-            devWindow.Show();
-            devWindow.Activate();
+            ShowSettings();
+            settingsWindow.ShowDeveloperTools(tv);
         }
 
         // an open window to the front; Activate alone leaves a minimized one down in the taskbar
@@ -227,13 +223,12 @@ namespace TVFollow
             window.Activate();
         }
 
-        // the switch in Settings: the background work starts or stops, and the window and the tray
-        // menu's Developer tools… go with it
+        // the switch in Settings: the background work starts or stops, and the tray menu's
+        // Developer tools… goes with it
         public void DeveloperToolsChanged()
         {
             developer.Available = follower.Settings.DeveloperTools;
             if (Dev != null) Dev.Refresh();
-            if (!follower.Settings.DeveloperTools && devWindow != null && !devWindow.IsDisposed) devWindow.Close();
         }
 
         public static void OpenLog()
@@ -251,7 +246,6 @@ namespace TVFollow
         {
             if (remote != null && !remote.IsDisposed) remote.Close();
             if (settingsWindow != null && !settingsWindow.IsDisposed) settingsWindow.Close();
-            if (devWindow != null && !devWindow.IsDisposed) devWindow.Close();
             icon.Visible = false;
             icon.Dispose();
         }
