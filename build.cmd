@@ -21,10 +21,11 @@ if not exist "%CSC%" (
 rem /codepage:65001 reads the source as UTF-8 (it has a few non-ASCII characters)
 set "OPTS=/nologo /debug- /codepage:65001 /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.Runtime.Serialization.dll /r:System.Security.dll /r:System.Windows.Forms.dll /r:System.Xml.dll"
 set "ICONS=/resource:assets\tv.ico,TVFollow.tv.ico /resource:assets\tv-paused.ico,TVFollow.tv-paused.ico /resource:assets\tv-on.ico,TVFollow.tv-on.ico /resource:assets\tv-off.ico,TVFollow.tv-off.ico /resource:assets\tv-pc.ico,TVFollow.tv-pc.ico"
-rem the example app, file by file: TVFollow zips it when it's pushed. A test checks every file
-rem in the folder is here.
-set "EX=examples\tvfollow-example"
-set "EXAMPLE=/resource:%EX%\manifest,example/manifest /resource:%EX%\source\main.brs,example/source/main.brs /resource:%EX%\components\MainScene.xml,example/components/MainScene.xml /resource:%EX%\components\MainScene.brs,example/components/MainScene.brs /resource:%EX%\images\icon_focus_fhd.png,example/images/icon_focus_fhd.png /resource:%EX%\images\icon_focus_hd.png,example/images/icon_focus_hd.png /resource:%EX%\images\splash_fhd.png,example/images/splash_fhd.png /resource:%EX%\images\splash_hd.png,example/images/splash_hd.png"
+rem the example app in examples\tvfollow-example, one resource per file, as listed in
+rem examples\example-resources.rsp: TVFollow zips it when it's pushed. After adding, removing
+rem or renaming a file there, git add it and run node tools\make-example-resources.js to
+rem write the list again. A test checks the list against the folder.
+set "EXAMPLE=@examples\example-resources.rsp"
 if not exist bin mkdir bin
 
 "%CSC%" %OPTS% %ICONS% %EXAMPLE% /optimize+ /target:winexe /win32icon:assets\tv.ico /win32manifest:assets\TVFollow.manifest /out:bin\TVFollow.exe src\*.cs

@@ -1,0 +1,8 @@
+"/resource:examples\tvfollow-example\components\MainScene.brs,example/components/MainScene.brs"
+"/resource:examples\tvfollow-example\components\MainScene.xml,example/components/MainScene.xml"
+"/resource:examples\tvfollow-example\images\icon_focus_fhd.png,example/images/icon_focus_fhd.png"
+"/resource:examples\tvfollow-example\images\icon_focus_hd.png,example/images/icon_focus_hd.png"
+"/resource:examples\tvfollow-example\images\splash_fhd.png,example/images/splash_fhd.png"
+"/resource:examples\tvfollow-example\images\splash_hd.png,example/images/splash_hd.png"
+"/resource:examples\tvfollow-example\manifest,example/manifest"
+"/resource:examples\tvfollow-example\source\main.brs,example/source/main.brs"
