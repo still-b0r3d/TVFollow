@@ -57,6 +57,10 @@ namespace TVFollow
         // back while an app was being put back.)
         public Func<bool> OffStillWanted;
 
+        // when TVFollow last switched this TV to an input (DateTime ticks, UTC): Roku's home
+        // screen on the way there isn't a trip home for the developer tools
+        long inputSwitched;
+
         public Controller(Settings settings, TvSettings tv)
         {
             this.settings = settings;
@@ -113,6 +117,18 @@ namespace TVFollow
             lock (gate) TurnOnNow(mode);
         }
 
+        // TVFollow is switching this TV to an input (for the pushed app, from the remote or Settings,
+        // or to the PC): from any thread, just before or after the switch goes out
+        public void NoteInputSwitch()
+        {
+            Interlocked.Exchange(ref inputSwitched, DateTime.UtcNow.Ticks);
+        }
+
+        public DateTime InputSwitchedAt
+        {
+            get { return new DateTime(Interlocked.Read(ref inputSwitched), DateTimeKind.Utc); }
+        }
+
         // a sequence is turning this TV on or off right now (the developer tools stay out of its way)
         public bool Busy
         {
@@ -164,6 +180,7 @@ namespace TVFollow
                 TvState now = Query();
                 if (now.IsOn && now.App == tv.PcApp) { Say(tag + ": showing the PC"); return; }
                 if (!now.IsOn) continue;
+                NoteInputSwitch();
                 int code = client.Keypress("Input" + tv.Input.ToUpperInvariant(), 4000);
                 if (code < 200 || code > 299) code = client.Launch(tv.PcApp, 4000);
                 if (i == 0) Say(tag + ": switching to the PC -> " + code);
@@ -251,7 +268,11 @@ namespace TVFollow
                 {
                     // back already: the TV stays on, showing the PC again
                     TvState now = Query();
-                    if (now.IsOn && now.App != tv.PcApp) Say(tag + ": you're back, so the TV stays on; back to the PC -> " + client.Launch(tv.PcApp, 4000));
+                    if (now.IsOn && now.App != tv.PcApp)
+                    {
+                        NoteInputSwitch();
+                        Say(tag + ": you're back, so the TV stays on; back to the PC -> " + client.Launch(tv.PcApp, 4000));
+                    }
                     else Say(tag + ": you're back, so the TV stays on");
                     return;
                 }

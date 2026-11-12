@@ -106,7 +106,8 @@ namespace TVFollow
 
         // the app on screen ("tvinput.hdmi1" for an HDMI input), "" for the Roku home screen,
         // null if the TV didn't answer. Older TVs show the home screen as an app with no id,
-        // newer ones as an app of type "home" ("Roku Dynamic Menu" on Roku OS 15).
+        // newer ones as an app of type "home" ("Roku Dynamic Menu" on Roku OS 15), after a
+        // moment with no id.
         public string GetActiveApp(int timeoutMs)
         {
             try

@@ -32,8 +32,11 @@ A new Settings window, and developer tools for putting your own Roku apps on the
   `%APPDATA%\TVFollow\dev\<serial> app log.txt`, the newest 2 MB or so.
 - **Open the app whenever the TV goes to Roku's home screen** (off to start with): the app
   becomes the TV's home screen while this PC is on. Turning the TV on or backing out of
-  another app lands in it. Pressing **Home** twice in a row stays on Roku's home screen.
-  Not while following is paused, and never on a TV that's off.
+  another app lands in it. Switching from an app to one of the TV's inputs passes Roku's
+  home screen, which doesn't count when TVFollow switched (for the app, or from its remote
+  or Settings) or when it's gone within 4 seconds, so the TV stays on the input. Pressing
+  **Home** twice in a row stays on Roku's home screen. Not while following is paused, and
+  never on a TV that's off.
 - `TVFollow.exe push <folder or .zip>` and `TVFollow.exe screenshot <picture or folder>`,
   with the developer tools on: **Push a folder…** and **Screenshot…** for test scripts,
   with the saved password, which never leaves TVFollow. They print how it went and end

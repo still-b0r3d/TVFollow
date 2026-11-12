@@ -168,14 +168,22 @@ nothing below runs while it isn't.
 - **Opening the app from the home screen:** with **Open the app whenever the TV goes to
   Roku's home screen** ticked, the same looks as for inputs (below: every 3 seconds, only
   on the TV's network) notice the home screen: an app of type `home` in
-  `query/active-app` (Roku OS 15 calls it "Roku Dynamic Menu"), or one with no id on older
-  TVs. Then TVFollow checks the TV is on (`power-mode` `PowerOn`, so a TV in standby isn't
-  woken), looks again 1.2 seconds later (a moment's home screen between two apps doesn't
-  count), checks `query/apps` still lists a `dev` app, and sends `launch/dev`. Back on the
-  home screen within a minute of that, with nothing else in between, means someone pressed
-  Home again: the TV stays home until it shows something else or turns off. That also
-  stops an app that crashes as it starts from being opened over and over. Nothing happens
-  while following is paused or while TVFollow is turning that TV on or off.
+  `query/active-app` (Roku OS 15 calls it "Roku Dynamic Menu"), or one with no id (older
+  TVs, and newer ones for a moment). Then TVFollow checks the TV is on (`power-mode`
+  `PowerOn`, so a TV in standby isn't woken). A Roku TV shows its home screen on the way
+  from an app to an input too: about 2.5 seconds between an app and HDMI 1 on a Roku TV
+  with Roku OS 16. So after TVFollow switched the TV to an input (for the app, from the
+  remote or Settings, or to the PC), the home screen doesn't count at all until the TV
+  shows something besides the app, or for 10 seconds, and the looks come every half
+  second meanwhile. Otherwise TVFollow checks `query/apps` lists a `dev` app, then asks
+  `query/active-app` every quarter of a second for 4 seconds: a home screen that goes away
+  meanwhile was one between two apps, or on the way to an input someone else switched to.
+  Then it checks the TV is still on (a TV that's off still says it shows the home screen)
+  and sends `launch/dev`. Back on the home screen (for those 4 seconds too) within a minute
+  of that, with nothing else in between, means someone pressed Home again: the TV stays
+  home until it shows something else or turns off. That also stops an app that crashes as
+  it starts from being opened over and over. Nothing happens while following is paused or
+  while TVFollow is turning that TV on or off.
 - **Letting the app switch inputs:** a Roku TV answers 403 when an app sends its own
   remote-control service a key press or a launch (at `127.0.0.1` or the TV's own address),
   and its app manager won't open `tvinput.*`, so an app can't switch the TV's input itself.

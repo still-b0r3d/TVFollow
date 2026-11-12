@@ -141,10 +141,13 @@ namespace TVFollow.Tests
                     InvokeClick(buttons.Find(b => b.AccessibleName == "Power"));
                     Pump(() => !tv.IsOn, 10);
                     Check(tv.Count("POST /keypress/PowerOff") == 1, "power should turn an on TV off");
-                    // the inputs come from the TV; picking one launches it
+                    // the inputs come from the TV; picking one launches it, and the developer tools
+                    // know the home screen on the way there isn't a trip home
                     Pump(() => FindChip(form, "HDMI 2") != null, 10);
+                    DateTime picked = DateTime.UtcNow;
                     InvokeClick(FindChip(form, "HDMI 2"));
                     Pump(() => tv.Count("POST /launch/tvinput.hdmi2") == 1, 10);
+                    Check(form.Tv.InputSwitchedAt >= picked, "picking an input didn't say so to the developer tools");
                 }
                 finally { form.Close(); form.Dispose(); }
             }

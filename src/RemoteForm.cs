@@ -460,6 +460,7 @@ namespace TVFollow
 
         void SwitchInput(string id)
         {
+            current.NoteInputSwitch();
             sender.Launch(id);
             showing = id;
             ShowInputs();

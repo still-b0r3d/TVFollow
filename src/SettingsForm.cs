@@ -491,6 +491,8 @@ namespace TVFollow
         {
             var client = new RokuClient(tv.Ip, settings.Port);
             string id = tv.PcApp;
+            DevTv tools = tray.Dev != null ? tray.Dev.Tvs.Find(d => d.Tv == tv) : null;
+            if (tools != null) tools.Controller.NoteInputSwitch();
             Task.Run(() => client.Launch(id, 3000));
         }
 

@@ -14,7 +14,6 @@ namespace TVFollow.Tests
     {
         public string Serial = "X000000001";
         public string PowerMode = "PowerOn";      // "PowerOn", or "DisplayOff" when off
-        public string App = "tvinput.hdmi1";      // "" = the Roku home screen
         public bool ModernHome;                   // the home screen as Roku OS 15 shows it: an app of type "home"
         public string ControlMode = "enabled";    // "limited" refuses button presses
         public string NetworkType = "wifi";
@@ -30,6 +29,7 @@ namespace TVFollow.Tests
         public string RawDeviceInfo;              // answer device-info with exactly this
         public bool RefusePowerOn;                // say OK to PowerOn but stay off
         public bool IgnoreInput;                  // say OK to input changes but don't switch
+        public int TransitHomeMs;                 // like a Roku TV: from an app to an input, the home screen shows this long first
         public string RedirectTo;                 // answer everything with "302 Found, go here" (no TV does this)
         public bool DeveloperEnabled;             // developer mode is on (its FakeInstaller takes apps)
         public string DevAppName;                 // the pushed app (id "dev") the TV lists, or null for none
@@ -39,6 +39,17 @@ namespace TVFollow.Tests
         public readonly int Port;
         readonly List<string> requests = new List<string>();
         readonly TcpListener listener;
+        string app = "tvinput.hdmi1";
+        int screens;     // each change of screen counts, so a trip to an input that something overtook doesn't land
+        Timer transit;   // the trip to an input under way
+
+        // what's on screen: "" = the Roku home screen. Setting it, like any change of screen,
+        // stops a trip to an input still under way.
+        public string App
+        {
+            get { return app; }
+            set { lock (this) Show(value); }
+        }
 
         public FakeTv(string ip, int port)
         {
@@ -76,7 +87,11 @@ namespace TVFollow.Tests
             lock (requests) requests.Add(what);
         }
 
-        public void Dispose() { listener.Stop(); }
+        public void Dispose()
+        {
+            listener.Stop();
+            lock (this) if (transit != null) transit.Dispose();
+        }
 
         void Serve()
         {
@@ -164,12 +179,33 @@ namespace TVFollow.Tests
             if (method != "POST") { status = 404; return; }
             if (path.StartsWith("/input?")) return; // for the app on screen, which reads it with roInput
             if (ControlMode == "limited" && path.StartsWith("/keypress/")) { status = 403; return; }
-            if (path == "/keypress/PowerOff") { PowerMode = "DisplayOff"; if (DownWhenOff) Down = true; }
+            if (path == "/keypress/PowerOff") { PowerMode = "DisplayOff"; screens++; if (DownWhenOff) Down = true; }
             else if (path == "/keypress/PowerOn") { if (!RefusePowerOn) PowerMode = "PowerOn"; }
-            else if (path.StartsWith("/keypress/InputHDMI")) { if (IsOn && !IgnoreInput) App = "tvinput.hdmi" + path.Substring("/keypress/InputHDMI".Length); }
-            else if (path.StartsWith("/launch/")) { if (IsOn && !IgnoreInput) App = path.Substring("/launch/".Length); }
-            else if (path == "/keypress/Home") { if (IsOn) App = ""; }
+            else if (path.StartsWith("/keypress/InputHDMI")) { if (IsOn && !IgnoreInput) SwitchTo("tvinput.hdmi" + path.Substring("/keypress/InputHDMI".Length)); }
+            else if (path.StartsWith("/launch/")) { if (IsOn && !IgnoreInput) SwitchTo(path.Substring("/launch/".Length)); }
+            else if (path == "/keypress/Home") { if (IsOn) Show(""); }
             else if (!path.StartsWith("/keypress/")) status = 404; // any other remote key is fine, like a real TV
+        }
+
+        // a change of screen (under the lock): a trip to an input still under way doesn't land
+        void Show(string to)
+        {
+            screens++;
+            app = to;
+        }
+
+        // an input or an app comes on (under the lock); from an app to an input, the home screen first
+        void SwitchTo(string to)
+        {
+            if (TransitHomeMs <= 0 || !to.StartsWith("tvinput.") || app == "" || app.StartsWith("tvinput."))
+            {
+                Show(to);
+                return;
+            }
+            Show("");
+            int mine = screens;
+            if (transit != null) transit.Dispose();
+            transit = new Timer(delegate { lock (this) if (screens == mine) Show(to); }, null, TransitHomeMs, Timeout.Infinite);
         }
 
         string DeviceInfoXml()

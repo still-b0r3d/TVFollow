@@ -33,6 +33,7 @@ namespace TVFollow.Tests
             Run("dev: the pushed app asks TVFollow to switch the TV's input", DevAppSwitchesInputs);
             Run("dev: nobody reads the app's console for asks unless switched on, and only on this TV", DevInputsOnlyWhenOn);
             Run("dev: the app opens when the TV goes to Roku's home screen, and Home twice stays home", DevHomeOpensApp);
+            Run("dev: the home screen on the way to an input doesn't open the app", DevHomeLeavesInputSwitches);
             Run("dev: the app log is saved in a file while it's read", DevAppLogSaved);
             Run("dev: push and screenshot from the command line, with the saved password", DevCommandLine);
             Run("dev: the developer window shows the TV's state", DevWindow);
@@ -1023,6 +1024,98 @@ namespace TVFollow.Tests
             }
         }
 
+        // A Roku TV shows its home screen for about 2.5 seconds on the way from an app to an input
+        // (measured on one with Roku OS 16). On the way to an input TVFollow switched to, that
+        // isn't a trip home; on the way to one someone else switched to (with the TV's own
+        // remote, say), it isn't one either while it's shorter than the wait.
+        static void DevHomeLeavesInputSwitches()
+        {
+            Check(DevTv.HomeSettleMs >= 3500, "the home screen's wait is no longer than a Roku TV's trip to an input: " + DevTv.HomeSettleMs);
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            using (var console = new FakeConsole("127.0.0.1", 0))
+            using (new InputTimings(console, 100))
+            {
+                int settle = DevTv.HomeSettleMs, check = DevTv.HomeCheckMs, switching = DevTv.SwitchingMs;
+                DevTv.HomeSettleMs = 600;
+                DevTv.HomeCheckMs = 50;
+                DevTv.SwitchingMs = 60000;   // longer than any wait below: here only the input showing ends a switch
+                try
+                {
+                    tv.ModernHome = true;
+                    tv.DeveloperEnabled = true;
+                    tv.DevAppName = "Home app";
+                    tv.InputNames = new[] { "PC", "Game console", "HDMI 3" };
+                    tv.App = "dev";
+                    Settings s = SettingsFor(tv);
+                    s.DeveloperTools = true;
+                    Tv(s).DevHome = true;
+                    Tv(s).DevInputs = true;
+                    using (DevTools tools = DevToolsFor(s))
+                    {
+                        // the app asks for an input, and the TV's home screen on the way there stays
+                        // longer than the wait: it still isn't a trip home
+                        tv.TransitHomeMs = 1500;
+                        Until(tv, () => Hellos(tv).Count >= 1, "the hello");
+                        console.Say("TVFollow ask " + Last(Hellos(tv))["token"] + " tvinput.hdmi2");
+                        Until(tv, () => tv.App == "", "the home screen on the way to HDMI 2");
+                        Until(tv, () => tv.App == "tvinput.hdmi2", "HDMI 2 after the home screen");
+                        Thread.Sleep(DevTv.HomeSettleMs + 300);
+                        Check(tv.App == "tvinput.hdmi2" && tv.Count("POST /launch/dev") == 0, "the app opened on the way to the input it asked for: " + tv.App);
+
+                        // there, the switch is over: Home is a trip home again
+                        tv.App = "";
+                        Until(tv, () => tv.App == "dev" && tv.Count("POST /launch/dev") == 1, "the app after Home on the input");
+
+                        // switched from somewhere else, with a shorter home screen than the wait: the
+                        // app doesn't open again, and it doesn't count as Home twice either, though
+                        // the app opened a moment ago
+                        tv.TransitHomeMs = 400;
+                        Check(new RokuClient(tv.Ip, tv.Port).Launch("tvinput.hdmi1", 2000) == 200 && tv.App == "", "the switch from somewhere else");
+                        Until(tv, () => tv.App == "tvinput.hdmi1", "HDMI 1 after the home screen");
+                        Thread.Sleep(DevTv.HomeSettleMs + 300);
+                        Check(tv.App == "tvinput.hdmi1" && tv.Count("POST /launch/dev") == 1, "the app opened on the way to HDMI 1: " + tv.App);
+                        Check(!LogText().Contains("so the TV stays there"), "a switch to an input counted as Home twice");
+
+                        // back in the app, TVFollow's remote or Settings switch the input, with a home
+                        // screen longer than the wait: not a trip home either
+                        tv.App = "dev";
+                        Thread.Sleep(300);
+                        tv.TransitHomeMs = 1500;
+                        tools.Tvs[0].Controller.NoteInputSwitch();
+                        Check(new RokuClient(tv.Ip, tv.Port).Launch("tvinput.hdmi3", 2000) == 200 && tv.App == "", "the switch from TVFollow's remote");
+                        Until(tv, () => tv.App == "tvinput.hdmi3", "HDMI 3 after the home screen");
+                        Thread.Sleep(DevTv.HomeSettleMs + 300);
+                        Check(tv.App == "tvinput.hdmi3" && tv.Count("POST /launch/dev") == 1, "the app opened on the way to HDMI 3: " + tv.App);
+
+                        // from another app, with looks that still see that app after TVFollow's switch
+                        // and before the TV leaves it: the switch isn't over yet
+                        tv.App = "12";
+                        Thread.Sleep(300);
+                        tools.Tvs[0].Controller.NoteInputSwitch();
+                        Thread.Sleep(300);
+                        Check(new RokuClient(tv.Ip, tv.Port).Launch("tvinput.hdmi1", 2000) == 200 && tv.App == "", "the switch from another app");
+                        Until(tv, () => tv.App == "tvinput.hdmi1", "HDMI 1 after the other app");
+                        Thread.Sleep(DevTv.HomeSettleMs + 300);
+                        Check(tv.App == "tvinput.hdmi1" && tv.Count("POST /launch/dev") == 1, "the app opened on the way from the other app: " + tv.App);
+
+                        // turned off during the wait (a TV that's off still says it shows the home
+                        // screen): the app doesn't open
+                        tv.App = "";
+                        Thread.Sleep(DevTv.HomeSettleMs / 2);
+                        tv.PowerMode = "DisplayOff";
+                        Thread.Sleep(DevTv.HomeSettleMs + 300);
+                        Check(tv.Count("POST /launch/dev") == 1, "the app opened on a TV turned off during the wait");
+                    }
+                }
+                finally
+                {
+                    DevTv.HomeSettleMs = settle;
+                    DevTv.HomeCheckMs = check;
+                    DevTv.SwitchingMs = switching;
+                }
+            }
+        }
+
         static void DevAppLogSaved()
         {
             using (var console = new FakeConsole("127.0.0.1", 0))
@@ -1274,6 +1367,7 @@ namespace TVFollow.Tests
                     Check(Hellos(tv).Count == hellos && console.Accepted == accepted, "another Roku was read or told");
                 }
                 tv.Serial = Tv(s).Serial;
+                Thread.Sleep(300);   // a look under way finishes
 
                 // this PC on another network (a laptop away from home): nothing goes to the TV's address
                 Controller away = Fast(FirstTv(s));

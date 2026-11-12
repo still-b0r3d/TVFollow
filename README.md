@@ -248,10 +248,13 @@ another replaces it.
 - **Open the app whenever the TV goes to Roku's home screen** (off to start with): makes
   the app the TV's home screen. Turning the TV on, or backing out of another app (Back out
   of YouTube, say), lands in your app instead of Roku's home screen, a few seconds later.
-  Press **Home** twice in a row to stay on Roku's home screen: going home again right after
-  TVFollow opened the app means you wanted it, and the TV stays there until it shows
-  something else or turns off. It works while this PC is on and TVFollow runs, never while
-  following is paused, and only on a TV that's on.
+  On the way from an app to one of its inputs the TV passes Roku's home screen too. That
+  doesn't count when TVFollow switched the input (for your app, or from its remote or
+  Settings), or when it's gone within 4 seconds (it took about 2.5 on a Roku TV with Roku
+  OS 16), so the TV stays on the input. Press **Home** twice in a row to stay on Roku's
+  home screen: going home again right after TVFollow opened the app means you wanted it,
+  and the TV stays there until it shows something else or turns off. It works while this
+  PC is on and TVFollow runs, never while following is paused, and only on a TV that's on.
 - **Put the app back when it disappears from the TV** (on to start with): the TV can lose
   its pushed app, after a Roku update, say. TVFollow keeps a copy of the app you pushed
   last and puts it back the next time it turns the TV off with your monitors, while
