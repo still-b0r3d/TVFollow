@@ -283,12 +283,12 @@ function BuildFmFonts(st as object) as object
     end if
     if st.look = "rgb" then
         return {
-            brand: Silk(st, Z(28, k), true),
-            sub: Silk(st, Z(18, k), false),
+            brand: Barlow(st, "extrabold", Z(32, k)),
+            sub: Barlow(st, "semibold", Z(18, k)),
             name: Barlow(st, "extrabold", Z(32, k)),
             now: Barlow(st, "medium", Z(22, k)),
-            clock: Silk(st, Z(26, k), true),
-            bar: Silk(st, Z(18, k), false)
+            clock: Barlow(st, "semibold", Z(26, k)),
+            bar: Barlow(st, "semibold", Z(18, k))
         }
     end if
     return {
@@ -368,15 +368,15 @@ function FmKit(st as object) as object
             rule: c.rule,
             accent: c.accent,
             well: c.well,
-            wellBorder: c.green,
+            wellBorder: c.frame,
             title: c.white,
             soft: c.soft,
             bar: c.dim,
             barFill: c.accent,
-            barTrack: &h222233FF,
+            barTrack: c.highlight,
             onAir: c.green,
-            buffering: &hFFD23FFF,
-            paused: &hFF4444FF
+            buffering: c.accent,
+            paused: c.red
         }
     end if
     return {
@@ -415,8 +415,8 @@ sub DrawFmScreen(st as object)
     ' Header bar
     headY = Z(38, k)
     if st.look = "rgb" then
-        DrawRgbTriad(s, left, headY + Z(6, k), Z(36, k), Z(14, k), st.kit)
-        s.DrawText("98.5 b0r3d FM - STEREO", left + Z(50, k), headY, kit.title, f.brand)
+        DrawRgbLedBar(st, s, left, headY + Z(2, k), f.brand.GetOneLineHeight() - Z(6, k))
+        s.DrawText("98.5 b0r3d FM  ·  STEREO", left + Z(22, k), headY, kit.title, f.brand)
     else if st.look = "phosphor" then
         DrawGlow(s, "98.5 B0R3D FM // HIGH FIDELITY STEREO", left, headY, kit.accent, st.kit.glow, f.brand, Z(1, k))
     else if st.look = "vcr" then
@@ -445,7 +445,10 @@ sub DrawFmScreen(st as object)
     end if
 
     clockW = f.clock.GetOneLineWidth(statusWord, 99999)
-    s.DrawText(statusWord, right - clockW, headY + Z(2, k), statusCol, f.clock)
+    statusY = headY + Z(2, k)
+    ' the RGB look's title is bigger than the word: the word sits on the title's baseline
+    if st.look = "rgb" then statusY = headY + f.brand.GetAscent() - f.clock.GetAscent()
+    s.DrawText(statusWord, right - clockW, statusY, statusCol, f.clock)
 
     s.DrawRect(left, Z(98, k), w, Z(2, k), kit.rule)
 
@@ -459,7 +462,7 @@ sub DrawFmScreen(st as object)
         B95Sunken(s, eqX, eqY, eqW, eqH, Z(2, k), st.kit, kit.well)
     else if st.look = "rgb" then
         s.DrawRect(eqX, eqY, eqW, eqH, kit.well)
-        DrawRgbBrackets(s, eqX, eqY, eqW, eqH, Z(2, k), Z(20, k), kit.wellBorder)
+        DrawRgbEdge(st, s, eqX, eqY, eqW, eqH)
     else if st.look = "phosphor" then
         DrawFrame(s, eqX, eqY, eqW, eqH, Z(2, k), kit.wellBorder)
     else if st.look = "vcr" then

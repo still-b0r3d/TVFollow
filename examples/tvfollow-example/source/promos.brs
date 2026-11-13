@@ -34,8 +34,8 @@ function PromoSpots() as object
         {
             tag: "A PUBLIC SERVICE ANNOUNCEMENT",
             title: "DON'T TOUCH THAT DIAL",
-            sub: "b0r3d TV'S OWN CHANNELS: 20 TO 24.",
-            bullet1: "Three games, a radio station and these commercials.",
+            sub: "b0r3d TV'S OWN CHANNELS: 3, 9 AND 20 TO 24.",
+            bullet1: "A VCR, a cat cam, three games, a radio station and these commercials.",
             bullet2: "Leave the remote alone for a while and Rukus comes by.",
             cta: "THIS HAS BEEN A TEST. STAY TUNED.",
             accent: &hFFD700FF
@@ -127,13 +127,13 @@ function BuildPromoFonts(st as object) as object
     end if
     if st.look = "rgb" then
         return {
-            header: Silk(st, Z(24, k), true),
+            header: Barlow(st, "bold", Z(24, k)),
             title: Barlow(st, "extrabold", Z(36, k)),
             sub: Barlow(st, "semibold", Z(22, k)),
-            badge: Silk(st, Z(18, k), true),
+            badge: Barlow(st, "bold", Z(18, k)),
             bullet: Barlow(st, "medium", Z(22, k)),
-            cta: Silk(st, Z(18, k), true),
-            bar: Silk(st, Z(18, k), false),
+            cta: Barlow(st, "bold", Z(20, k)),
+            bar: Barlow(st, "semibold", Z(18, k)),
             preview: Barlow(st, "bold", Z(20, k))
         }
     end if
@@ -279,7 +279,7 @@ function PromoKit(st as object) as object
         return {
             bg: c.bg,
             cardBg: c.card,
-            header: c.accent,
+            header: c.white,
             rule: c.rule,
             title: c.white,
             sub: c.soft,
@@ -324,9 +324,10 @@ sub DrawPromoScreen(st as object)
     if p.paused then statusWord = "PAUSED"
     headerText = "COMMERCIAL BREAKS // CH 24 [" + (p.idx + 1).ToStr() + "/" + p.spots.Count().ToStr() + " - " + statusWord + "]"
     if st.look = "rgb" then
-        s.DrawRect(hx, Z(28, k), st.w - 2 * hx, Z(2, k), kit.rule)
-        DrawRgbTriad(s, hx, hy + Z(4, k), Z(36, k), Z(14, k), st.kit)
-        GText(st, s, PromoTrim(st, headerText, f.header, st.w - 2 * hx - Z(50, k), true), hx + Z(50, k), hy, f.header, kit.header, true)
+        ' the look's own way of saying it: plain words between dots, the LED bar beside them
+        headerText = "COMMERCIAL BREAKS  ·  CH 24  ·  " + (p.idx + 1).ToStr() + "/" + p.spots.Count().ToStr() + " " + statusWord
+        DrawRgbLedBar(st, s, hx, hy + Z(2, k), f.header.GetOneLineHeight() - Z(4, k))
+        GText(st, s, PromoTrim(st, headerText, f.header, st.w - 2 * hx - Z(22, k), true), hx + Z(22, k), hy, f.header, kit.header, true)
     else
         if st.look = "b95" then DrawB95Taskbar(st, "Commercial Breaks")
         GText(st, s, PromoTrim(st, headerText, f.header, st.w - 2 * hx, true), hx, hy, f.header, kit.header, true)

@@ -195,3 +195,19 @@ function NewPicture(w as integer, h as integer, alpha as boolean) as dynamic
     if bmp = invalid then print "b0r3d TV: no picture memory left for a "; w; " x "; h; " picture"
     return bmp
 end function
+
+' For pictures that are only a saving (the RGB look's lettering made into pictures, Rukus's loaf
+' on its TV, Rukus Cam's words): after one couldn't be made, none is tried again for 5 seconds,
+' so a TV short of picture memory isn't asked (and the log isn't told) on every frame. Meanwhile
+' the RGB look draws its lettering and Rukus straight on the screen, and the camera leaves its
+' words out.
+sub PictureFailed(st as object)
+    st.picFail = CreateObject("roTimespan")
+end sub
+
+function PicturesFailing(st as object) as boolean
+    if st.picFail = invalid then return false
+    if st.picFail.TotalMilliseconds() < 5000 then return true
+    st.picFail = invalid
+    return false
+end function

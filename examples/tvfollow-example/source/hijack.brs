@@ -174,19 +174,21 @@ sub MaybeIdleHijack(st as object)
 end sub
 
 ' Whether the TV may have turned the screen black by now (its own screensaver, which comes over a
-' 2D app like this one as a black screen): the TV's idle count has reached its screensaver wait.
+' 2D app like this one as a black screen): the TV's idle count has reached its screensaver wait,
+' less margin seconds. Agent Ø's signal keeps the 5 s margin, to be sure it isn't wasted on a
+' dark TV; what's only saving drawing work asks with no margin, so a lit screen never slows.
 ' When the TV doesn't say its idle count, b0r3d TV's own count is used, unless the idle-clock
 ' reset is keeping the TV awake and has been seen to work. A TV with its screensaver off never
 ' turns black.
-function TvMayBeBlank(st as object) as boolean
+function TvMayBeBlank(st as object, margin = 5 as integer) as boolean
     tvTime = TvWaitSeconds(st)
     if tvTime <= 0 then return false
     tvIdle = TvIdleSeconds(st)
-    if tvIdle >= 0 then return tvIdle >= tvTime - 5
+    if tvIdle >= 0 then return tvIdle >= tvTime - margin
     if st.saverPick = "keep" and st.canReset and st.keepWorks then
         if st.idle.TotalSeconds() < 7200 then return false
     end if
-    return st.idle.TotalSeconds() >= tvTime - 5
+    return st.idle.TotalSeconds() >= tvTime - margin
 end function
 
 ' --- Drawing ---

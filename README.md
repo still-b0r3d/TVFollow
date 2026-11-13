@@ -222,13 +222,14 @@ choose **Disable installer and restart**.
   the app in a folder), TVFollow finds it there.
 - **Push the example app**: [b0r3d TV](https://github.com/still-b0r3d/b0r3d-TV), built
   into TVFollow, to check it all works: a channel guide like an old cable box's, where
-  your TV's apps are channels next to b0r3d's own: three games, a radio station and
-  late-night commercials. With **Let the app switch the TV's inputs** ticked (below), the
-  TV's inputs show up in its guide as channels a few seconds after it opens, and opening
-  one switches the TV: the asking described below, at work, in its `source/tvfollow.brs`.
-  Its source is in [examples/tvfollow-example](examples/tvfollow-example), under its own
-  license (see [License](#license)). Once it's on the TV, it goes on the internet by
-  itself (see [Privacy](#privacy)).
+  your TV's apps are channels next to b0r3d's own: a VCR, a camera on Rukus's room,
+  three games, a radio station and late-night commercials. With **Let the app switch the
+  TV's inputs** ticked (below), the TV's inputs show up in its guide as channels a few
+  seconds after it opens, and opening one switches the TV: the asking described below,
+  at work, in its `source/tvfollow.brs`. Its source is in
+  [examples/tvfollow-example](examples/tvfollow-example), under its own license (see
+  [License](#license)). Once it's on the TV, it goes on the internet by itself (see
+  [Privacy](#privacy)).
 
 The TV opens an app as soon as it has it. It holds one pushed app at a time, so pushing
 another replaces it.
@@ -319,7 +320,9 @@ token as it starts, a score that makes the TV's own top 10 goes up with your thr
 and a game's high-score page asks for the board's table when it opens. Those requests name
 b0r3d TV and its version, and send nothing else about you or your TV. b0r3d FM streams its
 songs from b0r3d.download while you listen. Like any web request, both see your internet
-address. Remove the app from the TV (**Remove** in the developer tools) and it all stops.
+address. Its VCR only plays a video whose address someone sends it, and the TV gets that
+video straight from there. Remove the app from the TV (**Remove** in the developer tools)
+and it all stops.
 
 TVFollow's settings and log are in `%APPDATA%\TVFollow` (with the developer tools, so are
 the copy of the app pushed last and the app log it read). The log shows your TV's local

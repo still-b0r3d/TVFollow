@@ -25,7 +25,7 @@ function LookColourNames(look as string) as object
     if look = "b95" then return ["Teal", "Blue", "Slate"]
     if look = "phosphor" then return ["Green", "Amber", "Cyan"]
     if look = "vcr" then return ["Blue", "Black", "Green"]
-    if look = "rgb" then return ["Rainbow Wave", "Neon Pulse", "Aurora Wave", "Spectrum Cycle"]
+    if look = "rgb" then return ["Rainbow wave", "Neon", "Aurora", "Colour cycle"]
     return []
 end function
 
@@ -48,6 +48,13 @@ sub LoadLook(st as object)
     else
         st.kit = CableKit()
         st.fonts = CableFonts(st)
+    end if
+    ' the RGB look's pictures take a few megabytes; another look lets them go. Its text pictures
+    ' are made again in the new fonts.
+    if st.look = "rgb" then
+        st.rgbText = invalid
+    else
+        ForgetRgbArt(st)
     end if
 end sub
 
@@ -111,81 +118,39 @@ function VcrKit(index as integer) as object
     }
 end function
 
-' The RGB LED lights look's four colourways: Rainbow Wave, Neon Pulse, Aurora Wave, Spectrum Cycle.
+' The RGB LED lights look's colours: a dark wall, the TV and the panel a shade darker, white and
+' grey type. The light itself comes from the colourway's pictures (rgb.brs); a kit only carries
+' the colours the games and the other screens use, so red, green and blue follow the colourway:
+' Rainbow wave, Neon, Aurora, Colour cycle.
 function RgbKit(index as integer) as object
-    sets = [
-        {
-            bg: &h07090EFF,
-            well: &h020306FF,
-            card: &h0E1320FF,
-            highlight: &h182236FF,
-            track: &h141A28FF,
-            rule: &h1E283CFF,
-            frame: &h1E283CFF,
-            red: &hFF0033FF,
-            green: &h00FF66FF,
-            blue: &h0088FFFF,
-            accent: &hFFCC00FF,
-            white: &hF4F8FFFF,
-            soft: &hC8D4E8FF,
-            dim: &h64748CFF,
-            noise: [&h07090EFF, &h1E283CFF, &h0088FFFF, &hF4F8FFFF]
-        },
-        {
-            bg: &h0A0612FF,
-            well: &h040208FF,
-            card: &h160D26FF,
-            highlight: &h281642FF,
-            track: &h221238FF,
-            rule: &h3A1E60FF,
-            frame: &h3A1E60FF,
-            red: &hFF007FFF,
-            green: &h39FF14FF,
-            blue: &h00F0FFFF,
-            accent: &hFFD700FF,
-            white: &hFFFFFFFF,
-            soft: &hE0D0F8FF,
-            dim: &h7C5E9EFF,
-            noise: [&h0A0612FF, &h3A1E60FF, &hFF007FFF, &h00F0FFFF]
-        },
-        {
-            bg: &h050D12FF,
-            well: &h020608FF,
-            card: &h0B1820FF,
-            highlight: &h122632FF,
-            track: &h0F202AFF,
-            rule: &h1A3644FF,
-            frame: &h1A3644FF,
-            red: &h00FFAAFF,
-            green: &h00FF66FF,
-            blue: &h0088FFFF,
-            accent: &h00EEFFFF,
-            white: &hE8F8FAFF,
-            soft: &hB4D8E2FF,
-            dim: &h587888FF,
-            noise: [&h050D12FF, &h1A3644FF, &h00FFAAFF, &hE8F8FAFF]
-        },
-        {
-            bg: &h06070AFF,
-            well: &h020204FF,
-            card: &h0C0E16FF,
-            highlight: &h161A28FF,
-            track: &h121520FF,
-            rule: &h1E2232FF,
-            frame: &h1E2232FF,
-            red: &hFF3333FF,
-            green: &h33FF66FF,
-            blue: &h3388FFFF,
-            accent: &hFFAA00FF,
-            white: &hF0F4FCFF,
-            soft: &hC0C8D8FF,
-            dim: &h606878FF,
-            noise: [&h06070AFF, &h1E2232FF, &hFFAA00FF, &hF0F4FCFF]
-        }
+    ' red, green, blue and the accent for each colourway, in that order
+    picks = [
+        [&hFF3346FF, &h3EF07AFF, &h2F7DFFFF, &hFFBE2AFF],
+        [&hFF2FD2FF, &h20D6FFFF, &h7449FFFF, &h20D6FFFF],
+        [&h7258FFFF, &h3BFF84FF, &h1ED9C8FF, &h3BFF84FF],
+        [&hFF3346FF, &h3EF07AFF, &h2F7DFFFF, &hFFBE2AFF]
     ]
-    idx = index mod sets.Count()
-    if idx < 0 then idx = idx + sets.Count()
-    return sets[idx]
+    idx = index mod picks.Count()
+    if idx < 0 then idx = idx + picks.Count()
+    p = picks[idx]
+    return {
+        bg: &h111216FF,
+        well: &h0C0D11FF,
+        card: &h0B0C0FFF,
+        highlight: &h1B1D24FF,
+        track: &h17181DFF,
+        rule: &h232429FF,
+        frame: &h07080AFF,
+        red: p[0],
+        green: p[1],
+        blue: p[2],
+        accent: p[3],
+        white: &hFFFFFFFF,
+        text: &hECEEF2FF,
+        soft: &hB9BDC7FF,
+        dim: &h80858FFF,
+        noise: [&h111216FF, &h2A2C33FF, &h80858FFF, &hECEEF2FF]
+    }
 end function
 
 ' Rukus in the look's colours: his own fur, or shades of the phosphor.

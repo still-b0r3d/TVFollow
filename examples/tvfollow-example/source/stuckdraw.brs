@@ -28,7 +28,7 @@ function StuckKit(st as object) as object
     end if
     ' each look has its own branch: a kit only has the colour names its own look uses
     if st.look = "rgb" then
-        return { wellBg: c.well, empty: c.card, block: c.blue, stuckOn: c.accent, stuckOff: c.dim, mini: c.well, flash: c.white, bannerBg: c.card, bannerFg: c.accent, noise: c.noise, light: 0, dark: 0, stuckLight: 0, stuckDark: 0 }
+        return { wellBg: c.well, empty: c.track, block: c.blue, stuckOn: c.accent, stuckOff: c.dim, mini: c.well, flash: c.white, bannerBg: c.card, bannerFg: c.accent, noise: c.noise, light: 0, dark: 0, stuckLight: 0, stuckDark: 0 }
     end if
     return { wellBg: &h050B22FF, empty: &h0B1740FF, block: &h8FB4FFFF, stuckOn: c.accent, stuckOff: &h484640FF, mini: &h050B22FF, flash: c.white, bannerBg: c.ink, bannerFg: c.accent, noise: c.noise, light: 0, dark: 0, stuckLight: 0, stuckDark: 0, cabinet: &h1F3170FF, bezel: &h03081AFF }
 end function
@@ -46,7 +46,7 @@ function StuckFonts(st as object) as object
         return { title: W95(st, Z(26, k)), line: W95(st, Z(19, k)), label: W95(st, Z(21, k)), value: W95(st, Z(21, k)), box: W95(st, Z(19, k)), banner: W95(st, Z(36, k)), bar: W95(st, Z(18, k)), small: W95(st, Z(18, k)) }
     end if
     if st.look = "rgb" then
-        return { title: Silk(st, Z(32, k), true), line: Barlow(st, "bold", Z(22, k)), label: Silk(st, Z(18, k), true), value: Silk(st, Z(30, k), true), box: Silk(st, Z(18, k), false), banner: Silk(st, Z(42, k), true), bar: Silk(st, Z(18, k), false), small: Silk(st, Z(18, k), false) }
+        return { title: Barlow(st, "extrabold", Z(34, k)), line: Barlow(st, "semibold", Z(22, k)), label: Barlow(st, "semibold", Z(19, k)), value: Barlow(st, "bold", Z(32, k)), box: Barlow(st, "semibold", Z(19, k)), banner: Barlow(st, "extrabold", Z(46, k)), bar: Barlow(st, "semibold", Z(18, k)), small: Barlow(st, "semibold", Z(19, k)) }
     end if
     return { title: Barlow(st, "extrabold", Z(44, k)), line: Barlow(st, "semibold", Z(22, k)), label: Barlow(st, "bold", Z(20, k)), value: Vt323(st, Z(44, k)), box: Barlow(st, "bold", Z(20, k)), banner: Barlow(st, "extrabold", Z(48, k)), bar: Barlow(st, "bold", Z(21, k)), small: Vt323(st, Z(26, k)), chin: Barlow(st, "extrabold", Z(22, k)) }
 end function
@@ -728,7 +728,7 @@ function StuckChromeVcr(st as object, s as object, a as object) as object
     sh = Z(3, k)
     s.Clear(c.bg)
     DrawVcrTitle(st, "STUCK PIXELS")
-    DrawVcrChannel(st, GameChannels()[0], Z(26, k))
+    DrawVcrChannel(st, GameChannel("game.stuck"), Z(26, k))
 
     ' left: each number's label, the number under it
     x = Z(56, k)
@@ -790,18 +790,18 @@ function StuckChromeRgb(st as object, s as object, a as object) as object
     headY = Z(38, k)
     left = Z(48, k)
     right = Z(1232, k)
-    triadW = Z(36, k)
-    triadH = Z(14, k)
-    DrawRgbTriad(s, left, headY + Z(6, k), triadW, triadH, c)
-    s.DrawText("STUCK PIXELS", left + triadW + Z(14, k), headY, c.white, f.title)
-    s.DrawText(TrimToWidth(StuckModeLine(st), f.line, Z(430, k) - left - triadW), left + triadW + Z(14, k), headY + Z(36, k), c.green, f.line)
+    ' the look's lit LED bar, then the title and the mode
+    barW = Z(18, k)
+    DrawRgbLedBar(st, s, left, headY + Z(10, k), Z(48, k))
+    s.DrawText("STUCK PIXELS", left + barW, headY, c.white, f.title)
+    s.DrawText(TrimToWidth(StuckModeLine(st), f.line, Z(430, k) - left - barW), left + barW, headY + Z(36, k), c.soft, f.line)
 
     wx = Z(462, k)
     wy = Z(102, k)
     ww = Z(818, k) - wx
     wh = Z(626, k) - wy
     s.DrawRect(wx, wy, ww, wh, c.well)
-    DrawRgbBrackets(s, wx, wy, ww, wh, Z(2, k), Z(20, k), c.green)
+    DrawRgbEdge(st, s, wx, wy, ww, wh)
 
     ' the numbers' labels and places: the same names as the other looks', so each gets its number
     names = StuckSlotNames()
@@ -809,14 +809,14 @@ function StuckChromeRgb(st as object, s as object, a as object) as object
     slots = {}
     ry = 112
     for i = 0 to 5
-        s.DrawText(labels[i], left + Z(12, k), Z(ry, k), c.green, f.label)
+        s.DrawText(labels[i], left + Z(12, k), Z(ry, k), c.soft, f.label)
         slots[names[i]] = { x: 420, y: ry + 22, align: "r", font: f.value, color: c.white, bg: c.bg }
         ry = ry + 78
     end for
 
     nextBox = StuckBoxRgb(st, s, a, "NEXT PIECE", 860, 104, 260, 160)
     holdBox = StuckBoxRgb(st, s, a, "HOLD PIECE", 860, 316, 260, 160)
-    s.DrawText(labels[6], Z(872, k), Z(520, k), c.green, f.label)
+    s.DrawText(labels[6], Z(872, k), Z(520, k), c.soft, f.label)
     slots.best = { x: 1232, y: 544, align: "r", font: f.value, color: c.accent, bg: c.bg }
 
     s.DrawRect(left, Z(646, k), right - left, Z(2, k), c.rule)
@@ -834,9 +834,9 @@ function StuckBoxRgb(st as object, s as object, a as object, label as string, x 
     by = Z(y + 26, k)
     bw = Z(x + w, k) - bx
     bh = Z(y + 26 + h, k) - by
-    s.DrawText(label, bx + Z(8, k), Z(y, k), c.green, a.fonts.label)
+    s.DrawText(label, bx + Z(8, k), Z(y, k), c.soft, a.fonts.label)
+    s.DrawRect(bx - Z(2, k), by - Z(2, k), bw + Z(4, k), bh + Z(4, k), c.frame)
     s.DrawRect(bx, by, bw, bh, c.well)
-    DrawRgbBrackets(s, bx, by, bw, bh, Z(2, k), Z(14, k), c.blue)
     inset = Z(8, k)
     return [bx + inset, by + inset, bw - 2 * inset, bh - 2 * inset]
 end function
@@ -949,8 +949,9 @@ end function
 
 ' How often the guide is drawn again while its preview plays a demo: five times a second for
 ' Stuck Pixels, ten for Test Pattern (its ball moves), about nine for Snake, ten for b0r3d FM's
-' bars, twice for Commercial Breaks (its card turns over every 8 s), or less on a TV that takes
-' long to draw the guide (never more than half the time spent drawing).
+' bars, twice for Commercial Breaks (its card turns over every 8 s) and for the VCR (its 12:00
+' blinks), ten for Rukus Cam (he walks), or less on a TV that takes long to draw the guide (never
+' more than half the time spent drawing).
 function DemoRedrawMs(st as object) as integer
     id = PreviewGameId(st)
     ms = 2 * st.guideMs
@@ -959,6 +960,8 @@ function DemoRedrawMs(st as object) as integer
     if id = "game.snake" then base = 110
     if id = "radio.fm" then base = 100
     if id = "promo.breaks" then base = 500
+    if id = "video.vcr" then base = 500
+    if id = "cam.rukus" then base = 100
     if ms < base then ms = base
     if ms > 1000 then ms = 1000
     return ms
@@ -974,6 +977,8 @@ function DemoWaitMs(st as object) as integer
     if id = "game.snake" then timer = st.snakeDemoTimer
     if id = "radio.fm" then timer = st.fmDemoTimer
     if id = "promo.breaks" then timer = st.promoDemoTimer
+    if id = "video.vcr" then timer = st.deckDemoTimer
+    if id = "cam.rukus" then timer = st.camDemoTimer
     if timer = invalid then return interval
     left = interval - timer.TotalMilliseconds()
     if left < 10 then return 10
@@ -997,15 +1002,19 @@ sub DrawGamePreview(st as object, ch as object, x as integer, y as integer, w as
         DrawSnakePreview(st, x, y, w, h)
     else if ch.id = "promo.breaks" then
         DrawPromoPreview(st, x, y, w, h)
+    else if ch.id = "video.vcr" then
+        DrawDeckPreview(st, x, y, w, h)
+    else if ch.id = "cam.rukus" then
+        DrawCamPreview(st, x, y, w, h)
     else
         DrawStuckPreview(st, x, y, w, h)
     end if
 end sub
 
-' Whether a channel's preview box plays a demo of it: the games, b0r3d FM and Commercial
-' Breaks, in every look.
+' Whether a channel's preview box plays a demo of it: the games, b0r3d FM, Commercial Breaks,
+' the VCR and Rukus Cam (live), in every look.
 function HasPreview(ch as object) as boolean
-    return ch.kind = "game" or ch.kind = "radio" or ch.kind = "promo"
+    return ch.kind = "game" or ch.kind = "radio" or ch.kind = "promo" or ch.kind = "vcr" or ch.kind = "cam"
 end function
 
 ' Whether the guide's highlight is on a channel with a demo in its preview box.

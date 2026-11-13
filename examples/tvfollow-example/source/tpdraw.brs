@@ -55,7 +55,7 @@ function TpKit(st as object) as object
         return { field: &h000000FF, paddle: c.face, paddleEdge: c.dark, ball: c.white, capBody: c.face, capScreen: &h101010FF, capMark: c.white, bannerBg: c.navy, bannerFg: c.white, noise: c.noise, outline: &h606060FF, label: c.black, value: c.black, flash: c.white, sticky: &hFF6FD8FF }
     end if
     if st.look = "rgb" then
-        return { field: c.well, paddle: c.green, paddleEdge: c.dim, ball: c.white, capBody: c.blue, capScreen: c.bg, capMark: c.white, bannerBg: c.card, bannerFg: c.accent, noise: c.noise, outline: c.rule, label: c.green, value: c.white, flash: c.white, sticky: c.accent }
+        return { field: c.well, paddle: c.green, paddleEdge: c.dim, ball: c.white, capBody: c.blue, capScreen: c.bg, capMark: c.white, bannerBg: c.card, bannerFg: c.accent, noise: c.noise, outline: c.rule, label: c.soft, value: c.white, flash: c.white, sticky: c.accent }
     end if
     return { field: &h050B22FF, paddle: c.accent, paddleEdge: &hB8962DFF, ball: c.white, capBody: &hC9D6FFFF, capScreen: &h0A1640FF, capMark: c.white, bannerBg: c.ink, bannerFg: c.accent, noise: c.noise, outline: &h5A5A5AFF, label: c.soft, value: c.white, flash: c.white, sticky: &hFF6FD8FF }
 end function
@@ -72,7 +72,7 @@ function TpFonts(st as object) as object
         return { title: W95(st, Z(26, k)), label: W95(st, Z(19, k)), value: W95(st, Z(21, k)), small: W95(st, Z(18, k)), banner: W95(st, Z(30, k)), bar: W95(st, Z(18, k)) }
     end if
     if st.look = "rgb" then
-        return { title: Silk(st, Z(32, k), true), label: Silk(st, Z(18, k), true), value: Silk(st, Z(28, k), true), small: Silk(st, Z(18, k), false), banner: Silk(st, Z(36, k), true), bar: Silk(st, Z(18, k), false) }
+        return { title: Barlow(st, "extrabold", Z(34, k)), label: Barlow(st, "semibold", Z(19, k)), value: Barlow(st, "bold", Z(30, k)), small: Barlow(st, "semibold", Z(19, k)), banner: Barlow(st, "extrabold", Z(40, k)), bar: Barlow(st, "semibold", Z(18, k)) }
     end if
     return { title: Barlow(st, "extrabold", Z(44, k)), label: Barlow(st, "bold", Z(20, k)), value: Vt323(st, Z(40, k)), small: Vt323(st, Z(26, k)), banner: Barlow(st, "extrabold", Z(40, k)), bar: Barlow(st, "bold", Z(21, k)) }
 end function
@@ -714,13 +714,10 @@ function TpChromeRgb(st as object, s as object, a as object) as object
     f = a.fonts
     s.Clear(c.bg)
 
-    headY = Z(38, k)
     left = Z(48, k)
     right = Z(1232, k)
-    triadW = Z(36, k)
-    triadH = Z(14, k)
-    ' the look's mark; the score, lives and wall along the field's top are the title line
-    DrawRgbTriad(s, left, headY + Z(6, k), triadW, triadH, c)
+    ' the score, lives and wall along the field's top are the title line; the field's lit edge is
+    ' the look's mark
 
     fs = 0.98
     fw = Int(1120 * fs)
@@ -728,15 +725,20 @@ function TpChromeRgb(st as object, s as object, a as object) as object
     fx = (1280 - fw) \ 2
     fy = 96
 
-    s.DrawRect(Z(fx, k), Z(fy, k), Z(fw, k), Z(fh, k), c.well)
-    DrawRgbBrackets(s, Z(fx - 4, k), Z(fy - 4, k), Z(fw + 8, k), Z(fh + 8, k), Z(2, k), Z(20, k), c.green)
+    ' the field's size on screen, worked out the way the game works it out (TpDrawField), so the
+    ' lit edge hugs it at every screen size
+    fieldW = Int(1120 * fs * k + 0.5)
+    fieldH = Int(548 * fs * k + 0.5)
+    s.DrawRect(Z(fx, k), Z(fy, k), fieldW, fieldH, c.well)
+    DrawRgbEdge(st, s, Z(fx, k), Z(fy, k), fieldW, fieldH)
 
     slots = {}
     slots.score = { x: fx + 16, y: fy - 40, align: "l", font: f.value, color: c.white, bg: c.bg, prefix: "SCORE " }
     slots.lives = { x: fx + 360, y: fy - 40, align: "l", font: f.value, color: c.green, bg: c.bg, prefix: "LIVES " }
     slots.wall = { x: fx + fw \ 2, y: fy - 40, align: "c", font: f.value, color: c.accent, bg: c.bg, prefix: "WALL " }
-    slots.best = { x: fx + fw - 16, y: fy + 10, align: "r", font: f.small, color: c.dim, bg: c.bg, prefix: "BEST " }
-    slots.effects = { x: fx + 16, y: fy + 10, align: "l", font: f.small, color: c.accent, bg: c.bg, prefix: "" }
+    ' these two sit inside the field, so their pictures are filled with the field's colour
+    slots.best = { x: fx + fw - 16, y: fy + 10, align: "r", font: f.small, color: c.dim, bg: c.well, prefix: "BEST " }
+    slots.effects = { x: fx + 16, y: fy + 10, align: "l", font: f.small, color: c.accent, bg: c.well, prefix: "" }
 
     s.DrawRect(left, Z(646, k), right - left, Z(2, k), c.rule)
     by = Z(650, k) + (Z(698, k) - Z(650, k) - f.bar.GetOneLineHeight()) \ 2
@@ -752,7 +754,7 @@ function TpChromeVcr(st as object, s as object, a as object) as object
     sh = Z(3, k)
     s.Clear(c.bg)
     DrawVcrTitle(st, "TEST PATTERN")
-    DrawVcrChannel(st, GameChannels()[1], Z(26, k))
+    DrawVcrChannel(st, GameChannel("game.test"), Z(26, k))
     slots = {}
     slots.score = { x: 420, y: 40, align: "l", font: f.value, color: c.white, bg: c.bg, prefix: "SCORE " }
     slots.lives = { x: 420, y: 80, align: "l", font: f.value, color: c.white, bg: c.bg, prefix: "LIVES " }

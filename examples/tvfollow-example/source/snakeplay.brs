@@ -81,10 +81,12 @@ end sub
 
 ' --- Time and Loop ---
 
+' How long Main's loop waits: what's left of a frame while a run is on screen, else a second
+' (less in the RGB look, whose light flows: RgbMenuWaitMs).
 function SnakeWaitMs(st as object) as integer
     sn = st.snake
     if sn = invalid then return 1000
-    if sn.view <> "play" and sn.view <> "signal" then return 1000
+    if sn.view <> "play" and sn.view <> "signal" then return RgbMenuWaitMs(st, 1000)
     left = 16 - (sn.clock.TotalMilliseconds() - sn.lastMs)
     if left < 1 then return 1
     return left
@@ -104,7 +106,10 @@ sub SnakeTurn(st as object)
         if SaverChores(st) then return
         if not SnakeBusy(st) then Redraw(st)
     end if
-    if not SnakeBusy(st) then return
+    if not SnakeBusy(st) then
+        RgbMenuTurn(st)
+        return
+    end if
 
     now = sn.clock.TotalMilliseconds()
     ms = now - sn.lastMs

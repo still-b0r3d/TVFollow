@@ -6,8 +6,13 @@
 ' Kept on the TV (registry): sp.mode, sp.level and sp.rows (the menu's picks), sp.initials
 ' (the last initials typed) and sp.best.<mode> (each mode's top 10).
 
-' The games' channels, at their own numbers (the apps' numbers skip 20, 21, 22, 23, 24).
+' The games' channels and b0r3d's other own channels, at their own numbers, lowest first (the
+' apps' numbers skip 3, 9, 20, 21, 22, 23 and 24).
 function GameChannels() as object
+    vcr = MakeChannel("video.vcr", "VCR", "VCR", "The VCR on channel 3, made by b0r3d", "vcr")
+    vcr.n = "03"
+    cam = MakeChannel("cam.rukus", "Rukus Cam", "RUKUS", "Rukus's room, live, made by b0r3d", "cam")
+    cam.n = "09"
     stuck = MakeChannel("game.stuck", "Stuck Pixels", "STUCK", "Falling blocks, made by b0r3d", "game")
     stuck.n = "20"
     test = MakeChannel("game.test", "Test Pattern", "TEST", "Brick breaker, made by b0r3d", "game")
@@ -18,11 +23,19 @@ function GameChannels() as object
     snake.n = "23"
     promo = MakeChannel("promo.breaks", "Commercial Breaks", "COMM", "Late-night station promos, made by b0r3d", "promo")
     promo.n = "24"
-    return [stuck, test, fm, snake, promo]
+    return [vcr, cam, stuck, test, fm, snake, promo]
+end function
+
+' One of them by its id, so nothing depends on their order in the list.
+function GameChannel(id as string) as dynamic
+    games = GameChannels()
+    i = IndexOfId(games, id)
+    if i < 0 then return invalid
+    return games[i]
 end function
 
 function IsGameNumber(n as integer) as boolean
-    return n = 20 or n = 21 or n = 22 or n = 23 or n = 24
+    return n = 3 or n = 9 or n = 20 or n = 21 or n = 22 or n = 23 or n = 24
 end function
 
 ' What OK does on a channel, for the guides' hints: "OK opens YouTube", "OK starts Stuck Pixels".
@@ -30,11 +43,15 @@ function OkWord(ch as object) as string
     if ch.kind = "game" then return "OK starts " + ch.name
     if ch.kind = "radio" then return "OK tunes to " + ch.name
     if ch.kind = "promo" then return "OK watches " + ch.name
+    if ch.kind = "vcr" then return "OK turns on the " + ch.name
+    if ch.kind = "cam" then return "OK checks on Rukus"
     return "OK opens " + ch.name
 end function
 
 ' OK on a game or special channel, after tuning in.
 sub OpenGame(st as object, id as string)
+    if id = "video.vcr" then OpenDeck(st)
+    if id = "cam.rukus" then OpenCam(st)
     if id = "game.stuck" then OpenStuckPixels(st)
     if id = "game.test" then OpenTestPattern(st)
     if id = "game.snake" then OpenSnake(st)
@@ -122,11 +139,11 @@ end sub
 ' --- Time ---
 
 ' How long Main's loop waits: what's left of a frame (about 60 a second) while a run is on
-' screen, else a second.
+' screen, else a second (less in the RGB look, whose light flows: RgbMenuWaitMs).
 function StuckWaitMs(st as object) as integer
     sp = st.sp
     if sp = invalid then return 1000
-    if sp.view <> "play" and sp.view <> "signal" then return 1000
+    if sp.view <> "play" and sp.view <> "signal" then return RgbMenuWaitMs(st, 1000)
     left = 16 - (sp.clock.TotalMilliseconds() - sp.lastMs)
     if left < 1 then return 1
     return left
@@ -150,7 +167,10 @@ sub StuckTurn(st as object)
         if SaverChores(st) then return
         if not StuckBusy(st) then Redraw(st)
     end if
-    if not StuckBusy(st) then return
+    if not StuckBusy(st) then
+        RgbMenuTurn(st)
+        return
+    end if
     ' the run's own clock: each frame takes what's passed since the last one, so no fraction
     ' of a millisecond goes missing (a frame of a slow moment counts as 50 ms at most)
     now = sp.clock.TotalMilliseconds()

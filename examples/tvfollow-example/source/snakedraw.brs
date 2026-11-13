@@ -62,13 +62,13 @@ function SnakeKit(st as object) as object
             field: c.well,
             grid: c.rule,
             snake: c.green,
-            head: &hA6FFCEFF,
-            food: &hFF3B5CFF,
-            border: c.dim,
+            head: RgbLift(c.green, 0.55),
+            food: c.red,
+            border: c.frame,
             bannerBg: c.card,
             bannerFg: c.accent,
             noise: c.noise,
-            label: c.green,
+            label: c.soft,
             value: c.white,
             flash: c.white
         }
@@ -124,12 +124,12 @@ function SnakeFonts(st as object) as object
     end if
     if st.look = "rgb" then
         return {
-            title: Silk(st, Z(30, k), true),
-            label: Silk(st, Z(16, k), true),
-            value: Silk(st, Z(30, k), true),
-            bar: Silk(st, Z(16, k), false),
-            banner: Silk(st, Z(40, k), true),
-            box: Silk(st, Z(16, k), false)
+            title: Barlow(st, "extrabold", Z(32, k)),
+            label: Barlow(st, "semibold", Z(18, k)),
+            value: Barlow(st, "bold", Z(32, k)),
+            bar: Barlow(st, "semibold", Z(18, k)),
+            banner: Barlow(st, "extrabold", Z(44, k)),
+            box: Barlow(st, "semibold", Z(18, k))
         }
     end if
     return {
@@ -265,9 +265,8 @@ function SnakeChromeFor(st as object, s as object, a as object) as object
     s.Clear(c.bg)
     ' the title
     if st.look = "rgb" then
-        s.DrawRect(Z(60, k), Z(30, k), st.w - Z(120, k), Z(2, k), c.rule)
-        DrawRgbTriad(s, Z(60, k), Z(40, k), Z(36, k), Z(14, k), c)
-        GText(st, s, "SNAKE // CHANNEL 23", Z(110, k), Z(36, k), f.title, c.green, true)
+        DrawRgbLedBar(st, s, Z(60, k), Z(38, k), f.title.GetOneLineHeight() - Z(6, k))
+        GText(st, s, "SNAKE  ·  CHANNEL 23", Z(82, k), Z(34, k), f.title, c.white, true)
     else if st.look = "phosphor" then
         GText(st, s, "[ 23  SNAKE ]", Z(60, k), Z(36, k), f.title, c.full, true)
     else if st.look = "vcr" then
@@ -277,9 +276,13 @@ function SnakeChromeFor(st as object, s as object, a as object) as object
         GText(st, s, "CH 23", Z(200, k), Z(44, k), f.label, c.soft, false)
     end if
 
-    ' the arena's frame
+    ' the arena's frame (lit on the RGB look)
     borderW = Z(3, k)
-    s.DrawRect(ax - borderW, ay - borderW, aw + 2 * borderW, ah + 2 * borderW, kit.border)
+    if st.look = "rgb" then
+        DrawRgbEdge(st, s, ax, ay, aw, ah)
+    else
+        s.DrawRect(ax - borderW, ay - borderW, aw + 2 * borderW, ah + 2 * borderW, kit.border)
+    end if
 
     ' left: the score and the best
     lx = Z(60, k)
@@ -553,6 +556,8 @@ sub DrawSnakePreview(st as object, x as integer, y as integer, w as integer, h a
     if st.look = "vcr" then frameColor = st.kit.white
     if st.look = "phosphor" then frameColor = st.kit.full
     if st.look = "b95" then frameColor = &h808080FF
+    ' the RGB look's border is near-black, made for its lit edge; the preview box has no light
+    if st.look = "rgb" then frameColor = st.kit.rule
 
     inset = Z(2, k)
     s.DrawRect(ox - inset - Z(1, k), oy - inset - Z(1, k), ww + 2 * inset + Z(2, k), wh + 2 * inset + Z(2, k), frameColor)

@@ -55,10 +55,10 @@ function MakeChannel(id as string, name as string, sign as string, now as string
 end function
 
 ' Puts the channels in the saved order (new inputs go in front, new apps at the end), marks
-' which are shown, and numbers the shown ones 01, 02..., skipping the games' numbers; each game
-' then sits at its own number (20 for Stuck Pixels). The games aren't in the channel list
-' (st.all), so they can't be hidden or moved. The highlight stays on the same channel where it
-' can.
+' which are shown, and numbers the shown ones 01, 02, 04..., skipping the numbers of b0r3d's own
+' channels (3, 9 and 20 to 24); each of those then sits at its own number (03 for the VCR, 09 for
+' Rukus Cam, 20 for Stuck Pixels). They aren't in the channel list (st.all), so they can't be
+' hidden or moved. The highlight stays on the same channel where it can.
 sub ApplyChannelPrefs(st as object)
     focusId = ""
     if st.DoesExist("channels") then

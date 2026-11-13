@@ -28,6 +28,8 @@ function ShowForChannel(ch as object, hour as integer, slotIndex as integer) as 
     if ch = invalid or ch.id = invalid then return ""
     slot = hour * 2 + slotIndex
     ' b0r3d's own channels
+    if ch.id = "video.vcr" then return "VCR: No Tape"
+    if ch.id = "cam.rukus" then return "Rukus Cam: Live from His Room"
     if ch.id = "game.stuck" then return PickShow(StuckShows(), slot)
     if ch.id = "game.test" then return PickShow(TestPatternShows(), slot)
     if ch.id = "game.snake" then return "Snake: Twenty by Twenty, Wraparound"

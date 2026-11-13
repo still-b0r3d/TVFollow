@@ -155,10 +155,10 @@ end sub
 ' The desktop behind every b0r3d 95 screen: one column of icons down the left (the TV's inputs,
 ' up to four, then b0r3d's own channels in their order, then Settings), the focused channel's
 ' label lit (or the open channel's, or Settings'), Rukus by the taskbar, and the taskbar itself.
-' The column has to end above Rukus: when it wouldn't, the icons move closer together, then
-' b0r3d FM and Commercial Breaks leave the desktop (they're in the guide), then inputs, from the
-' last. While a game is being played Rukus stays away: in a game he only comes on while it's
-' paused.
+' The column has to end above Rukus: when it wouldn't, the icons move closer together, then the
+' channels that aren't games leave the desktop (they're in the guide), from the last: Commercial
+' Breaks, b0r3d FM, Rukus Cam, the VCR; then inputs, from the last. While a game is being played Rukus
+' stays away: in a game he only comes on while it's paused.
 sub DrawB95Desktop(st as object, ch as dynamic, task as string)
     s = st.screen
     c = st.kit
@@ -217,6 +217,8 @@ function B95OpenId(st as object) as string
     if st.mode = "snake" then return "game.snake"
     if st.mode = "fm" then return "radio.fm"
     if st.mode = "promo" then return "promo.breaks"
+    if st.mode = "deck" then return "video.vcr"
+    if st.mode = "cam" then return "cam.rukus"
     return ""
 end function
 
@@ -566,8 +568,11 @@ sub DrawB95Banner(st as object, ch as object)
 end sub
 
 ' Which picture goes with a channel: a monitor for the PC's input, a TV for other inputs, a
-' stack of pixels for Stuck Pixels, colour bars for Test Pattern, a window for apps.
+' stack of pixels for Stuck Pixels, colour bars for Test Pattern, a VCR for the VCR, a camera
+' for Rukus Cam, a window for apps.
 function B95IconFor(st as object, ch as object) as string
+    if ch.id = "video.vcr" then return "vcr"
+    if ch.id = "cam.rukus" then return "cam"
     if ch.id = "game.test" then return "test"
     if ch.id = "game.snake" then return "snake"
     if ch.id = "radio.fm" then return "radio"
@@ -581,10 +586,38 @@ end function
 
 ' A small picture on a 28 x 26 grid, size pixels wide: "pc" (a monitor), "tv" (a TV with rabbit
 ' ears), "settings" (a panel of sliders), "stuck" (a stack of pixels with a stuck yellow one),
-' "test" (colour bars on a little stand) or "app" (a window with a play button).
+' "test" (colour bars on a little stand), "radio", "snake", "vcr" (a VCR with a tape slot and a
+' little display), "cam" (a camera on the wall, its red light on, Rukus's head under it) or "app"
+' (a window with a play button).
 sub DrawB95Icon(s as object, kind as string, x as integer, y as integer, size as integer, c as object)
     u = size / 28
-    if kind = "test" then
+    if kind = "cam" then
+        B95Grid(s, x, y, u, 1, 2, 3, 12, c.shadow)
+        B95Grid(s, x, y, u, 4, 7, 5, 2, c.black)
+        B95GridBox(s, x, y, u, 8, 3, 15, 9, c.face, c.black)
+        B95Grid(s, x, y, u, 9, 4, 13, 1, c.white)
+        B95GridBox(s, x, y, u, 22, 4, 5, 7, c.black, c.black)
+        B95Grid(s, x, y, u, 23, 6, 2, 2, &h3D7BFFFF)
+        B95Grid(s, x, y, u, 10, 8, 2, 2, &hFF3B30FF)
+        B95Grid(s, x, y, u, 14, 15, 2, 2, c.black)
+        B95Grid(s, x, y, u, 20, 15, 2, 2, c.black)
+        B95GridBox(s, x, y, u, 13, 17, 10, 7, &h9A9AA2FF, c.black)
+        B95Grid(s, x, y, u, 15, 19, 2, 2, &hC8E060FF)
+        B95Grid(s, x, y, u, 19, 19, 2, 2, &hC8E060FF)
+        B95Grid(s, x, y, u, 17, 21, 2, 1, &hE8B890FF)
+    else if kind = "vcr" then
+        B95GridBox(s, x, y, u, 1, 6, 26, 12, c.face, c.black)
+        B95Grid(s, x, y, u, 2, 7, 24, 1, c.white)
+        B95Grid(s, x, y, u, 2, 16, 24, 1, c.shadow)
+        B95Grid(s, x, y, u, 4, 9, 12, 3, c.black)
+        B95Grid(s, x, y, u, 5, 13, 3, 2, c.shadow)
+        B95Grid(s, x, y, u, 9, 13, 3, 2, c.shadow)
+        B95Grid(s, x, y, u, 13, 13, 3, 2, c.shadow)
+        B95Grid(s, x, y, u, 18, 9, 7, 5, c.black)
+        B95Grid(s, x, y, u, 19, 11, 5, 1.5, &h39FF88FF)
+        B95Grid(s, x, y, u, 3, 18, 3, 2, c.black)
+        B95Grid(s, x, y, u, 22, 18, 3, 2, c.black)
+    else if kind = "test" then
         B95Grid(s, x, y, u, 1, 1, 26, 15, c.black)
         bars = [&hC0C0C0FF, &hC0C000FF, &h00C0C0FF, &h00C000FF, &hC000C0FF, &hC00000FF]
         for i = 0 to 5

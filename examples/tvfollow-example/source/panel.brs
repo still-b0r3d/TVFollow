@@ -15,6 +15,7 @@ sub DrawPanel(st as object, spec as object)
     else if st.look = "vcr" then
         DrawVcrPanel(st, spec)
     else if st.look = "rgb" then
+        RgbRememberPanel(st, spec)
         DrawRgbPanel(st, spec)
     else
         DrawCablePanel(st, spec)
@@ -29,8 +30,9 @@ function ListTop(sel as integer, count as integer, visible as integer) as intege
     return first
 end function
 
-' A page of answers: each label with its value wrapped beside it, down to the bottom.
-sub DrawInfoRows(st as object, rows as object, x as integer, valueX as integer, right as integer, top as integer, bottom as integer, labelColor as dynamic, valueColor as dynamic, shadow as dynamic)
+' A page of answers: each label with its value wrapped beside it, down to the bottom. With
+' alignBaselines, each label sits on its value's first line (else it's centred on it).
+sub DrawInfoRows(st as object, rows as object, x as integer, valueX as integer, right as integer, top as integer, bottom as integer, labelColor as dynamic, valueColor as dynamic, shadow as dynamic, alignBaselines = false as boolean)
     s = st.screen
     f = st.fonts
     k = st.k
@@ -38,6 +40,7 @@ sub DrawInfoRows(st as object, rows as object, x as integer, valueX as integer, 
     if shadow <> invalid then sh = Z(2, k)
     stepY = f.pageInfo.GetOneLineHeight() + Z(5, k)
     drop = (stepY - f.pageLabel.GetOneLineHeight()) \ 2
+    if alignBaselines then drop = f.pageInfo.GetAscent() - f.pageLabel.GetAscent()
     valueW = right - valueX
     y = top
     for each line in rows

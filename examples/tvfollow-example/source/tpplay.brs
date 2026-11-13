@@ -87,11 +87,11 @@ end sub
 ' --- Time ---
 
 ' How long Main's loop waits: what's left of a frame (about 60 a second) while a run is on
-' screen, else a second.
+' screen, else a second (less in the RGB look, whose light flows: RgbMenuWaitMs).
 function TpWaitMs(st as object) as integer
     tp = st.tp
     if tp = invalid then return 1000
-    if not TpBusy(st) then return 1000
+    if not TpBusy(st) then return RgbMenuWaitMs(st, 1000)
     left = 16 - (tp.clock.TotalMilliseconds() - tp.lastMs)
     if left < 1 then return 1
     return left
@@ -115,7 +115,10 @@ sub TpTurn(st as object)
         if SaverChores(st) then return
         if not TpBusy(st) then Redraw(st)
     end if
-    if not TpBusy(st) then return
+    if not TpBusy(st) then
+        RgbMenuTurn(st)
+        return
+    end if
     ' the run's own clock: each frame takes what's passed since the last one (50 ms at most)
     now = tp.clock.TotalMilliseconds()
     ms = now - tp.lastMs

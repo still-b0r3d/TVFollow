@@ -82,7 +82,8 @@ function SaverFonts(st as object) as object
     k = st.k
     if st.look = "b95" then return { time: W95(st, Z(72, k)), date: W95(st, Z(26, k)) }
     if st.look = "phosphor" then return { time: Vt323(st, Z(112, k)), date: Vt323(st, Z(36, k)) }
-    if st.look = "vcr" or st.look = "rgb" then return { time: Silk(st, Z(64, k), true), date: Silk(st, Z(24, k), false) }
+    if st.look = "vcr" then return { time: Silk(st, Z(64, k), true), date: Silk(st, Z(24, k), false) }
+    if st.look = "rgb" then return { time: Barlow(st, "semibold", Z(96, k)), date: Barlow(st, "semibold", Z(26, k)) }
     return { time: Vt323(st, Z(104, k)), date: Barlow(st, "semibold", Z(28, k)) }
 end function
 
@@ -617,14 +618,18 @@ end sub
 ' How long Main's loop waits for a key: what's left of a frame (about 30 a second) while Rukus
 ' is on, the open game's or channel's own frames, the demo's next step while the guide's
 ' preview plays one, else a second. The RGB look's lights move, so its guide and pages are drawn
-' again up to 20 times a second, but, as with the demos, never more than half the time goes to
-' drawing (RgbWaitMs). Never 0, which would mean "wait for ever".
+' again up to 10 times a second, but, as with the demos, never more than half the time goes to
+' drawing (RgbWaitMs). While the TV's own screensaver may have blanked the screen, neither a
+' demo nor the light is drawn more than once a second (it would only be drawn onto black).
+' Never 0, which would mean "wait for ever".
 function LoopWaitMs(st as object) as integer
     if st.mode = "stuck" then return StuckWaitMs(st)
     if st.mode = "testpat" then return TpWaitMs(st)
     if st.mode = "snake" then return SnakeWaitMs(st)
     if st.mode = "fm" then return 33
     if st.mode = "promo" then return PromoWaitMs(st)
+    if st.mode = "deck" then return DeckWaitMs(st)
+    if st.mode = "cam" then return CamWaitMs(st)
     if st.mode = "hijack" then return HijackWaitMs(st)
     if st.mode = "saver" and st.saver <> invalid then
         left = 33 - st.saver.frame.TotalMilliseconds()
@@ -633,6 +638,7 @@ function LoopWaitMs(st as object) as integer
         return left
     end if
     ms = 1000
+    if TvMayBeBlank(st, 0) then return ms
     if GuideShowsGame(st) then ms = DemoWaitMs(st)
     if st.look = "rgb" and st.mode <> "saver" and st.mode <> "aside" then
         led = RgbWaitMs(st)
@@ -641,10 +647,10 @@ function LoopWaitMs(st as object) as integer
     return ms
 end function
 
-' The RGB look's wait between drawings: 50 ms, or twice as long as the last one took to draw
+' The RGB look's wait between drawings: 100 ms, or twice as long as the last one took to draw
 ' (Tick measures it), up to a second.
 function RgbWaitMs(st as object) as integer
-    ms = 50
+    ms = 100
     if st.tickMs <> invalid then
         if 2 * st.tickMs > ms then ms = 2 * st.tickMs
     end if
@@ -700,7 +706,8 @@ function SaverChores(st as object) as boolean
     return true
 end function
 
-' The chores for a channel that plays on its own (a radio station, the ads), about once a second.
+' The chores for a channel that plays on its own (a radio station, the ads, a tape in the VCR,
+' Rukus Cam), about once a second.
 ' While it plays, Rukus doesn't come on over it, but the TV is kept awake as SaverChores does
 ' for the "keep" pick (without that, the TV turns the screen black at its screensaver time, as
 ' over any 2D app, even mid-song). Paused, it's like a paused game: the usual chores, Rukus
@@ -901,6 +908,8 @@ sub ScreensaverEvent(st as object, info as dynamic)
         ' as a key: the signal ends, and from Rukus so does he
         StopHijack(st, true)
     else
+        ' Rukus Cam goes straight back to its full frames
+        if st.mode = "cam" and st.cam <> invalid then st.cam.blank = false
         Redraw(st)
     end if
 end sub

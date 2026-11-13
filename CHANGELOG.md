@@ -20,12 +20,13 @@ A new Settings window, and developer tools for putting your own Roku apps on the
 - **Push a .zip…**, **Push a folder…** (TVFollow zips it, leaving out `.git`, `Thumbs.db`
   and editors' temporary files) and **Push the example app**. An app one folder down is
   found. When the TV refuses an app, its own words say why.
-- The example app is b0r3d TV 0.71 (Build: 1e8f154), b0r3d's channel guide for Roku TVs
-  that looks like an old cable box, with three games, a radio station and late-night
-  commercials. With **Let the app switch the TV's inputs** ticked, the TV's inputs are
-  channels in its guide. Its source is in `examples/tvfollow-example`, under its own
-  license. Once it's on the TV, it uses b0r3d's online high-score boards and streams
-  b0r3d FM; the README's Privacy section says what goes where.
+- The example app is b0r3d TV 0.71 (Build: 87e560a), b0r3d's channel guide for Roku TVs
+  that looks like an old cable box, with a VCR, a camera on Rukus's room, three games, a
+  radio station and late-night commercials. With **Let the app switch the TV's inputs**
+  ticked, the TV's inputs are channels in its guide. Its source is in
+  `examples/tvfollow-example`, under its own license. Once it's on the TV, it uses b0r3d's
+  online high-score boards and streams b0r3d FM, and its VCR plays videos sent to it; the
+  README's Privacy section says what goes where.
 - **Open on the TV**, **Remove**, **Screenshot…** (saves a picture of the app's screen)
   and **App log…** (the app's console: what it prints, and where it stopped if it
   crashed). Whatever TVFollow reads of the app log also goes into
