@@ -72,9 +72,14 @@ another router; a TV button you press yourself can (see the router note below).
 If the TV doesn't answer when it's time to turn it on, TVFollow sends a
 **Wake-on-LAN packet** for the TV's network card (Wi-Fi or cable, whichever the TV uses;
 TVFollow notices if that changes) to the broadcast address of each network the PC is on,
-again every 3 seconds, and gives the TV 20 seconds to wake up. If the PC isn't on the
-TV's network, it sends no wake packet: on its own it only asks the TV's last address
-whether it's there.
+again every 3 seconds, and gives the TV 20 seconds to wake up. That packet turns many TVs
+all the way on, so the TV may say it's on by the time it answers, a few seconds later. It
+was off a moment ago, so TVFollow still switches it to your PC, from Roku's home screen or
+from another input. A TV that wasn't off is left alone as always: one with an app on its
+screen (a TV doesn't start in an app), and one that answers within a second of the packet
+(no TV wakes that fast, so something else kept it from answering, like the PC's own
+network coming back after sleep). If the PC isn't on the TV's network, it sends no wake
+packet: on its own it only asks the TV's last address whether it's there.
 
 "The TV's network" means the network behind your home router, not just the same kind of
 addresses: a laptop that joins a hotel or office network which also uses `192.168.1.x` finds
@@ -152,9 +157,15 @@ nothing below runs while it isn't.
   skipped. If developer mode went off, or the copy couldn't go back (a new password, say),
   a notification says so, once each time. **Remove** deletes the copy.
 - **Pushing on save** watches the folder pushed last, sub-folders too, and pushes 1.5
-  seconds after the last change. Changes to skipped files (`.git`, editors' temporary
-  files) don't count, and a zip that's the same as the one the TV took last isn't sent.
-  Only folders on this PC's own drives are watched, not network paths (`\\server\...`).
+  seconds after the last change, but only while this PC is on the TV's network. Changes to
+  skipped files (`.git`, editors' temporary files) don't count, and a zip that's the same
+  as the one the TV took last isn't sent. When the TV can't take the app (it's off,
+  developer mode is off, the password is wrong), a notification says so once, not again at
+  every save until that's over. What the TV says about the app itself (code that doesn't
+  compile, say) comes at every save. Only a folder on a drive letter (`C:\apps\mine`) is
+  watched. A network path (`\\server\...`, or the same with forward slashes) isn't, and
+  TVFollow doesn't ask Windows about one, since that alone would connect to the other
+  computer. A network drive with a letter of its own counts as a drive.
 - **The app log** is the TV's app console on port 8085, plain text over TCP (telnet
   commands are dropped, and keep-alive notices a TV that went away). It needs no password,
   and the window reconnects while it's open. It shows what the app prints while the window

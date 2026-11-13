@@ -22,6 +22,7 @@ namespace TVFollow.Tests
         public bool IsTv = true;
         public string[] InputNames = { "HDMI 1", "HDMI 2", "HDMI 3" };
         public bool Down;                         // stop answering, like a TV in deep standby
+        public int ComesUpAfter;                  // woken by a wake packet: that many more requests go unanswered, then it's back, switched on (a real TV takes seconds)
         public bool DownWhenOff;                  // go into deep standby as soon as it's turned off
         public int DelayMs;                       // wait this long before answering anything
         public int TrickleMs;                     // send the headers, then wait this long before the body
@@ -113,7 +114,18 @@ namespace TVFollow.Tests
             if (requestLine == null) return;
             string header;
             while (!string.IsNullOrEmpty(header = reader.ReadLine())) { }
-            if (Down) return; // hang up without answering
+            if (Down)
+            {
+                lock (this)
+                {
+                    if (ComesUpAfter > 0 && --ComesUpAfter == 0)
+                    {
+                        PowerMode = "PowerOn";
+                        Down = false;
+                    }
+                }
+                return; // hang up without answering
+            }
             if (DelayMs > 0) Thread.Sleep(DelayMs);
 
             string[] parts = requestLine.Split(' ');

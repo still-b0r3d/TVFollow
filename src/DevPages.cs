@@ -406,7 +406,8 @@ namespace TVFollow
         {
             using (var dialog = new FolderBrowserDialog { Description = "Pick your app's folder: the one with the manifest file in it.", ShowNewFolderButton = false })
             {
-                if (tv.Tv.DevFolder.Length > 0 && Directory.Exists(tv.Tv.DevFolder)) dialog.SelectedPath = tv.Tv.DevFolder;
+                // (a folder on the network isn't looked for: see DevTv.OnADrive)
+                if (DevTv.OnADrive(tv.Tv.DevFolder) && Directory.Exists(tv.Tv.DevFolder)) dialog.SelectedPath = tv.Tv.DevFolder;
                 if (dialog.ShowDialog(owner) != DialogResult.OK) return;
                 string path = dialog.SelectedPath;
                 PushApp(() => DevPackage.FromFolder(path), null);

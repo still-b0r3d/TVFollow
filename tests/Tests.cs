@@ -18,7 +18,12 @@ namespace TVFollow.Tests
             if (args.Length == 2 && args[0] == "--shots") return Shots.Run(args[1], false);
             if (args.Length == 2 && args[0] == "--screenshots") return Shots.Run(args[1], true);
             if (args.Length == 1 && args[0] == "--probe") return Shots.Probe();
+            // the tests' windows open on a desktop of their own, out of the way of whoever is at the PC
+            return OwnDesktop.Run(RunAll);
+        }
 
+        static int RunAll()
+        {
             // an exception inside a window's message handler never reaches Run on its own: WinForms
             // catches it and shows its error dialog (or, with nobody there, drops it). Caught here, it
             // fails the test that was running instead, and no dialog stops the run.
@@ -40,6 +45,8 @@ namespace TVFollow.Tests
             Run("TV on button: only powers on", PowerOnlyDoesNotSwitch);
             Run("Limited setting: gives up cleanly and logs 403", LimitedIsLogged);
             Run("deep standby: sends a wake packet", WakesDeepStandby);
+            Run("deep standby: a TV woken onto the home screen or another input goes to the PC", WokenTvGoesToPc);
+            Run("deep standby: a TV that wasn't off (an app on, or it answers right away) is left alone", SlowToAnswerLeftAlone);
             Run("moved TV: found again by serial and saved", FindsMovedTv);
             Run("rules: monitors on with fresh input", RulesFreshInput);
             Run("rules: monitors on with nobody there waits for input", RulesWaitForInput);
@@ -63,14 +70,28 @@ namespace TVFollow.Tests
             Run("version matches the exe's version", VersionMatches);
             Run("the version line fits beside the buttons", VersionLineFits);
 
+            stuck.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
             try { Directory.Delete(home, true); } catch { }
             Console.WriteLine();
             Console.WriteLine(passed + " passed, " + failed + " failed");
             return failed == 0 ? 0 : 1;
         }
 
+        // A test that never ends stops the run, which says which test it was: a dialog waiting
+        // for a click would wait for good on the tests' own desktop, where nobody can see it.
+        const int StuckMinutes = 3;
+        static string running = "";
+        static readonly System.Threading.Timer stuck = new System.Threading.Timer(delegate
+        {
+            Console.WriteLine("STUCK " + running + ": still going after " + StuckMinutes + " minutes, so the run stops here. " +
+                "A dialog may be waiting for a click where nobody can see it.");
+            Environment.Exit(3);
+        });
+
         static void Run(string name, Action test)
         {
+            running = name;
+            stuck.Change(StuckMinutes * 60000, System.Threading.Timeout.Infinite);
             try
             {
                 if (File.Exists(Log.FilePath)) File.Delete(Log.FilePath);
@@ -108,6 +129,7 @@ namespace TVFollow.Tests
             c.PollMs = 20;
             c.ReachMs = 200;
             c.WakeReachMs = 400;
+            c.AwakeMs = 100;
             c.SweepWaitMs = 100;
             c.SendWake = mac => { throw new Exception("unexpected wake packet"); };
             c.Candidates = () => new List<string>();
@@ -314,11 +336,82 @@ namespace TVFollow.Tests
                 tv.PowerMode = "DisplayOff";
                 var woken = new List<string>();
                 Controller c = Fast(FirstTv(SettingsFor(tv)));
-                c.SendWake = mac => { woken.Add(mac); tv.Down = false; tv.PowerMode = "PowerOn"; return 2; };
+                c.SendWake = mac => { woken.Add(mac); tv.ComesUpAfter = 2; return 2; };
                 c.TurnOn(TurnOnMode.Follow);
                 Check(woken.Count == 1 && woken[0] == "00:11:22:33:44:55", "expected one wake packet to the TV's address");
                 Check(tv.IsOn && tv.App == "tvinput.hdmi1", "TV should be on and showing the PC");
                 Check(LogText().Contains("TV woke up"), "wake-up not logged");
+            }
+        }
+
+        // The wake packet turns a TV in deep standby all the way on, so its first answer says
+        // it's on already, showing Roku's home screen (as older and newer TVs report it) or the
+        // input it starts on. It was off a moment ago: it goes to the PC, like a TV that
+        // answered while it was off.
+        static void WokenTvGoesToPc()
+        {
+            foreach (string lands in new[] { "the home screen", "the newer home screen", "tvinput.hdmi2" })
+            {
+                if (File.Exists(Log.FilePath)) File.Delete(Log.FilePath);
+                using (var tv = new FakeTv("127.0.0.1", 0))
+                {
+                    tv.Down = true;
+                    tv.PowerMode = "DisplayOff";
+                    tv.ModernHome = lands == "the newer home screen";
+                    tv.App = lands.StartsWith("tvinput.") ? lands : "";
+                    Controller c = Fast(FirstTv(SettingsFor(tv)));
+                    c.SendWake = mac => { tv.ComesUpAfter = 2; return 2; };
+                    c.TurnOn(TurnOnMode.Follow);
+                    string log = LogText().Replace("\r\n", " / ");
+                    Check(tv.IsOn && tv.App == "tvinput.hdmi1", "woken onto " + lands + ", the TV ended up showing " +
+                        (tv.App.Length > 0 ? tv.App : "the home screen") + ". The log: " + log);
+                    Check(tv.Count("POST /keypress/PowerOn") == 0, "woken onto " + lands + ": a power press for a TV that's on already");
+                    Check(log.Contains("TV woke up (PowerOn)") && log.Contains("on: showing the PC") && !log.Contains("leaving it alone"),
+                        "woken onto " + lands + ", the log: " + log);
+                }
+            }
+        }
+
+        // Not every TV that didn't answer was off. One that took as long as a woken TV but has an
+        // app on screen wasn't: a TV doesn't start in an app, so someone's watching it. And one
+        // that answers the moment the wake packet goes out didn't need waking: a TV in deep
+        // standby takes seconds, so this one was on all along, and what kept it from answering
+        // (this PC's own network coming back after sleep, say) is over. Both are left alone.
+        static void SlowToAnswerLeftAlone()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                tv.Down = true;
+                tv.App = "12";
+                Controller c = Fast(FirstTv(SettingsFor(tv)));
+                c.SendWake = mac => { tv.ComesUpAfter = 2; return 2; };
+                c.TurnOn(TurnOnMode.Follow);
+                Check(tv.App == "12" && tv.Presses == 0, "a TV showing an app was switched: it shows " + tv.App + " after " + tv.Presses + " presses");
+                Check(LogText().Contains("TV woke up (PowerOn)") && LogText().Contains("TV is on and showing 12, leaving it alone"), "the log: " + LogText());
+            }
+            foreach (string showing in new[] { "", "tvinput.hdmi2" })
+            {
+                if (File.Exists(Log.FilePath)) File.Delete(Log.FilePath);
+                using (var tv = new FakeTv("127.0.0.1", 0))
+                {
+                    tv.Down = true;
+                    tv.App = showing;
+                    Controller c = Fast(FirstTv(SettingsFor(tv)));
+                    c.AwakeMs = 5000;   // however slow the PC running the tests: this TV answers its first look
+                    c.SendWake = mac => { tv.Down = false; return 2; };
+                    c.TurnOn(TurnOnMode.Follow);
+                    Check(tv.App == showing && tv.Presses == 0, "a TV that answered right away was switched from " + (showing.Length > 0 ? showing : "its home screen") +
+                        ". The log: " + LogText().Replace("\r\n", " / "));
+                    Check(LogText().Contains("TV answered right away (PowerOn), so it didn't need waking") && LogText().Contains("leaving it alone") &&
+                        !LogText().Contains("TV woke up"), "the log: " + LogText());
+                }
+            }
+            // and a TV on its home screen that never stopped answering: left alone, as ever
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            {
+                tv.App = "";
+                Fast(FirstTv(SettingsFor(tv))).TurnOn(TurnOnMode.Follow);
+                Check(tv.App == "" && tv.Presses == 0, "a TV that was on, showing its home screen, was switched");
             }
         }
 

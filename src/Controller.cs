@@ -37,6 +37,7 @@ namespace TVFollow
         public int ReachMs = 8000;        // after sleep the PC's own network takes a few seconds
         public int WakeReachMs = 20000;   // a TV woken from deep standby takes a while to answer
         public int WakeRepeatMs = 3000;   // the wake packet is sent again this often while waiting
+        public int AwakeMs = 800;         // a TV that answers this soon after the wake packet was awake already
         public int SweepWaitMs = 2000;
         public TimeSpan SearchEvery = TimeSpan.FromMinutes(10);
         public int PressSearchMs = 20000;  // how long a pressed button may search behind a router TVFollow doesn't know
@@ -145,9 +146,10 @@ namespace TVFollow
             string tag = mode == TurnOnMode.Follow ? "on" : mode == TurnOnMode.ToPc ? "pc" : "on (button)";
             TvState s = WaitReachable(ReachMs);
             bool pressed = false;  // a pressed button's search behind a router TVFollow doesn't know
+            bool woken = false;    // the wake packet brought the TV up
             if (!s.Reachable)
             {
-                if (OnTvNetwork()) s = WakeUp(tag);
+                if (OnTvNetwork()) s = WakeUp(tag, out woken);
                 else if (mode != TurnOnMode.Follow && SameNumbers()) { LookingBehindOtherRouter(tag); pressed = true; }
                 else
                 {
@@ -159,11 +161,18 @@ namespace TVFollow
             if (!s.Reachable && Rediscover(pressed)) s = Query();
             if (!s.Reachable) { Say(tag + ": TV not found"); return; }
 
+            // The wake packet turns a TV in deep standby all the way on, so by the time it answers
+            // it says it's on, showing Roku's home screen or the input it starts on. Nobody is
+            // watching that: the TV was off a moment ago, and it goes on to the PC like any TV
+            // that was off. An app on screen is something else: a TV doesn't start in one, so
+            // this one was on all along and only slow to answer, and it's left alone as ever.
+            bool cameOn = woken && s.IsOn && (s.App.Length == 0 || s.App.StartsWith("tvinput.", StringComparison.Ordinal));
+
             if (s.IsOn)
             {
                 if (mode == TurnOnMode.PowerOnly) { Say(tag + ": already on"); return; }
                 if (s.App == tv.PcApp) { Say(tag + ": already showing the PC"); return; }
-                if (mode == TurnOnMode.Follow) { Say(tag + ": TV is on and showing " + Describe(s.App) + ", leaving it alone"); return; }
+                if (mode == TurnOnMode.Follow && !cameOn) { Say(tag + ": TV is on and showing " + Describe(s.App) + ", leaving it alone"); return; }
             }
             else
             {
@@ -174,9 +183,9 @@ namespace TVFollow
 
             for (int i = 0; i < 8; i++)
             {
-                // a TV that was already on can take the input press at once; one just turned on
-                // needs a moment first
-                if (i > 0 || !s.IsOn) Thread.Sleep(i == 0 ? FirstCheckMs : RetryMs);
+                // a TV that was already on can take the input press at once; one just turned on,
+                // or just woken, needs a moment first
+                if (i > 0 || !s.IsOn || cameOn) Thread.Sleep(i == 0 ? FirstCheckMs : RetryMs);
                 TvState now = Query();
                 if (now.IsOn && now.App == tv.PcApp) { Say(tag + ": showing the PC"); return; }
                 if (!now.IsOn) continue;
@@ -199,22 +208,41 @@ namespace TVFollow
         }
 
         // The wake packet, sent again every few seconds while waiting for the TV to answer.
-        TvState WakeUp(string tag)
+        // woken: the packet is what brought the TV up. A TV in deep standby takes seconds to
+        // answer after it (3 to 5 on the Roku TV this was timed on). One that answers within a
+        // moment was awake all along: something else kept it from answering until now, like
+        // this PC's own network coming back after sleep.
+        TvState WakeUp(string tag, out bool woken)
         {
+            woken = false;
             int sent = SendWake(tv.WakeMac);
             Say(sent > 0
                 ? tag + ": TV not answering, sent a wake packet (" + sent + " addresses)"
                 : tag + ": TV not answering, and there was no network to send a wake packet on");
+            bool packet = sent > 0;   // a wake packet has gone out
             DateTime until = DateTime.UtcNow.AddMilliseconds(WakeReachMs);
             DateTime nextSend = DateTime.UtcNow.AddMilliseconds(WakeRepeatMs);
+            // a first look with a short deadline: no TV wakes that fast
+            TvState s = Query(AwakeMs);
+            if (s.Reachable)
+            {
+                RememberNetwork();
+                Say(tag + ": TV answered right away (" + s.PowerMode + "), so it didn't need waking");
+                return s;
+            }
             while (true)
             {
-                TvState s = Query();
-                if (s.Reachable) { Say(tag + ": TV woke up (" + s.PowerMode + ")"); return s; }
+                s = Query();
+                if (s.Reachable)
+                {
+                    woken = packet;
+                    Say(tag + ": TV woke up (" + s.PowerMode + ")");
+                    return s;
+                }
                 if (DateTime.UtcNow > until) return s;
                 if (DateTime.UtcNow >= nextSend)
                 {
-                    SendWake(tv.WakeMac);
+                    if (SendWake(tv.WakeMac) > 0) packet = true;
                     nextSend = DateTime.UtcNow.AddMilliseconds(WakeRepeatMs);
                 }
                 Thread.Sleep(PollMs);

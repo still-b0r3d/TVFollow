@@ -360,12 +360,13 @@ You don't need anything installed. Windows already has the C# compiler TVFollow 
    you can read how it went.
 3. Open `bin\TVFollow.exe` and set it up as above.
 
-`build.cmd test` also runs the tests, against pretend TVs. Every release is built the
-same way on GitHub's own machines, which put the commit it was built from in as the
-build: `v1.3 · Build: abc1234` at the bottom of the Settings window. Your own build says
-`Build: dev` there. The SHA-256 checksum next to each download is for checking that
-download; your own build won't match it byte for byte, because the compiler stamps
-each build differently.
+`build.cmd test` also runs the tests, against pretend TVs. Their windows open on a Windows
+desktop of their own, so nothing shows up on yours or takes your keyboard meanwhile. Every
+release is built the same way on GitHub's own machines, which put the commit it was built
+from in as the build: `v1.3 · Build: abc1234` at the bottom of the Settings window. Your
+own build says `Build: dev` there. The SHA-256 checksum next to each download is for
+checking that download; your own build won't match it byte for byte, because the compiler
+stamps each build differently.
 
 ## License
 

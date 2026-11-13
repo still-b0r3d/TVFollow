@@ -144,25 +144,52 @@ namespace TVFollow
                 Console.WriteLine("TVFollow: switch on the developer tools in Settings first.");
                 return 2;
             }
-            if (args.Length < 2 || args[1].Trim().Length == 0)
+            string path, name;
+            PathAndRest(args, out path, out name);
+            if (path.Length == 0)
             {
                 Console.WriteLine(cmd == "push" ? "TVFollow: push what? TVFollow.exe push <app folder or .zip> [TV]"
                     : "TVFollow: save it where? TVFollow.exe screenshot <picture or folder> [TV]");
                 return 2;
             }
-            string name = args.Length > 2 ? string.Join(" ", args, 2, args.Length - 2) : null;
-            List<Controller> which = string.IsNullOrEmpty(name) ? new List<Controller> { tvs[0] } : Pick(tvs, name);
+            List<Controller> which = name.Length == 0 ? new List<Controller> { tvs[0] } : Pick(tvs, name);
             if (which == null || which.Count != 1)
             {
                 Console.WriteLine("TVFollow: no TV called " + name + ". Give a TV's number (1 to " + tvs.Count + ") or its name.");
                 return 2;
             }
+            string target;
+            try { target = Path.GetFullPath(path); }
+            catch (Exception e)
+            {
+                // a | or a < in it, say: Windows has no such file or folder
+                Console.WriteLine("TVFollow: " + path + " can't be a file or folder: " + e.Message);
+                return 2;
+            }
             using (DevTools tools = DevTools.ForCommandLine(settings, which))
             {
                 DevTv tv = tools.Tvs[0];
-                string target = Path.GetFullPath(args[1].Trim());
                 return cmd == "push" ? PushCommand(tv, target) : ScreenshotCommand(tv, target);
             }
+        }
+
+        // The path on a push or screenshot line, and what follows it (a TV's number or name).
+        // A folder in quotes with a backslash at its end, "C:\my app\", is how PowerShell's Tab
+        // key writes a folder. Windows takes that \" for a quote inside the text, so it reaches
+        // a program as C:\my app" with the rest of the line stuck on behind. No path has a
+        // quote in it, so the path ended there, with the backslash.
+        internal static void PathAndRest(string[] args, out string path, out string rest)
+        {
+            path = args.Length > 1 ? args[1] : "";
+            rest = args.Length > 2 ? string.Join(" ", args, 2, args.Length - 2) : "";
+            int quote = path.IndexOf('"');
+            if (quote >= 0)
+            {
+                rest = path.Substring(quote + 1) + " " + rest;
+                path = path.Substring(0, quote) + "\\";
+            }
+            path = path.Trim();
+            rest = rest.Trim();
         }
 
         static int PushCommand(DevTv tv, string path)

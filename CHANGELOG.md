@@ -46,12 +46,16 @@ A new Settings window, and developer tools for putting your own Roku apps on the
   a copy of the app pushed last and puts it back, if the TV lost it, just before it turns
   the TV off with your monitors. If developer mode itself went off, or the app couldn't
   go back, a notification says so, once each time.
-- **Push the app's folder again whenever a file in it is saved**, for making apps.
+- **Push the app's folder again whenever a file in it is saved**, for making apps. When
+  the TV can't take it (it's off, say), a notification says so once, not at every save.
 - **Let the app switch the TV's inputs** (off to start with): a Roku TV won't let an app
   switch its inputs, so the pushed app can ask TVFollow, which switches the TV while this
   PC is on. The README says how an app asks.
 - **Settings…** in the tray menu, double-clicking the icon and opening TVFollow again all
   bring a minimized Settings window back up. Before, it stayed down in the taskbar.
+- A TV woken from deep standby is switched to your PC even when it comes up on Roku's home
+  screen or on another input. Before, TVFollow took it for a TV that was on already and
+  left it there. A TV that was on all along, and only slow to answer, is still left alone.
 - The version and the build are shown apart: `TVFollow v1.3 · Build: abc1234` at the bottom
   of the setup and Settings windows (on two lines there now), in the log and in
   `TVFollow.exe --version`. The exe's **Product version** says `1.3 build abc1234`.

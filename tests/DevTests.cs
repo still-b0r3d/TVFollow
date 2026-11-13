@@ -29,17 +29,20 @@ namespace TVFollow.Tests
             Run("dev: screenshot, open and remove", DevScreenshotAndRemove);
             Run("dev: a vanished app goes back on before the TV turns off", DevPutBack);
             Run("dev: a saved file pushes the folder again, once", DevPushOnSave);
+            Run("dev: saves the TV can't take: its own trouble is told once, the app's each time", DevPushOnSaveTellsOnce);
+            Run("dev: only a folder on a drive letter is watched, never a network path", DevFolderOnADrive);
             Run("dev: the app log shows the TV's console", DevAppLog);
             Run("dev: the pushed app asks TVFollow to switch the TV's input", DevAppSwitchesInputs);
             Run("dev: nobody reads the app's console for asks unless switched on, and only on this TV", DevInputsOnlyWhenOn);
             Run("dev: the app opens when the TV goes to Roku's home screen, and Home twice stays home", DevHomeOpensApp);
             Run("dev: the home screen on the way to an input doesn't open the app", DevHomeLeavesInputSwitches);
+            Run("dev: a TV woken onto its home screen goes to the PC, and the app stays shut", DevHomeWokenTvGoesToPc);
             Run("dev: the app log is saved in a file while it's read", DevAppLogSaved);
             Run("dev: push and screenshot from the command line, with the saved password", DevCommandLine);
             Run("dev: the developer window shows the TV's state", DevWindow);
             Run("dev: Settings shows the developer tools only when switched on", DevSettingsSwitch);
             Run("dev: the tray menu has Developer tools… only when switched on, and it opens them", DevTrayItem);
-            Run("dev: removing TVFollow's settings takes the pushed apps' copies too", DevUninstallRemovesCopies);
+            Run("dev: removing TVFollow's settings takes the pushed apps' copies and the app logs too", DevUninstallRemovesCopies);
             DevClient.InstallerPort = 80;   // as it was, for whatever runs after
         }
 
@@ -676,6 +679,149 @@ namespace TVFollow.Tests
             }
         }
 
+        // Pushing on save while the TV can't take the app. The TV's own trouble (it's off, its
+        // developer mode is off) is told once, however many saves follow, and again when it turns
+        // into other trouble or comes back after a push that worked. Trouble with the app itself
+        // is told at every save. Away from the TV's network, nothing goes to its address at all.
+        static void DevPushOnSaveTellsOnce()
+        {
+            string app = TempFolder("Saved app");
+            int settleBefore = DevTv.SettleMs;
+            DevTv.SettleMs = 150;
+            DevTools tools = null;
+            try
+            {
+                WriteFile(app, "manifest", "title=Saved\nmajor_version=1\nminor_version=0\nbuild_version=1\n");
+                WriteFile(app, "source/main.brs", "sub Main()\nend sub\n");
+                using (var tv = new FakeTv("127.0.0.1", 0))
+                using (var installer = new FakeInstaller(tv, 0))
+                {
+                    tv.DeveloperEnabled = true;
+                    Settings s = DevSettings(tv, installer);
+                    Tv(s).DevFolder = app;
+                    Tv(s).DevOnSave = true;
+                    Controller c = Fast(FirstTv(s));
+                    tools = new DevTools(s, new List<Controller> { c });
+                    var notes = new List<string>();
+                    tools.Notify = (title, text) => { lock (notes) notes.Add(text); };
+                    int tries = 0;
+                    tools.Tvs[0].Background += r => Interlocked.Increment(ref tries);
+                    Check(tools.Tvs[0].Watching, "not watching the folder");
+                    Func<string[]> told = () => { lock (notes) return notes.ToArray(); };
+                    Func<string> all = () => told().Length + " told: " + string.Join(" | ", told());
+                    int saves = 0;
+                    // a save, and the push it leads to done, one way or the other (and a moment
+                    // more: Windows can tell of one save twice)
+                    Action save = () =>
+                    {
+                        int before = tries;
+                        WriteFile(app, "source/main.brs", "sub Main()\n    print " + (++saves) + "\nend sub\n");
+                        WaitFor(() => tries > before, 15, "save " + saves + " wasn't tried");
+                        Thread.Sleep(DevTv.SettleMs * 3);
+                    };
+
+                    // the TV off and not answering: two saves, told once
+                    tv.Down = true;
+                    save();
+                    save();
+                    Check(told().Length == 1 && told()[0].Contains("didn't answer"), "the TV off: " + all());
+                    // answering again, its developer mode off: other trouble, told once too
+                    tv.Down = false;
+                    tv.DeveloperEnabled = false;
+                    save();
+                    save();
+                    Check(told().Length == 2 && told()[1].Contains("Developer mode is off"), "developer mode off: " + all());
+                    // all's well again: the save goes to the TV, and there's nothing to tell
+                    tv.DeveloperEnabled = true;
+                    save();
+                    Check(installer.Installs >= 1 && told().Length == 2, "a push that worked: " + installer.Installs + " taken, " + all());
+                    // off again after that is news again
+                    tv.Down = true;
+                    save();
+                    Check(told().Length == 3 && told()[2].Contains("didn't answer"), "the TV off again: " + all());
+                    tv.Down = false;
+
+                    // the app's own trouble is told at every save: each one is a new try at it
+                    installer.Refuse = "Install Failure: Compilation Failed.";
+                    int toldBefore = told().Length, triesBefore = tries;
+                    save();
+                    save();
+                    Check(tries - triesBefore >= 2 && told().Length - toldBefore == tries - triesBefore && told()[told().Length - 1].Contains("Compilation Failed"),
+                        "the app's own trouble, " + (tries - triesBefore) + " tries: " + all());
+                    installer.Refuse = null;
+
+                    // away from the TV's network: nothing goes to its address, and that's told once
+                    c.OnTvNetwork = () => false;
+                    int asked = tv.Requests().Count, hits = installer.Hits;
+                    toldBefore = told().Length;
+                    save();
+                    save();
+                    Check(tv.Requests().Count == asked && installer.Hits == hits, "something went to the TV's address from another network");
+                    Check(told().Length == toldBefore + 1 && told()[toldBefore].Contains("isn't on the TV's network"), "away from the TV's network: " + all());
+                    Check(Regex.Matches(LogText(), "this PC isn't on the TV's network, so nothing is pushed").Count == 1, "the log should say it once: " + LogText());
+                }
+            }
+            finally
+            {
+                if (tools != null) tools.Dispose();
+                DevTv.SettleMs = settleBefore;
+                Directory.Delete(Path.GetDirectoryName(app), true);
+            }
+        }
+
+        // Only a folder on a drive letter is watched. A network path isn't even looked for: asking
+        // Windows whether it's there connects to that computer, and the folder may only have been
+        // named in a settings file.
+        static void DevFolderOnADrive()
+        {
+            foreach (string yes in new[] { "C:\\apps\\mine", "c:/apps/mine", "Z:\\" })
+                Check(DevTv.OnADrive(yes), yes + " should count as on a drive");
+            foreach (string no in new[] { "\\\\server\\share\\app", "//server/share/app", "\\/server/share/app", "\\\\?\\UNC\\server\\share\\app",
+                "\\\\?\\C:\\apps\\mine", "\\\\.\\C:\\apps\\mine", "\\??\\UNC\\server\\share\\app", "apps\\mine", "C:apps", "C:", "", null })
+                Check(!DevTv.OnADrive(no), (no ?? "(nothing)") + " shouldn't count as on a drive");
+
+            string app = TempFolder("Drive app");
+            DevTools tools = null;
+            // The test listens in on TVFollow asking Windows whether a folder is there. A network
+            // path that got that far is never passed on, so the test itself touches no network.
+            var asked = new List<string>();
+            Func<string, bool> there = DevTv.FolderThere;
+            DevTv.FolderThere = folder =>
+            {
+                lock (asked) asked.Add(folder);
+                return DevTv.OnADrive(folder) && there(folder);
+            };
+            try
+            {
+                WriteFile(app, "manifest", "title=Drive\nmajor_version=1\nminor_version=0\nbuild_version=1\n");
+                using (var tv = new FakeTv("127.0.0.1", 0))
+                using (var installer = new FakeInstaller(tv, 0))
+                {
+                    tv.DeveloperEnabled = true;
+                    Settings s = DevSettings(tv, installer);
+                    Tv(s).DevOnSave = true;
+                    // a folder on another computer, as a settings file could name it, both ways of writing it
+                    Tv(s).DevFolder = "\\\\server\\share\\app";
+                    tools = DevToolsFor(s);
+                    Check(!tools.Tvs[0].Watching, "a network folder is watched");
+                    Tv(s).DevFolder = "//server/share/app";
+                    tools.Refresh();
+                    Check(!tools.Tvs[0].Watching, "a network folder written with forward slashes is watched");
+                    lock (asked) Check(!asked.Exists(f => !DevTv.OnADrive(f)), "Windows was asked about a network folder: " + string.Join(" | ", asked.ToArray()));
+                    // the app's own folder on this PC's drive is looked for, and watched
+                    Tv(s).DevFolder = app;
+                    tools.Refresh();
+                    lock (asked) Check(tools.Tvs[0].Watching && asked.Contains(app), "the folder on a drive isn't watched");
+                }
+            }
+            finally
+            {
+                DevTv.FolderThere = there;
+                if (tools != null) tools.Dispose();
+                Directory.Delete(Path.GetDirectoryName(app), true);
+            }
+        }
+
         // ---- the windows ----
 
         static void DevAppLog()
@@ -827,18 +973,35 @@ namespace TVFollow.Tests
 
         static void DevUninstallRemovesCopies()
         {
-            string dir = TempFolder("TVFollow data");
+            string dir = TempFolder("TVFollow data"), other = TempFolder("TVFollow data");
             try
             {
                 File.WriteAllText(Path.Combine(dir, "settings.ini"), "ip=192.168.1.50\r\n");
                 WriteFile(dir, "dev/X000000001.zip", "a kept app");
                 WriteFile(dir, "dev/X000000002.zip.tmp", "half a kept app");
+                // the saved app log, under the name the developer tools give it
+                var s = new Settings();
+                Tv(s).Serial = "X000000001";
+                using (DevTools tools = DevTools.ForCommandLine(s, new List<Controller> { FirstTv(s) }))
+                    WriteFile(dir, "dev/" + Path.GetFileName(tools.Tvs[0].AppLogPath), "what the app printed");
+                Check(Directory.GetFiles(Path.Combine(dir, "dev")).Length == 3, "the test's app log took the name of one of the other files");
                 Installer.RemoveSettings(dir);
                 // a portable copy's folder left behind would make that copy start portable again
                 Check(!Directory.Exists(dir), "the settings folder stayed: " +
                     (Directory.Exists(dir) ? string.Join(", ", Directory.GetFileSystemEntries(dir, "*", SearchOption.AllDirectories)) : ""));
+
+                // a file in there that isn't TVFollow's stays, and its folder with it
+                File.WriteAllText(Path.Combine(other, "settings.ini"), "ip=192.168.1.50\r\n");
+                WriteFile(other, "dev/notes.txt", "somebody's own");
+                Installer.RemoveSettings(other);
+                Check(File.Exists(Path.Combine(other, "dev\\notes.txt")) && !File.Exists(Path.Combine(other, "settings.ini")),
+                    "a file that isn't TVFollow's was deleted, or settings.ini stayed");
             }
-            finally { Directory.Delete(Path.GetDirectoryName(dir), true); }
+            finally
+            {
+                Directory.Delete(Path.GetDirectoryName(dir), true);
+                Directory.Delete(Path.GetDirectoryName(other), true);
+            }
         }
 
         static void DevSettingsSwitch()
@@ -1024,6 +1187,53 @@ namespace TVFollow.Tests
             }
         }
 
+        // The monitors come on with the TV in deep standby, and the wake packet brings it up on
+        // Roku's home screen. With the app as the TV's home screen, the app must not get there
+        // first: the TV was off, so it goes to the PC, and the home screen on the way doesn't count.
+        static void DevHomeWokenTvGoesToPc()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            using (var console = new FakeConsole("127.0.0.1", 0))
+            using (new InputTimings(console, 100))
+            {
+                int settle = DevTv.HomeSettleMs, check = DevTv.HomeCheckMs;
+                DevTv.HomeSettleMs = 200;
+                DevTv.HomeCheckMs = 40;
+                try
+                {
+                    tv.Down = true;
+                    tv.PowerMode = "DisplayOff";
+                    tv.ModernHome = true;
+                    tv.App = "";
+                    tv.DeveloperEnabled = true;
+                    tv.DevAppName = "Home app";
+                    Settings s = SettingsFor(tv);
+                    s.DeveloperTools = true;
+                    Tv(s).DevHome = true;
+                    Controller c = Fast(FirstTv(s));
+                    c.SendWake = mac => { tv.ComesUpAfter = 3; return 2; };   // 3: one of the looks may ask it meanwhile
+                    using (var tools = new DevTools(s, new List<Controller> { c }))
+                    {
+                        Thread.Sleep(DevTv.InputsIdleMs * 2);   // a look or two at the TV in deep standby
+                        c.TurnOn(TurnOnMode.Follow);            // the monitors came on
+                        Check(tv.App == "tvinput.hdmi1", "the woken TV shows " + (tv.App.Length > 0 ? tv.App : "the home screen") +
+                            ". The log: " + LogText().Replace("\r\n", " / "));
+                        // long enough for the looks to have opened the app, had they taken that home screen for a trip home
+                        Thread.Sleep(DevTv.InputsIdleMs * 5 + DevTv.HomeSettleMs + 300);
+                        Check(tv.App == "tvinput.hdmi1" && tv.Count("POST /launch/dev") == 0, "the app opened on a TV that was on its way to the PC: it shows " + tv.App);
+                        // and the app is still the TV's home screen afterwards: Home, and it opens
+                        Check(new RokuClient(tv.Ip, tv.Port).Keypress("Home", 2000) == 200 && tv.App == "", "pressing Home");
+                        Until(tv, () => tv.App == "dev", "the app opening from the home screen once the TV is on the PC");
+                    }
+                }
+                finally
+                {
+                    DevTv.HomeSettleMs = settle;
+                    DevTv.HomeCheckMs = check;
+                }
+            }
+        }
+
         // A Roku TV shows its home screen for about 2.5 seconds on the way from an app to an input
         // (measured on one with Roku OS 16). On the way to an input TVFollow switched to, that
         // isn't a trip home; on the way to one someone else switched to (with the TV's own
@@ -1187,6 +1397,33 @@ namespace TVFollow.Tests
                     Check(Program.DevCommand(s, tvs, "screenshot", new[] { "screenshot", parent }) == 0, "the picture");
                     string[] pictures = Directory.GetFiles(parent, "*.jpg");
                     Check(pictures.Length == 1 && File.ReadAllBytes(pictures[0]).Length > 100, "the picture's file: " + pictures.Length);
+
+                    // A folder in quotes with a backslash at its end, "C:\my app\" (PowerShell's Tab
+                    // key writes folders that way): Windows hands a program C:\my app" for it, with
+                    // whatever followed on the line stuck on behind the quote.
+                    string path, rest;
+                    Program.PathAndRest(new[] { "push", "C:\\apps\\my app\"" }, out path, out rest);
+                    Check(path == "C:\\apps\\my app\\" && rest == "", "a quoted folder: <" + path + "> <" + rest + ">");
+                    Program.PathAndRest(new[] { "push", "C:\\apps\\my app\" Office", "TV" }, out path, out rest);
+                    Check(path == "C:\\apps\\my app\\" && rest == "Office TV", "a quoted folder and a TV's name: <" + path + "> <" + rest + ">");
+                    Program.PathAndRest(new[] { "push", "D:\"" }, out path, out rest);
+                    Check(path == "D:\\" && rest == "", "a quoted drive: <" + path + "> <" + rest + ">");
+                    Program.PathAndRest(new[] { "push", "C:\\apps\\mine", "2" }, out path, out rest);
+                    Check(path == "C:\\apps\\mine" && rest == "2", "a plain folder and a TV's number: <" + path + "> <" + rest + ">");
+                    Program.PathAndRest(new[] { "push" }, out path, out rest);
+                    Check(path == "" && rest == "", "nothing after push: <" + path + "> <" + rest + ">");
+                    int submits = installer.Submits;
+                    Check(Program.DevCommand(s, tvs, "push", new[] { "push", app + "\"" }) == 0 && installer.Submits == submits + 1,
+                        "a push of a quoted folder with a backslash at its end");
+                    Check(Program.DevCommand(s, tvs, "push", new[] { "push", app + "\" 1" }) == 0 && installer.Submits == submits + 2,
+                        "the same with a TV's number after it");
+                    File.Delete(pictures[0]);
+                    Check(Program.DevCommand(s, tvs, "screenshot", new[] { "screenshot", parent + "\"" }) == 0 && Directory.GetFiles(parent, "*.jpg").Length == 1,
+                        "a picture into a quoted folder with a backslash at its end");
+                    // a name no file or folder can have is a wrong command: said so, not crashed on
+                    Check(Program.DevCommand(s, tvs, "push", new[] { "push", parent + "\\a|b" }) == 2 && installer.Submits == submits + 2,
+                        "a push of a name with a | in it");
+                    Check(Program.DevCommand(s, tvs, "screenshot", new[] { "screenshot", parent + "\\a<b.jpg" }) == 2, "a picture into a name with a < in it");
                 }
                 finally { Directory.Delete(Path.GetDirectoryName(parent), true); }
             }

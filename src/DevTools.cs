@@ -51,11 +51,17 @@ namespace TVFollow
     {
         public readonly bool Ok;
         public readonly string Text;
+        // It didn't work, and not because of the app: the TV is off or away, developer mode is
+        // off, the password is missing or wrong. Other files wouldn't have fared better.
+        public readonly bool TvTrouble;
 
-        public DevReport(bool ok, string text)
+        public DevReport(bool ok, string text) : this(ok, text, false) { }
+
+        public DevReport(bool ok, string text, bool tvTrouble)
         {
             Ok = ok;
             Text = text ?? "";
+            TvTrouble = tvTrouble;
         }
     }
 
@@ -143,6 +149,7 @@ namespace TVFollow
         bool saving, savedAgain;   // a push on save is running; another save came meanwhile
         bool closed;
         bool toldDevModeOff, toldPutBackFailed;
+        string toldSaveTrouble;   // the TV's trouble a push on save last told of, so it's told once
         string lastPushed;   // a fingerprint of the last zip the TV took, so a save that changed nothing isn't pushed
 
         // the app's console (port 8085), shared by the app log window and the app's asks
@@ -306,11 +313,13 @@ namespace TVFollow
                 // Roku OS 15 turns away zips under 512 bytes as corrupt (Roku's own tools say so too)
                 if (app.Zip.Length < 512 && (r.Message.IndexOf("corrupt", StringComparison.OrdinalIgnoreCase) >= 0 || r.Message.IndexOf("unzip", StringComparison.OrdinalIgnoreCase) >= 0))
                     problem += " Roku TVs turn away apps under 512 bytes, and this one is " + app.Zip.Length + ": add a file to it, a picture say.";
-                return new DevReport(false, problem);
+                // only the TV's own words about the app (its code doesn't compile, say) are about the app
+                return new DevReport(false, problem, r.Outcome != DevOutcome.Refused);
             }
             Keep(app.Zip);
             lastPushed = Fingerprint(app.Zip);
             toldDevModeOff = toldPutBackFailed = false;
+            toldSaveTrouble = null;
             string text = r.Outcome == DevOutcome.Same
                 ? "The TV already had these very files, so TVFollow opened the app."
                 : "Pushed " + app + " (" + size + "). It's open on the TV.";
@@ -427,9 +436,23 @@ namespace TVFollow
 
         // ---- pushing on save ----
 
+        // Is this folder on a drive letter (C:\apps\mine)? The only kind TVFollow looks at on its
+        // own. Anything else may be a network path (\\server\share, also written //server/share
+        // or \\?\UNC\server\share), and just asking Windows whether such a folder is there makes
+        // it connect to that computer, even when the folder was only named in a settings file.
+        // Told from the text alone: a drive letter, a colon, a slash.
+        public static bool OnADrive(string folder)
+        {
+            return folder != null && folder.Length >= 3 &&
+                ((folder[0] >= 'A' && folder[0] <= 'Z') || (folder[0] >= 'a' && folder[0] <= 'z')) &&
+                folder[1] == ':' && (folder[2] == '\\' || folder[2] == '/');
+        }
+
+        // asking Windows whether the watched folder is there (the tests listen in on this)
+        public static Func<string, bool> FolderThere = Directory.Exists;
+
         // Starts or stops watching the app's folder, as the settings now say. Only folders on
-        // this PC's own drives: looking at a network path (\\server\...) would have Windows
-        // connect to it, even for a folder only named in a settings file.
+        // a drive letter (see OnADrive).
         public void Refresh()
         {
             lock (refreshing) RefreshNow();
@@ -439,8 +462,8 @@ namespace TVFollow
         void RefreshNow()
         {
             string folder = Tv.DevFolder;
-            bool wanted = settings.DeveloperTools && Tv.DevOnSave && folder.Length > 0 && !folder.StartsWith("\\\\");
-            bool there = wanted && Directory.Exists(folder);
+            bool wanted = settings.DeveloperTools && Tv.DevOnSave && OnADrive(folder);
+            bool there = wanted && FolderThere(folder);
             lock (watchLock)
             {
                 if (closed) return;
@@ -591,8 +614,15 @@ namespace TVFollow
             // gone (a build tool clearing it, say): pushed once it's back, without a message meanwhile
             if (folder == null || !Directory.Exists(folder)) return;
             DevReport r = null;
+            // like the following, nothing goes to the TV's address on another network (a laptop
+            // away from home), where something else may have that address
+            if (!Controller.OnTvNetwork())
+            {
+                r = new DevReport(false, "This PC isn't on the TV's network, so the app wasn't pushed.", true);
+                if (r.Text != toldSaveTrouble) Controller.Say("developer tools: push on save: this PC isn't on the TV's network, so nothing is pushed");
+            }
             // the folder is zipped in this TV's turn, so no push waiting behind it can send older files
-            lock (turn)
+            else lock (turn)
             {
                 DevPackage app = null;
                 try { app = DevPackage.FromFolder(folder); }
@@ -606,7 +636,15 @@ namespace TVFollow
                     r = PushNow(app, "pushed on save", PushMs);
                 }
             }
-            if (!r.Ok) tools.Notify("Couldn't push your app", r.Text);
+            // The TV's own trouble (it's off or away, developer mode is off, the password is
+            // wrong) is told once, not again at every save until it's over or turns into other
+            // trouble: an editor that saves by itself would pile the notifications up. What's
+            // wrong with the app itself is told each time, since each save is a new try at it.
+            bool tell = !r.Ok;
+            if (r.Ok || !r.TvTrouble) toldSaveTrouble = null;
+            else if (r.Text == toldSaveTrouble) tell = false;
+            else toldSaveTrouble = r.Text;
+            if (tell) tools.Notify("Couldn't push your app", r.Text);
             Background(r);
         }
 
