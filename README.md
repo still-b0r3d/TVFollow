@@ -222,7 +222,7 @@ choose **Disable installer and restart**.
   the app in a folder), TVFollow finds it there.
 - **Push the example app**: [b0r3d TV](https://github.com/still-b0r3d/b0r3d-TV), built
   into TVFollow, to check it all works: a channel guide like an old cable box's, where
-  your TV's apps are channels next to b0r3d's own: a VCR, a camera on Rukus's room,
+  your TV's apps are channels next to b0r3d's own: a VCR, a camera on Ruckus's room,
   three games, a radio station and late-night commercials. With **Let the app switch the
   TV's inputs** ticked (below), the TV's inputs show up in its guide as channels a few
   seconds after it opens, and opening one switches the TV: the asking described below,
@@ -381,7 +381,7 @@ do is sell it, or sell something whose value comes mostly from it. See
 The example app in [examples/tvfollow-example](examples/tvfollow-example) is b0r3d TV, with
 terms of its own in that folder. Its code is under the same MIT License with the Commons
 Clause ([its LICENSE](examples/tvfollow-example/LICENSE)). Its pixel art, music, sounds,
-writing, names, game data and the character Rukus aren't: they're all rights reserved
+writing, names, game data and the character Ruckus aren't: they're all rights reserved
 ([LICENSE-ASSETS](examples/tvfollow-example/LICENSE-ASSETS)), so they can go on your TV
 with the app, and nowhere else without b0r3d's permission. Its fonts keep their own
 licenses, in the OFL files beside them.

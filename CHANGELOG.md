@@ -26,7 +26,7 @@ A new Settings window, and developer tools for putting your own Roku apps on the
   and editors' temporary files) and **Push the example app**. An app one folder down is
   found. When the TV refuses an app, its own words say why.
 - The example app is b0r3d TV 0.71 (Build: 87e560a), b0r3d's channel guide for Roku TVs
-  that looks like an old cable box, with a VCR, a camera on Rukus's room, three games, a
+  that looks like an old cable box, with a VCR, a camera on Ruckus's room, three games, a
   radio station and late-night commercials. With **Let the app switch the TV's inputs**
   ticked, the TV's inputs are channels in its guide. Its source is in
   `examples/tvfollow-example`, under its own license. Once it's on the TV, it uses b0r3d's
@@ -69,6 +69,7 @@ A new Settings window, and developer tools for putting your own Roku apps on the
 - The version and the build are shown apart: `TVFollow v1.3 · Build: abc1234` at the bottom
   of the setup and Settings windows (on two lines there now), in the log and in
   `TVFollow.exe --version`. The exe's **Product version** says `1.3 build abc1234`.
+- b0r3d's cat is spelled Ruckus here and in the README now (it was Rukus).
 
 ## 1.2.1 (2026-10-31)
 
