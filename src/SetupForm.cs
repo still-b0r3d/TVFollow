@@ -42,6 +42,9 @@ namespace TVFollow
         readonly Button back = new Button();
         readonly Button next = new Button();
         readonly Button cancel = new Button();
+        Panel footer;                    // the grey strip along the bottom,
+        FlowLayoutPanel buttonRow;       // the three buttons on it,
+        LinkLabel about;                 // and its two lines
 
         public SetupForm(Settings settings)
         {
@@ -141,15 +144,14 @@ namespace TVFollow
 
         Control BuildFooter()
         {
-            var footer = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = Color.FromArgb(243, 243, 243) };
-            var buttons = new FlowLayoutPanel
+            footer = new Panel { Dock = DockStyle.Bottom, Height = 56 };
+            buttonRow = new FlowLayoutPanel
             {
                 Dock = DockStyle.Right,
                 FlowDirection = FlowDirection.RightToLeft,
                 AutoSize = true,
                 WrapContents = false,
-                Padding = new Padding(0, 12, 20, 0),
-                BackColor = footer.BackColor
+                Padding = new Padding(0, 12, 20, 0)
             };
             foreach (Button b in new[] { cancel, next, back })
             {
@@ -157,7 +159,7 @@ namespace TVFollow
                 b.MinimumSize = new Size(92, 30);
                 b.Margin = new Padding(8, 0, 0, 0);
                 b.UseVisualStyleBackColor = true;
-                buttons.Controls.Add(b);
+                buttonRow.Controls.Add(b);
             }
             cancel.Text = "Cancel";
             next.Text = "Next";
@@ -172,12 +174,11 @@ namespace TVFollow
             CancelButton = cancel;
 
             // two lines: the version with its build doesn't fit beside the three buttons on one
-            var about = new LinkLabel
+            about = new LinkLabel
             {
                 AutoSize = true,
                 Location = new Point(24, 12),
                 Text = "TVFollow " + Program.FullVersion + "\r\nHelp  ·  made by " + Maker,
-                LinkColor = SetupPage.Muted,
                 ActiveLinkColor = SystemColors.HotTrack,
                 LinkBehavior = LinkBehavior.HoverUnderline
             };
@@ -187,9 +188,24 @@ namespace TVFollow
             about.Links.Add(text.LastIndexOf(Maker), Maker.Length, MakerUrl);
             about.LinkClicked += (s, e) => OpenUrl((string)e.Link.LinkData);
 
-            footer.Controls.Add(buttons);
+            footer.Controls.Add(buttonRow);
             footer.Controls.Add(about);
+            Recolour();
             return footer;
+        }
+
+        // The footer's grey, in the colours Look gives it. Again whenever Windows' colours
+        // change: a high contrast theme going on or off changes them.
+        void Recolour()
+        {
+            footer.BackColor = buttonRow.BackColor = Look.Footer;
+            about.LinkColor = Look.FooterLink;
+        }
+
+        protected override void OnSystemColorsChanged(EventArgs e)
+        {
+            base.OnSystemColorsChanged(e);
+            if (about != null) Recolour();
         }
 
         public static void OpenUrl(string url)
@@ -332,17 +348,15 @@ namespace TVFollow
                 Settings.Tvs.Add(tv);
             }
             // the settings go where the chosen mode keeps them (a trial copy keeps its own folder)
-            string dirBefore = TVFollow.Settings.Dir;
-            if (!TVFollow.Settings.IsTrial) TVFollow.Settings.Dir = Portable ? TVFollow.Settings.PortableDir : TVFollow.Settings.DefaultDir;
-            try { Settings.Save(); }
-            catch (Exception e)
+            string problem = SaveIn(TVFollow.Settings.IsTrial ? TVFollow.Settings.Dir
+                : Portable ? TVFollow.Settings.PortableDir : TVFollow.Settings.DefaultDir);
+            if (problem != null)
             {
                 // as it was, so going back to step 1 still knows which TVs were set up before
                 // (the kept TVs' changes were made on copies)
                 Settings.Tvs.Clear();
                 Settings.Tvs.AddRange(before);
-                TVFollow.Settings.Dir = dirBefore;
-                MessageBox.Show(this, "Couldn't save the settings: " + e.Message, "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, "Couldn't save the settings: " + problem, "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
             Log.Write(Settings.SeveralTvs
@@ -350,6 +364,25 @@ namespace TVFollow
                 : "setup saved: input " + Settings.Tvs[0].Input);
             DialogResult = DialogResult.OK;
             Close();
+        }
+
+        // Saves the settings in this folder, which is theirs from then on. When it isn't the
+        // folder they were in (installed made portable, or the other way), what the developer
+        // tools keep beside them comes along: the copy of the app pushed last, without which
+        // there'd be nothing to put back on a TV that lost its app, and the app log. Null when
+        // saved; otherwise why not, and the settings stay where they were.
+        internal string SaveIn(string dir)
+        {
+            string dirBefore = TVFollow.Settings.Dir;
+            TVFollow.Settings.Dir = dir;
+            try { Settings.Save(); }
+            catch (Exception e)
+            {
+                TVFollow.Settings.Dir = dirBefore;
+                return e.Message;
+            }
+            if (!TVFollow.Settings.SameDir(dirBefore, dir)) Installer.CarryDevFiles(dirBefore, dir);
+            return null;
         }
     }
 

@@ -26,7 +26,11 @@ namespace TVFollow
             public override string ToString() { return Name; }   // what a screen reader says
         }
 
-        public static readonly Color Back = Color.FromArgb(243, 243, 243);
+        // A light grey, a darker patch under the open page and a fainter one under the mouse. In
+        // Windows' high contrast themes the theme's own instead (Look says why): its window
+        // colour, its highlight under the open page with the words in the colour that goes on
+        // it, and an outline under the mouse.
+        public static Color Back { get { return Look.List; } }
         static readonly Color Open = Color.FromArgb(232, 232, 232);
         static readonly Color Hover = Color.FromArgb(237, 237, 237);
         static readonly Color Accent = Color.FromArgb(0, 95, 184);
@@ -85,6 +89,14 @@ namespace TVFollow
             ItemHeight = Math.Min(255, Font.Height * 2 + 4);
         }
 
+        // Windows' colours changed (a high contrast theme went on or off): the list's are picked again
+        protected override void OnSystemColorsChanged(EventArgs e)
+        {
+            base.OnSystemColorsChanged(e);
+            BackColor = Back;
+            Invalidate();
+        }
+
         int Scaled(Graphics g, int px) { return (int)Math.Round(px * g.DpiX / 96f); }
 
         protected override void OnDrawItem(DrawItemEventArgs e)
@@ -95,24 +107,33 @@ namespace TVFollow
             if (e.Index < 0 || e.Index >= Items.Count) return;
             var page = (Page)Items[e.Index];
             bool open = (e.State & DrawItemState.Selected) != 0;
+            bool contrast = Look.HighContrast();
             Rectangle patch = new Rectangle(r.X + Scaled(g, 4), r.Y + Scaled(g, 2), r.Width - Scaled(g, 8), r.Height - Scaled(g, 4));
             if (open || e.Index == hot)
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 using (GraphicsPath path = Rounded(patch, Scaled(g, 4)))
-                using (var fill = new SolidBrush(open ? Open : Hover))
-                    g.FillPath(fill, path);
+                {
+                    if (contrast && !open)
+                    {
+                        using (var line = new Pen(SystemColors.Highlight)) g.DrawPath(line, path);
+                    }
+                    else
+                    {
+                        using (var fill = new SolidBrush(!open ? Hover : contrast ? SystemColors.Highlight : Open)) g.FillPath(fill, path);
+                    }
+                }
                 if (open)
                 {
                     int h = Scaled(g, 16), w = Math.Max(2, Scaled(g, 3));
                     var bar = new Rectangle(patch.X, patch.Y + (patch.Height - h) / 2, w, h);
                     using (GraphicsPath path = Rounded(bar, w / 2))
-                    using (var fill = new SolidBrush(Accent))
+                    using (var fill = new SolidBrush(contrast ? SystemColors.HighlightText : Accent))
                         g.FillPath(fill, path);
                 }
                 g.SmoothingMode = SmoothingMode.Default;
             }
-            Color ink = Enabled ? ForeColor : SystemColors.GrayText;
+            Color ink = !Enabled ? SystemColors.GrayText : contrast && open ? SystemColors.HighlightText : ForeColor;
             int x = patch.X + Scaled(g, 14);
             const TextFormatFlags Middle = TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
             if (iconFont != null)
@@ -124,7 +145,10 @@ namespace TVFollow
             TextRenderer.DrawText(g, page.Name, Font, new Rectangle(x, patch.Y, Math.Max(1, patch.Right - x), patch.Height), ink, Middle | TextFormatFlags.EndEllipsis);
             // moving through the list with the keyboard shows where the focus is
             if ((e.State & DrawItemState.Focus) != 0 && (e.State & DrawItemState.NoFocusRect) == 0)
-                ControlPaint.DrawFocusRectangle(g, patch);
+            {
+                if (contrast) ControlPaint.DrawFocusRectangle(g, patch, ink, open ? SystemColors.Highlight : BackColor);
+                else ControlPaint.DrawFocusRectangle(g, patch);
+            }
         }
 
         static GraphicsPath Rounded(Rectangle r, int radius)

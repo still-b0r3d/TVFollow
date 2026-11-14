@@ -68,14 +68,7 @@ namespace TVFollow
             if (cmd == "uninstall") return Uninstall(args.Length > 1 && args[1].ToLowerInvariant() == "--quiet");
 
             Settings settings = Settings.Load();
-            if (settings.LoadError != null)
-            {
-                // the file is there but couldn't be read: say so, rather than running with the
-                // wrong settings or offering setup as if there were none
-                MessageBox.Show("TVFollow couldn't read its settings file:\n" + settings.LoadError + "\n\nThe file is settings.ini in " + Settings.Dir +
-                    ". Another program may be holding it open; try again in a moment.", "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return 1;
-            }
+            if (SettingsUnreadable(settings, cmd)) return 1;
             // "home" is the install folder, or for a portable copy the folder it runs from
             bool home = Settings.IsPortable || Installer.SamePath(Application.ExecutablePath, InstallPaths.ForThisPC().Exe);
             Opening opening = WhatOpens(cmd, settings.IsComplete, Instance.IsRunning(), home);
@@ -96,11 +89,7 @@ namespace TVFollow
                 return portable ? StartPortable(settings) : InstallAndStart(settings);
             }
 
-            if (!settings.IsComplete)
-            {
-                MessageBox.Show("TVFollow isn't set up yet. Open TVFollow to set it up.", "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return 1;
-            }
+            if (NotSetUp(settings, cmd)) return 1;
 
             List<Controller> tvs = Controller.For(settings);
             if (cmd == "on" || cmd == "pc" || cmd == "off")
@@ -129,6 +118,42 @@ namespace TVFollow
 
             MessageBox.Show("Unknown command: " + args[0] + "\n\nUse setup, on, off, pc, uninstall or --version.", "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return 2;
+        }
+
+        // push and screenshot are for test scripts, and a script can't click a message box
+        // away: it would wait on it for good. So what stops the other commands with a box
+        // is a printed line for these two.
+        internal static bool ForScripts(string cmd) { return cmd == "push" || cmd == "screenshot"; }
+
+        // a message box of Main's (the tests take its place)
+        internal static Action<string, MessageBoxIcon> Box = (text, icon) => MessageBox.Show(text, "TVFollow", MessageBoxButtons.OK, icon);
+
+        // a line for whoever started push or screenshot, in the window it was started from
+        static void Print(string words)
+        {
+            AttachConsole(-1);
+            Console.WriteLine("TVFollow: " + words);
+        }
+
+        // Settings that couldn't be read stop every command: the file is there, so it's said,
+        // rather than running with the wrong settings or offering setup as if there were none.
+        // True when that's how it is.
+        internal static bool SettingsUnreadable(Settings settings, string cmd)
+        {
+            if (settings.LoadError == null) return false;
+            const string Advice = "Another program may be holding it open; try again in a moment.";
+            if (ForScripts(cmd)) Print("couldn't read settings.ini in " + Settings.Dir + ": " + settings.LoadError + " " + Advice);
+            else Box("TVFollow couldn't read its settings file:\n" + settings.LoadError + "\n\nThe file is settings.ini in " + Settings.Dir + ". " + Advice, MessageBoxIcon.Error);
+            return true;
+        }
+
+        // With no TV set up yet there's nothing for a command to do. True when that's how it is.
+        internal static bool NotSetUp(Settings settings, string cmd)
+        {
+            if (settings.IsComplete) return false;
+            if (ForScripts(cmd)) Print("no TV is set up yet. Open TVFollow to set it up first.");
+            else Box("TVFollow isn't set up yet. Open TVFollow to set it up.", MessageBoxIcon.Information);
+            return true;
         }
 
         // TVFollow.exe push <folder or .zip> [TV] and screenshot <picture or folder> [TV]: the
@@ -214,8 +239,9 @@ namespace TVFollow
                 return 1;
             }
             // a folder gets the picture under the app's name and the time
-            if (Directory.Exists(path)) path = Path.Combine(path, DevTv.PictureName("TV", extension));
-            try { File.WriteAllBytes(path, picture); }
+            if (Directory.Exists(path)) path = Path.Combine(path, DevTv.PictureName("TV", DevPicture.Kind(picture, extension)));
+            // (the name it's saved under can differ from the one given: see DevPicture)
+            try { path = DevPicture.Save(path, picture, extension); }
             catch (Exception e) { Console.WriteLine("TVFollow: couldn't save it: " + e.Message); return 1; }
             Console.WriteLine("TVFollow: saved the picture: " + path);
             return 0;

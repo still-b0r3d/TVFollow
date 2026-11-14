@@ -32,12 +32,17 @@ namespace TVFollow.Tests
         public byte[] Last;             // the last app taken
         public int Hits;                // requests of any kind, with a password or not
         public int Submits;             // pushes with the right password, the same files again too
+        public bool PngPictures;        // send pictures of the screen as PNG (as JPEG otherwise, like most Roku TVs)
+        public byte[] SendInstead;      // send these bytes for a picture, whatever they are
 
         public readonly int Port;
         readonly FakeTv tv;
         readonly TcpListener listener;
         readonly string nonce = Guid.NewGuid().ToString("N");
-        readonly byte[] picture;
+        readonly byte[] picture, picturePng;
+
+        // the picture a screenshot gets right now, byte for byte
+        public byte[] Picture { get { return SendInstead ?? (PngPictures ? picturePng : picture); } }
 
         public FakeInstaller(FakeTv tv, int port)
         {
@@ -47,10 +52,13 @@ namespace TVFollow.Tests
             Port = ((IPEndPoint)listener.LocalEndpoint).Port;
             using (var bmp = new Bitmap(64, 36))
             using (var ms = new MemoryStream())
+            using (var png = new MemoryStream())
             {
                 using (Graphics g = Graphics.FromImage(bmp)) g.Clear(Color.FromArgb(20, 33, 61));
                 bmp.Save(ms, ImageFormat.Jpeg);
                 picture = ms.ToArray();
+                bmp.Save(png, ImageFormat.Png);
+                picturePng = png.ToArray();
             }
             var thread = new Thread(Serve) { IsBackground = true };
             thread.Start();
@@ -135,9 +143,9 @@ namespace TVFollow.Tests
                 Page(stream, "<html><title>Roku Development Kit</title>Development Application Installer</html>");
                 return;
             }
-            if (method == "GET" && path.StartsWith("/pkgs/dev.jpg"))
+            if (method == "GET" && (path.StartsWith("/pkgs/dev.jpg") || path.StartsWith("/pkgs/dev.png")))
             {
-                Send(stream, 200, "OK", "image/jpeg", picture, "");
+                Send(stream, 200, "OK", path.StartsWith("/pkgs/dev.png") ? "image/png" : "image/jpeg", Picture, "");
                 return;
             }
             if (method != "POST") { Send(stream, 404, "Not Found", "text/html", new byte[0], ""); return; }
@@ -180,7 +188,7 @@ namespace TVFollow.Tests
             if (path == "/plugin_inspect" && submit == "Screenshot")
             {
                 if (tv.App != "dev") { Page(stream, Message("error", "Screenshot failed. No dev app running.")); return; }
-                Page(stream, Message("success", "Screenshot ok") + "<img src=\"pkgs/dev.jpg?time=1762430400\">");
+                Page(stream, Message("success", "Screenshot ok") + "<img src=\"pkgs/dev." + (PngPictures ? "png" : "jpg") + "?time=1762430400\">");
                 return;
             }
             Send(stream, 404, "Not Found", "text/html", new byte[0], "");

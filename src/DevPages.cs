@@ -415,8 +415,8 @@ namespace TVFollow
         }
 
         // Makes the app (off this thread: a folder can take a moment to zip) and pushes it.
-        // folder: "" when it's a zip or the example, so pushing on save stops; null for a folder,
-        // whose own path is then remembered.
+        // folder: "" when it's a zip or the example, so pushing on save stops once that's on the
+        // TV; null for a folder, whose own path is then remembered.
         public async void PushApp(Func<DevPackage> make, string folder)
         {
             if (busy) return;
@@ -443,10 +443,16 @@ namespace TVFollow
                     result.ForeColor = SetupPage.Muted;
                 }
                 r = await Task.Run(() => on.Push(app, "pushed"));
-                // pushing on save works on the folder pushed last
-                on.Tv.DevFolder = folder ?? app.Root;
-                Save();
-                tools.Refresh();
+                // Pushing on save works on the folder pushed last. A folder is remembered even
+                // when its push didn't work: it's the one being worked on, and the next save
+                // tries it again. A zip or the example that didn't get onto the TV changes
+                // nothing: the app from the folder is still the one there.
+                if (r.Ok || folder == null)
+                {
+                    on.Tv.DevFolder = folder ?? app.Root;
+                    Save();
+                    tools.Refresh();
+                }
             }
             busy = false;
             if (closed || owner.IsDisposed) return;
@@ -489,20 +495,22 @@ namespace TVFollow
             UpdateButtons();
             if (on != tv) return;   // the pages moved to another TV meanwhile
             if (!r.Ok) { Show(result, r); return; }
-            string name = DevTv.PictureName(appName, extension);
+            string kind = DevPicture.Kind(picture, extension);
+            string name = DevTv.PictureName(appName, kind);
             using (var dialog = new SaveFileDialog
             {
                 Title = "Save the picture",
                 FileName = name,
-                Filter = extension == "png" ? "PNG picture (*.png)|*.png" : "JPEG picture (*.jpg)|*.jpg",
+                Filter = kind == "png" ? "PNG picture (*.png)|*.png" : "JPEG picture (*.jpg)|*.jpg",
                 InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures)
             })
             {
                 if (dialog.ShowDialog(owner) != DialogResult.OK) { result.Text = ""; return; }
                 try
                 {
-                    File.WriteAllBytes(dialog.FileName, picture);
-                    Show(result, new DevReport(true, "Saved the picture: " + dialog.FileName));
+                    // (a name typed with the other kind's ending gets that kind of picture: see DevPicture)
+                    string saved = DevPicture.Save(dialog.FileName, picture, extension);
+                    Show(result, new DevReport(true, "Saved the picture: " + saved));
                 }
                 catch (Exception e) { Show(result, new DevReport(false, "Couldn't save it: " + e.Message)); }
             }

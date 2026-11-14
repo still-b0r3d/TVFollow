@@ -22,6 +22,9 @@ namespace TVFollow
         readonly Follower follower;
         readonly Tray tray;
         readonly NavList nav = new NavList();
+        readonly Panel side = new Panel { Dock = DockStyle.Left, Width = 200, Padding = new Padding(8, 12, 8, 8) };   // the list's strip
+        readonly Panel footer = new Panel { Dock = DockStyle.Bottom, Height = 52 };
+        LinkLabel about;   // the footer's two lines
         readonly Panel pages = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
         readonly Dictionary<string, Column> pageOf = new Dictionary<string, Column>();
         readonly List<NavList.Page> allPages = new List<NavList.Page>();
@@ -116,16 +119,22 @@ namespace TVFollow
                 dev = new DevPages(tray.Dev, this, pageOf[DeveloperPage], app, options, tray.Dev.Tvs[0]);
             }
 
-            var side = new Panel { Dock = DockStyle.Left, Width = 200, BackColor = NavList.Back, Padding = new Padding(8, 12, 8, 8) };
             nav.Dock = DockStyle.Fill;
             nav.Font = Font;
             nav.SelectedIndexChanged += delegate { if (nav.Selected != null) Reveal(nav.Selected.Key); };
             side.Controls.Add(nav);
+            BuildFooter();
+            Recolour();
 
             // docked in reverse: the footer across the bottom, then the list down the left, then the pages
             Controls.Add(pages);
             Controls.Add(side);
-            Controls.Add(Footer());
+            Controls.Add(footer);
+            // Tab goes the way the window reads: the list, the page that's open, the footer.
+            // (Left as added, it went from the list to the footer, and reached the page last.)
+            side.TabIndex = 0;
+            pages.TabIndex = 1;
+            footer.TabIndex = 2;
 
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
@@ -297,16 +306,14 @@ namespace TVFollow
             return b;
         }
 
-        Control Footer()
+        void BuildFooter()
         {
-            var footer = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = Color.FromArgb(243, 243, 243) };
             // two lines, like setup's: the version with its build and the links don't fit on one
-            var about = new LinkLabel
+            about = new LinkLabel
             {
                 AutoSize = true,
                 Location = new Point(20, 10),
                 Text = "TVFollow " + Program.FullVersion + "\r\nHelp  ·  Open log  ·  made by " + SetupForm.Maker,
-                LinkColor = SetupPage.Muted,
                 ActiveLinkColor = SystemColors.HotTrack,
                 LinkBehavior = LinkBehavior.HoverUnderline
             };
@@ -326,7 +333,21 @@ namespace TVFollow
             CancelButton = close;
             footer.Controls.Add(about);
             footer.Controls.Add(close);
-            return footer;
+        }
+
+        // The grey parts, the list's strip and the footer, in the colours Look gives them. Again
+        // whenever Windows' colours change: a high contrast theme going on or off changes them.
+        void Recolour()
+        {
+            side.BackColor = NavList.Back;
+            footer.BackColor = Look.Footer;
+            about.LinkColor = Look.FooterLink;
+        }
+
+        protected override void OnSystemColorsChanged(EventArgs e)
+        {
+            base.OnSystemColorsChanged(e);
+            if (about != null) Recolour();
         }
 
         // ---- filling in ----

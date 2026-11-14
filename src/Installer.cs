@@ -204,6 +204,34 @@ namespace TVFollow
             DeleteEmptyDir(dir, null);
         }
 
+        // What the developer tools keep beside the settings, copied from one settings folder into
+        // another: the copies of pushed apps (what gets put back on a TV that lost its app) and
+        // the saved app logs. For when the settings move between the installed place and a
+        // portable copy's folder; the folder they leave is cleared like any other afterwards
+        // (RemoveSettings). A file that can't be copied is logged and left: setup goes on.
+        public static void CarryDevFiles(string fromDir, string toDir)
+        {
+            string from = Path.Combine(fromDir, "dev"), to = Path.Combine(toDir, "dev");
+            string[] files;
+            try
+            {
+                if (!Directory.Exists(from)) return;
+                files = Directory.GetFiles(from);
+            }
+            catch (Exception e) { Log.Write("couldn't look for the developer tools' files in " + from + ": " + e.Message); return; }
+            foreach (string file in files)
+            {
+                string name = Path.GetFileName(file);
+                if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && !name.EndsWith(" app log.txt", StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    Directory.CreateDirectory(to);
+                    File.Copy(file, Path.Combine(to, name), true);
+                }
+                catch (Exception e) { Log.Write("couldn't bring " + name + " along to " + to + ": " + e.Message); }
+            }
+        }
+
         // A hidden Command Prompt removes the folder once this copy has exited, trying for about
         // fifteen seconds. The folder goes in through an environment variable, so nothing in the
         // path is read as a command, and the prompt starts in Temp so it doesn't sit in the folder.

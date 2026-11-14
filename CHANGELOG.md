@@ -6,7 +6,12 @@ A new Settings window, and developer tools for putting your own Roku apps on the
 
 - **The Settings window has a page for each part**, picked from a list down its left side,
   like Windows' own Settings: TV, Following, Remote, This PC, Updates and Developer tools.
-  It keeps one size; a page with more than fits scrolls.
+  It keeps one size; a page with more than fits scrolls. **Tab** goes from the list into
+  the open page, then to the footer.
+- In Windows' high contrast themes, the Settings window's page list and the grey footers
+  of the Settings and setup windows take the theme's colours. Before, the footers' version
+  line was in the theme's text colour on TVFollow's own light grey: white on near-white in
+  the dark themes.
 - **Settings… → Developer tools → Turn on the developer tools** (off to start with) adds
   two pages, **App on the TV** and **App options**, and **Developer tools…** to the tray
   menu (right under **Settings…**), which opens Settings on them. There's no separate
@@ -41,13 +46,18 @@ A new Settings window, and developer tools for putting your own Roku apps on the
 - `TVFollow.exe push <folder or .zip>` and `TVFollow.exe screenshot <picture or folder>`,
   with the developer tools on: **Push a folder…** and **Screenshot…** for test scripts,
   with the saved password, which never leaves TVFollow. They print how it went and end
-  with 0, 1 or 2.
+  with 0, 1 or 2. Nothing they have to say comes in a message box, so a script never waits
+  on a click. A picture named `.png` or `.jpg` is saved as that kind, whichever of the two
+  the TV sent.
 - **Put the app back when it disappears from the TV** (on to start with): TVFollow keeps
   a copy of the app pushed last and puts it back, if the TV lost it, just before it turns
   the TV off with your monitors. If developer mode itself went off, or the app couldn't
-  go back, a notification says so, once each time.
+  go back, a notification says so, once each time. The copy moves with the settings when
+  you switch between installed and portable.
 - **Push the app's folder again whenever a file in it is saved**, for making apps. When
   the TV can't take it (it's off, say), a notification says so once, not at every save.
+  It works on the folder pushed last, until a .zip or the example goes onto the TV instead;
+  one that didn't get there changes nothing.
 - **Let the app switch the TV's inputs** (off to start with): a Roku TV won't let an app
   switch its inputs, so the pushed app can ask TVFollow, which switches the TV while this
   PC is on. The README says how an app asks.

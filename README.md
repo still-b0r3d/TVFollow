@@ -236,7 +236,8 @@ another replaces it.
 
 - **Open on the TV** and **Remove**: start the app, or take it off the TV.
 - **Screenshot…**: saves a picture of the app's screen. Roku only takes pictures of the
-  pushed app.
+  pushed app. It comes as a JPEG or a PNG, whichever the TV sends; a name typed with the
+  other one's ending gets the picture as that kind.
 - **App log…**: what the app prints, and the error and the line it stopped at if it
   crashes. It shows what happens while it's open, so open it first, then push or open
   the app. Look here when an app won't start. Whatever TVFollow reads of the app log
@@ -260,9 +261,11 @@ another replaces it.
   its pushed app, after a Roku update, say. TVFollow keeps a copy of the app you pushed
   last and puts it back the next time it turns the TV off with your monitors, while
   nobody's looking at the screen. If developer mode itself was turned off, or the app
-  couldn't go back, a notification says so.
+  couldn't go back, a notification says so. The copy is kept beside TVFollow's settings,
+  and moves with them when you switch between installed and portable.
 - **Push the app's folder again whenever a file in it is saved**: for making apps. Save
-  a file, and a moment later the TV runs your new version.
+  a file, and a moment later the TV runs your new version. It works on the folder you
+  pushed last, until a .zip or the example goes onto the TV instead.
 - **Let the app switch the TV's inputs** (off to start with): a Roku TV won't let an app
   switch its inputs (to a game console on HDMI 2, say), so the pushed app can ask TVFollow,
   which switches the TV for it while this PC is on. How an app asks is just below.
@@ -346,8 +349,8 @@ TVFollow also takes commands, for hotkeys, Stream Deck buttons or scripts:
 | `TVFollow.exe setup` | Opens the setup window |
 | `TVFollow.exe uninstall` | Removes TVFollow (`--quiet` skips the questions) |
 | `TVFollow.exe --version` | Prints the version and the build, which is the commit it was built from (`TVFollow v1.3 · Build: abc1234`) |
-| `TVFollow.exe push <folder or .zip>` | With the [developer tools](#developer-tools) on: pushes an app to the TV, like **Push a folder…**, with the password saved in them (it never leaves TVFollow). For test scripts: it prints how it went, and ends with 0 when it worked, 1 when it didn't, 2 for a wrong command. A TV's number or name after it picks the TV |
-| `TVFollow.exe screenshot <picture or folder>` | With the developer tools on: saves a picture of the TV's screen (the pushed app's), into that file, or into that folder under the time. Prints and ends like `push` |
+| `TVFollow.exe push <folder or .zip>` | With the [developer tools](#developer-tools) on: pushes an app to the TV, like **Push a folder…**, with the password saved in them (it never leaves TVFollow). For test scripts: it prints how it went, and ends with 0 when it worked, 1 when it didn't, 2 for a wrong command. What it has to say is printed, never shown in a message box, so a script doesn't wait on a click. A TV's number or name after it picks the TV |
+| `TVFollow.exe screenshot <picture or folder>` | With the developer tools on: saves a picture of the TV's screen (the pushed app's), into that file, or into that folder under the time. A name ending in `.png` or `.jpg` gets that kind of picture, whichever of the two the TV sent; any other name gets the picture's kind added (`shot` becomes `shot.jpg`). Prints and ends like `push` |
 
 After setup, TVFollow lives in `%LOCALAPPDATA%\Programs\TVFollow`.
 

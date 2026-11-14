@@ -67,6 +67,7 @@ namespace TVFollow.Tests
             Run("updates: remembering the last check", UpdateState);
             RunReviewFixes();
             RunDevTests();
+            RunSettingsWindowTests();
             Run("version matches the exe's version", VersionMatches);
             Run("the version line fits beside the buttons", VersionLineFits);
 

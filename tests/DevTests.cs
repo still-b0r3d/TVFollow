@@ -39,6 +39,9 @@ namespace TVFollow.Tests
             Run("dev: a TV woken onto its home screen goes to the PC, and the app stays shut", DevHomeWokenTvGoesToPc);
             Run("dev: the app log is saved in a file while it's read", DevAppLogSaved);
             Run("dev: push and screenshot from the command line, with the saved password", DevCommandLine);
+            Run("dev: a screenshot's file holds the kind of picture its name says", DevScreenshotNames);
+            Run("dev: push and screenshot print what stops them, where other commands show a message box", DevCommandsPrint);
+            Run("dev: the pushed apps' copies and the app logs move with the settings", DevFilesMoveWithSettings);
             Run("dev: the developer window shows the TV's state", DevWindow);
             Run("dev: Settings shows the developer tools only when switched on", DevSettingsSwitch);
             Run("dev: the tray menu has Developer tools… only when switched on, and it opens them", DevTrayItem);
@@ -951,6 +954,13 @@ namespace TVFollow.Tests
                             Pump(() => AllText(window).Contains("Type the password"), 10);
                             Check(Tv(s).DevFolder == inner, "a failed push forgot the folder");
                             box.Text = installer.Password;
+                            // the example (or a zip) that doesn't get onto the TV leaves the folder alone:
+                            // the app from that folder is still the one on the TV, and the one being worked on
+                            box.Text = "not-the-password";
+                            window.Dev.PushApp(() => DevPackage.Example(), "");
+                            Pump(() => AllText(window).Contains("the password is wrong"), 10);
+                            Check(Tv(s).DevFolder == inner, "a push of the example that didn't work forgot the folder: <" + Tv(s).DevFolder + ">");
+                            box.Text = installer.Password;
 
                             tv.DeveloperEnabled = false;
                             window.ShowPage(SettingsForm.DeveloperPage);
@@ -1426,6 +1436,185 @@ namespace TVFollow.Tests
                     Check(Program.DevCommand(s, tvs, "screenshot", new[] { "screenshot", parent + "\\a<b.jpg" }) == 2, "a picture into a name with a < in it");
                 }
                 finally { Directory.Delete(Path.GetDirectoryName(parent), true); }
+            }
+        }
+
+        // the kind of picture a file holds, by its first bytes, and its size once it's read as one
+        static string PictureIn(string path)
+        {
+            byte[] bytes = File.ReadAllBytes(path);
+            string kind = bytes.Length > 3 && bytes[0] == 0x89 && bytes[1] == 'P' && bytes[2] == 'N' && bytes[3] == 'G' ? "png"
+                : bytes.Length > 2 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF ? "jpg" : "?";
+            using (var stream = new MemoryStream(bytes))
+            using (Image image = Image.FromStream(stream))
+                return kind + " " + image.Width + "x" + image.Height;
+        }
+
+        static bool SameBytes(byte[] a, byte[] b)
+        {
+            if (a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+            return true;
+        }
+
+        static void DevScreenshotNames()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            using (var installer = new FakeInstaller(tv, 0))
+            {
+                tv.DeveloperEnabled = true;
+                Settings s = DevSettings(tv, installer);
+                var tvs = new List<Controller> { Fast(FirstTv(s)) };
+                string dir = TempFolder("Pictures");
+                TextWriter console = Console.Out;
+                // TVFollow.exe screenshot <name in dir>: how it ended, and what it printed
+                string said = "";
+                Func<string, int> shot = name =>
+                {
+                    var printed = new StringWriter();
+                    Console.SetOut(printed);
+                    try { return Program.DevCommand(s, tvs, "screenshot", new[] { "screenshot", Path.Combine(dir, name) }); }
+                    finally
+                    {
+                        Console.SetOut(console);
+                        said = printed.ToString().Trim();
+                    }
+                };
+                try
+                {
+                    using (DevTools tools = DevTools.ForCommandLine(s, tvs)) Check(tools.Tvs[0].Push(DevPackage.Example(), "pushed").Ok, "the push");
+
+                    // the pretend TV sends a JPEG, as Roku TVs mostly do: under a .jpg name it's saved as it came
+                    Check(shot("as-sent.jpg") == 0 && SameBytes(File.ReadAllBytes(Path.Combine(dir, "as-sent.jpg")), installer.Picture), "a JPEG under a .jpg name: " + said);
+                    Check(shot("LOUD.JPEG") == 0 && SameBytes(File.ReadAllBytes(Path.Combine(dir, "LOUD.JPEG")), installer.Picture), "a JPEG under a .JPEG name: " + said);
+                    // under a .png name it's made into a PNG, so the name tells the truth
+                    Check(shot("named.png") == 0 && PictureIn(Path.Combine(dir, "named.png")) == "png 64x36",
+                        "a JPEG asked for as .png: " + said + " / the file holds " + (File.Exists(Path.Combine(dir, "named.png")) ? PictureIn(Path.Combine(dir, "named.png")) : "nothing"));
+                    Check(said.EndsWith("named.png"), "what it printed for named.png: " + said);
+                    // a name that says no kind of picture gets the TV's kind added, and the line says so
+                    Check(shot("bare") == 0 && !File.Exists(Path.Combine(dir, "bare")) && File.Exists(Path.Combine(dir, "bare.jpg")) && said.EndsWith("bare.jpg"),
+                        "a name with nothing after it: " + said);
+                    Check(shot("notes.txt") == 0 && !File.Exists(Path.Combine(dir, "notes.txt")) && File.Exists(Path.Combine(dir, "notes.txt.jpg")) && said.EndsWith("notes.txt.jpg"),
+                        "a name that ends in .txt: " + said);
+
+                    // a TV that sends PNG: the same the other way round
+                    installer.PngPictures = true;
+                    Check(shot("second.png") == 0 && SameBytes(File.ReadAllBytes(Path.Combine(dir, "second.png")), installer.Picture), "a PNG under a .png name: " + said);
+                    Check(shot("second.jpg") == 0 && PictureIn(Path.Combine(dir, "second.jpg")) == "jpg 64x36", "a PNG asked for as .jpg: " + said);
+                    Check(shot("plain") == 0 && File.Exists(Path.Combine(dir, "plain.png")), "a PNG under a name with nothing after it: " + said);
+
+                    // the TV calls it a PNG and sends a JPEG: the bytes decide, not the TV's word
+                    installer.PngPictures = false;
+                    byte[] jpeg = installer.Picture;
+                    installer.PngPictures = true;
+                    installer.SendInstead = jpeg;
+                    Check(shot("mislabelled") == 0 && File.Exists(Path.Combine(dir, "mislabelled.jpg")), "a JPEG the TV called a PNG: " + said);
+
+                    // something that's no picture at all can't be made into one: said so, and no file left under that name
+                    installer.SendInstead = System.Text.Encoding.ASCII.GetBytes("this is not a picture, though the TV says it is");
+                    Check(shot("broken.jpg") == 1 && !File.Exists(Path.Combine(dir, "broken.jpg")) && said.Contains("couldn't"), "a picture that isn't one: " + said);
+                }
+                finally
+                {
+                    Console.SetOut(console);
+                    Directory.Delete(Path.GetDirectoryName(dir), true);
+                }
+            }
+        }
+
+        static void DevCommandsPrint()
+        {
+            Action<string, MessageBoxIcon> box = Program.Box;
+            TextWriter console = Console.Out;
+            var boxes = new List<string>();
+            var printed = new StringWriter();
+            Program.Box = (text, icon) => boxes.Add(text);
+            Console.SetOut(printed);
+            try
+            {
+                var unreadable = new Settings { LoadError = "Access to the path is denied." };
+                var empty = new Settings();   // never set up
+                // a script can't click a message box away, so the two commands for scripts print
+                foreach (string cmd in new[] { "push", "screenshot" })
+                {
+                    Check(Program.SettingsUnreadable(unreadable, cmd), cmd + " went on with settings that couldn't be read");
+                    Check(Program.NotSetUp(empty, cmd), cmd + " went on with no TV set up");
+                }
+                string[] lines = printed.ToString().Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+                Check(boxes.Count == 0, "push or screenshot opened a message box: " + string.Join(" | ", boxes.ToArray()));
+                Check(lines.Length == 4 && Array.TrueForAll(lines, l => l.StartsWith("TVFollow: ")), "what they printed: " + string.Join(" | ", lines));
+                Check(lines[0].Contains("couldn't read settings.ini") && lines[0].Contains("Access to the path is denied.") && lines[0].Contains(Settings.Dir),
+                    "the line about the settings: " + lines[0]);
+                Check(lines[1].Contains("no TV is set up yet"), "the line about setup: " + lines[1]);
+
+                // the commands a person starts (a shortcut, or TVFollow itself) still get the box, and print nothing
+                printed.GetStringBuilder().Length = 0;
+                Check(Program.SettingsUnreadable(unreadable, "on") && Program.NotSetUp(empty, "pc") && Program.SettingsUnreadable(unreadable, ""), "another command went on");
+                Check(boxes.Count == 3 && boxes[0].Contains("Access to the path is denied.") && boxes[1].Contains("isn't set up yet") && printed.ToString().Length == 0,
+                    "the other commands: " + boxes.Count + " boxes, printed <" + printed + ">");
+
+                // settings that are fine stop nothing, and nothing is said
+                boxes.Clear();
+                var fine = new Settings();
+                Tv(fine).Ip = "192.168.1.50";
+                Tv(fine).Serial = "X000000001";
+                Check(!Program.SettingsUnreadable(fine, "push") && !Program.NotSetUp(fine, "push") && !Program.NotSetUp(fine, "off"), "settings that are fine stopped a command");
+                Check(boxes.Count == 0 && printed.ToString().Length == 0, "something was said about settings that are fine");
+            }
+            finally
+            {
+                Program.Box = box;
+                Console.SetOut(console);
+            }
+        }
+
+        static void DevFilesMoveWithSettings()
+        {
+            string home = Settings.Dir;                   // where the settings are (the tests' own folder)...
+            string other = TempFolder("TVFollow data");   // ...and where they move to, as to a portable copy's folder
+            try
+            {
+                var s = new Settings();
+                Tv(s).Ip = "192.168.1.50";
+                Tv(s).Serial = "X000000001";
+                var tvs = new List<Controller> { FirstTv(s) };
+                // the copy of the app pushed last and the app log, under the names the developer tools give them
+                string kept, log;
+                using (DevTools tools = DevTools.ForCommandLine(s, tvs))
+                {
+                    kept = "dev\\" + Path.GetFileName(tools.Tvs[0].KeptPath);
+                    log = "dev\\" + Path.GetFileName(tools.Tvs[0].AppLogPath);
+                }
+                WriteFile(home, kept, "the app pushed last");
+                WriteFile(home, log, "what the app printed");
+                WriteFile(home, kept + ".tmp", "half a copy");
+                WriteFile(home, "dev\\notes.txt", "somebody's own");
+                using (var setup = new SetupForm(s))
+                {
+                    string problem = setup.SaveIn(other);
+                    Check(problem == null && Settings.SameDir(Settings.Dir, other) && File.Exists(Path.Combine(other, "settings.ini")), "the settings didn't move: " + problem);
+                    Check(File.Exists(Path.Combine(other, kept)) && File.ReadAllText(Path.Combine(other, kept)) == "the app pushed last",
+                        "the copy of the pushed app stayed behind");
+                    Check(File.Exists(Path.Combine(other, log)) && File.ReadAllText(Path.Combine(other, log)) == "what the app printed", "the app log stayed behind");
+                    Check(Directory.GetFiles(Path.Combine(other, "dev")).Length == 2, "something that isn't the developer tools' came along: " +
+                        string.Join(", ", Directory.GetFiles(Path.Combine(other, "dev"))));
+                    // so there's still something to put back on a TV that lost its app
+                    using (DevTools tools = DevTools.ForCommandLine(s, tvs)) Check(tools.Tvs[0].HasKept, "nothing to put back after the move");
+
+                    // saved again where they are: nothing moves, and a newer copy there isn't written over by the old one
+                    File.WriteAllText(Path.Combine(other, kept), "a newer app");
+                    Check(setup.SaveIn(other) == null && File.ReadAllText(Path.Combine(other, kept)) == "a newer app", "saving in the same folder again");
+
+                    // a folder that can't be made (it's under a file): said, and the settings stay where they were
+                    problem = setup.SaveIn(Path.Combine(other, "settings.ini", "deeper"));
+                    Check(problem != null && Settings.SameDir(Settings.Dir, other), "a folder that can't be made: " + problem + " / now in " + Settings.Dir);
+                }
+            }
+            finally
+            {
+                Settings.Dir = home;
+                try { Directory.Delete(Path.Combine(home, "dev"), true); } catch { }
+                Directory.Delete(Path.GetDirectoryName(other), true);
             }
         }
 

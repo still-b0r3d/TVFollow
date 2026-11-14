@@ -148,18 +148,23 @@ nothing below runs while it isn't.
   `query/apps` (its id is `dev`).
 - **Remove** is `plugin_install` with `mysubmit=Delete`; **Screenshot** is
   `plugin_inspect` with `mysubmit=Screenshot`, then the picture the page links
-  (`pkgs/dev.jpg` or `.png`).
+  (`pkgs/dev.jpg` or `.png`). The picture's first bytes say which of the two it is. Under
+  a file name ending in `.png` or `.jpg` it's saved as that kind, made over if the TV sent
+  the other; any other name gets the picture's own kind added.
 - **Putting an app back:** each successful push keeps a copy in `dev\<serial>.zip` in the
   settings folder. When the monitors go off and TVFollow is about to turn off a TV that's
   showing the PC, it first checks the TV still lists its `dev` app. If not, and developer
   mode is on, the copy goes back on, then the TV turns off. A button's **TV off**, sleep
   and shutdown never do this, and a TV on Limited, which hides its list of apps, is
   skipped. If developer mode went off, or the copy couldn't go back (a new password, say),
-  a notification says so, once each time. **Remove** deletes the copy.
+  a notification says so, once each time. **Remove** deletes the copy. When setup moves
+  the settings, from installed to portable or back, the copy and the app log go along.
 - **Pushing on save** watches the folder pushed last, sub-folders too, and pushes 1.5
-  seconds after the last change, but only while this PC is on the TV's network. Changes to
-  skipped files (`.git`, editors' temporary files) don't count, and a zip that's the same
-  as the one the TV took last isn't sent. When the TV can't take the app (it's off,
+  seconds after the last change, but only while this PC is on the TV's network. A folder
+  is remembered even when its own push didn't work, so the next save tries again; a .zip
+  or the example takes its place only once it's on the TV. Changes to skipped files
+  (`.git`, editors' temporary files) don't count, and a zip that's the same as the one
+  the TV took last isn't sent. When the TV can't take the app (it's off,
   developer mode is off, the password is wrong), a notification says so once, not again at
   every save until that's over. What the TV says about the app itself (code that doesn't
   compile, say) comes at every save. Only a folder on a drive letter (`C:\apps\mine`) is
@@ -270,7 +275,7 @@ remote_layout=classic
 | `paused` | Only there while paused from the tray (`paused=yes`) |
 | `developer_tools` | Only there while the developer tools are switched on (`developer_tools=yes`) |
 | `dev_password` | The developer mode password, encrypted for your Windows account (`dpapi:` and Windows' own encryption). Copied to another PC or account, it can't be read, and the password box is empty again |
-| `dev_folder` | The app's folder pushed last (empty after pushing a zip or the example) |
+| `dev_folder` | The app's folder pushed last (empty once a zip or the example is on the TV instead) |
 | `dev_push_back`, `dev_on_save`, `dev_inputs`, `dev_home` | The developer tools' four options (`dev_push_back=no`, `dev_on_save=yes`, `dev_inputs=yes` and `dev_home=yes` are only written when set that way) |
 
 **Several TVs:** the first TV uses the keys above, the way TVFollow 1.1 wrote them, so an
@@ -292,8 +297,8 @@ The numbers are the order the Settings window lists the TVs in, and the ones the
 Everything is per user, so TVFollow never needs admin rights. Uninstalling removes all
 of it.
 
-**Portable copies** keep `settings.ini`, the log and `updates.ini` in a `TVFollow data`
-folder next to TVFollow.exe, and write nothing anywhere else: no registry, no Start menu,
-no Apps entry. That folder is how TVFollow knows it's portable. Installed or portable,
+**Portable copies** keep `settings.ini`, the log, `updates.ini` and the developer tools'
+`dev` folder in a `TVFollow data` folder next to TVFollow.exe, and write nothing anywhere
+else: no registry, no Start menu, no Apps entry. That folder is how TVFollow knows it's portable. Installed or portable,
 only one TVFollow follows the monitors at a time: a second one started alongside steps
 back.
