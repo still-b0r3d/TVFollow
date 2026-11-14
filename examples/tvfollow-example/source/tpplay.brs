@@ -97,14 +97,14 @@ function TpWaitMs(st as object) as integer
     return left
 end function
 
-' Whether a run is being played (or is just ending), when Rukus must not come on.
+' Whether a run is being played (or is just ending), when Ruckus must not come on.
 function TpBusy(st as object) as boolean
     if st.tp = invalid then return false
     return st.tp.view = "play" or st.tp.view = "signal"
 end function
 
 ' Main's loop calls this on every turn in the game: a frame when one is due, and once a second
-' the clock and the screensaver's chores (Rukus comes on only while the game is paused or on a
+' the clock and the screensaver's chores (Ruckus comes on only while the game is paused or on a
 ' menu).
 sub TpTurn(st as object)
     tp = st.tp

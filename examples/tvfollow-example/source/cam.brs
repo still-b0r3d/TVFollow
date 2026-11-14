@@ -1,12 +1,12 @@
-' Rukus Cam on channel 9 (nine lives): a security camera on Rukus's room, live. Like the VCR it
+' Ruckus Cam on channel 9 (nine lives): a security camera on Ruckus's room, live. Like the VCR it
 ' has a picture of its own, the same in every look, laid out on the 1280 x 720 grid (scaled by
 ' st.k).
 '
-' The room is pixel art, 160 x 90 of its pixels, each 8 grid units (Rukus's own pixel size). It's
+' The room is pixel art, 160 x 90 of its pixels, each 8 grid units (Ruckus's own pixel size). It's
 ' drawn into a small picture once a minute and stretched over the screen. The window shows the
 ' hour: sunrise from 6, day from 8 (the sun crossing the window and lying on the floor), sunset
-' from 17, and from 20 to 6 the camera switches to infrared: grey-green, the moon out, Rukus's
-' eyes shining. Rukus is the screensaver's (saver.brs): the same walks, sits, grooms, loafs, naps
+' from 17, and from 20 to 6 the camera switches to infrared: grey-green, the moon out, Ruckus's
+' eyes shining. Ruckus is the screensaver's (saver.brs): the same walks, sits, grooms, loafs, naps
 ' and stretches, wandering off now and then and coming back, and the stuck pixel he chases. OK
 ' throws him a treat from the camera, as treat cameras do: one at a time, nine a day. While one
 ' is coming or waiting it's all he thinks about: no wandering off and no napping, and he dashes
@@ -14,14 +14,14 @@
 '
 ' The camera's words are VT323 with a hard shadow: CAM 1 at the top left (and IR at night), REC
 ' at the top right with its dot blinking, the date and time at the bottom left, and for a few
-' seconds after a key, what the keys do. While it's on, Rukus the screensaver stays away (he's
+' seconds after a key, what the keys do. While it's on, Ruckus the screensaver stays away (he's
 ' on already) and the TV is kept awake as for b0r3d FM. While the TV's own screensaver may have
-' blanked the screen, Rukus carries on but the camera is drawn only once a second, so if the TV
+' blanked the screen, Ruckus carries on but the camera is drawn only once a second, so if the TV
 ' is still lit after all, the picture and its clock still move.
 
-' The camera: the screensaver's scene (its sv: Rukus, the stuck pixel, his z's, the pop) with the
+' The camera: the screensaver's scene (its sv: Ruckus, the stuck pixel, his z's, the pop) with the
 ' room, the treats and the words added. Made the first time the guide shows the channel, and
-' kept, so the preview and the channel show the same Rukus.
+' kept, so the preview and the channel show the same Ruckus.
 function CamState(st as object) as object
     if st.cam <> invalid then return st.cam
     cam = {
@@ -74,12 +74,12 @@ sub OpenCam(st as object)
     cam.frame.Mark()
     cam.blank = false
     CamChores(st, cam)
-    print "b0r3d TV Rukus Cam: on"
+    print "b0r3d TV Ruckus Cam: on"
     DrawCamScreen(st)
 end sub
 
 ' Back to the guide. The camera's word pictures go (the guide's preview writes its own small
-' words); Rukus, his room and a treat on its way stay, so the preview shows him carrying on.
+' words); Ruckus, his room and a treat on its way stay, so the preview shows him carrying on.
 sub CloseCam(st as object)
     cam = st.cam
     if cam <> invalid then
@@ -91,7 +91,7 @@ sub CloseCam(st as object)
         cam.hintText = ""
     end if
     st.mode = "guide"
-    print "b0r3d TV Rukus Cam: off"
+    print "b0r3d TV Ruckus Cam: off"
     Redraw(st)
 end sub
 
@@ -112,7 +112,7 @@ end sub
 ' Main's loop calls this on every turn on channel 9: the clock four times a second (so the
 ' seconds shown never skip one); once a second the chores (the TV kept awake, as for b0r3d FM),
 ' the room's hour, and whether the TV's own screensaver may have blanked the screen (at its own
-' time, no margin); and a frame about 30 times a second. While the screen may be blank, Rukus
+' time, no margin); and a frame about 30 times a second. While the screen may be blank, Ruckus
 ' still moves on about 10 times a second but the camera is drawn once a second; a key, or the
 ' TV's screensaver ending (ScreensaverEvent), brings the 30 frames straight back.
 sub CamTurn(st as object)
@@ -172,9 +172,9 @@ sub CamChores(st as object, cam as object)
     end if
 end sub
 
-' --- Rukus and the treats ---
+' --- Ruckus and the treats ---
 
-' Everything moves on by dt seconds: a treat in the air, Rukus (the screensaver's moves), the
+' Everything moves on by dt seconds: a treat in the air, Ruckus (the screensaver's moves), the
 ' stuck pixel, his z's and the hearts. While a treat is coming or waiting, CamWantsTreat has its
 ' say before his move and after it, so not even one frame shows him dozing off or walking away.
 sub CamStep(cam as object, dt as dynamic)
@@ -232,7 +232,7 @@ sub CamThrowTreat(st as object, cam as object)
     if r.state <> "pounce" then cam.px = invalid
     if cam.pxTimer < 30 then cam.pxTimer = 30
     CamWantsTreat(cam)
-    print "b0r3d TV Rukus Cam: a treat ("; cam.treatsUsed; " of 9 today)"
+    print "b0r3d TV Ruckus Cam: a treat ("; cam.treatsUsed; " of 9 today)"
 end sub
 
 ' A treat is coming or waiting, so it's all he thinks about: he doesn't wander off (one more act
@@ -338,7 +338,7 @@ function CamRgb(r as dynamic, g as dynamic, b as dynamic) as integer
     return out
 end function
 
-' Rukus's poses in the hour's light (his own colours, not the look's), as the screensaver's runs.
+' Ruckus's poses in the hour's light (his own colours, not the look's), as the screensaver's runs.
 ' In infrared his eyes shine.
 function CamRukusRuns(ph as string) as object
     base = RukusColors()

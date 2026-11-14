@@ -41,7 +41,7 @@ sub AddInputChannels(st as object)
         i = IndexOfId(st.channels, RegRead("last", ""))
         if i >= 0 then st.focus = i
     end if
-    ' the channel list being edited keeps its place, also while Rukus or the stand-in is over it
+    ' the channel list being edited keeps its place, also while Ruckus or the stand-in is over it
     if editing <> "" then st.csel = IndexOfId(st.all, editing)
     if st.csel > st.all.Count() - 1 then st.csel = st.all.Count() - 1
     if st.csel < 0 then st.csel = 0

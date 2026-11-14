@@ -950,7 +950,7 @@ end function
 ' How often the guide is drawn again while its preview plays a demo: five times a second for
 ' Stuck Pixels, ten for Test Pattern (its ball moves), about nine for Snake, ten for b0r3d FM's
 ' bars, twice for Commercial Breaks (its card turns over every 8 s) and for the VCR (its 12:00
-' blinks), ten for Rukus Cam (he walks), or less on a TV that takes long to draw the guide (never
+' blinks), ten for Ruckus Cam (he walks), or less on a TV that takes long to draw the guide (never
 ' more than half the time spent drawing).
 function DemoRedrawMs(st as object) as integer
     id = PreviewGameId(st)
@@ -1012,7 +1012,7 @@ sub DrawGamePreview(st as object, ch as object, x as integer, y as integer, w as
 end sub
 
 ' Whether a channel's preview box plays a demo of it: the games, b0r3d FM, Commercial Breaks,
-' the VCR and Rukus Cam (live), in every look.
+' the VCR and Ruckus Cam (live), in every look.
 function HasPreview(ch as object) as boolean
     return ch.kind = "game" or ch.kind = "radio" or ch.kind = "promo" or ch.kind = "vcr" or ch.kind = "cam"
 end function

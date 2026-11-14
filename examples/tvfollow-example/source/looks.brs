@@ -153,7 +153,7 @@ function RgbKit(index as integer) as object
     }
 end function
 
-' Rukus in the look's colours: his own fur, or shades of the phosphor.
+' Ruckus in the look's colours: his own fur, or shades of the phosphor.
 function RukusColorsFor(st as object) as object
     if st.look <> "phosphor" then return RukusColors()
     k = st.kit

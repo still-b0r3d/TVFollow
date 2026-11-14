@@ -1,5 +1,5 @@
 ' b0r3d FM, channel 22: the owner's songs streamed from b0r3d.download with Roku's own audio
-' player (roAudioPlayer), with a bar visualizer and Rukus, drawn in every look.
+' player (roAudioPlayer), with a bar visualizer and Ruckus, drawn in every look.
 '
 ' The player keeps the whole song list and moves on by itself at the end of a song (and back to
 ' the first after the last). Skipping stops it, sets the song and plays again (Play starts at
@@ -198,7 +198,7 @@ sub FmTurn(st as object)
     fm = st.fm
     if fm = invalid then return
 
-    ' once a second: the clock, and the chores (the TV kept awake while it plays; paused, Rukus
+    ' once a second: the clock, and the chores (the TV kept awake while it plays; paused, Ruckus
     ' may come on as in a paused game)
     if st.fmClock = invalid then st.fmClock = CreateObject("roTimespan")
     if st.fmClock.TotalMilliseconds() >= 1000 then
@@ -527,7 +527,7 @@ sub DrawFmScreen(st as object)
     if fm.failed then infoText = "The station can't be reached right now. OK tries again."
     s.DrawText(infoText, left, infoY + Z(44, k), kit.soft, f.now)
 
-    ' Rukus, sitting by the song, clear of the bars' frame above him
+    ' Ruckus, sitting by the song, clear of the bars' frame above him
     sc = Z(7, k)
     rukusX = right - 16 * sc - Z(16, k)
     rukusY = infoY - Z(10, k)

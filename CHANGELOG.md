@@ -25,7 +25,7 @@ A new Settings window, and developer tools for putting your own Roku apps on the
 - **Push a .zip…**, **Push a folder…** (TVFollow zips it, leaving out `.git`, `Thumbs.db`
   and editors' temporary files) and **Push the example app**. An app one folder down is
   found. When the TV refuses an app, its own words say why.
-- The example app is b0r3d TV 0.71 (Build: 87e560a), b0r3d's channel guide for Roku TVs
+- The example app is b0r3d TV 0.71 (Build: fda3dd9), b0r3d's channel guide for Roku TVs
   that looks like an old cable box, with a VCR, a camera on Ruckus's room, three games, a
   radio station and late-night commercials. With **Let the app switch the TV's inputs**
   ticked, the TV's inputs are channels in its guide. Its source is in

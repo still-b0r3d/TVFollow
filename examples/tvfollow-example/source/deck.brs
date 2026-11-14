@@ -184,14 +184,14 @@ sub DeckStopped(st as object)
     DeckRedraw(st)
 end sub
 
-' The player's messages can come while Rukus or Agent Ø's signal is over the VCR: the deck's
+' The player's messages can come while Ruckus or Agent Ø's signal is over the VCR: the deck's
 ' screen is drawn only while it's the one up.
 sub DeckRedraw(st as object)
     if st.mode = "deck" then Redraw(st)
 end sub
 
 ' Main's loop calls this on every turn on channel 3: once a second the clock and the chores (the
-' TV kept awake while a tape plays or starts; on the blue screen or paused, Rukus may come on, as
+' TV kept awake while a tape plays or starts; on the blue screen or paused, Ruckus may come on, as
 ' in a paused game), the display going 5 s after play starts, and the 12:00 blinking.
 sub DeckTurn(st as object)
     d = st.deck
@@ -399,7 +399,7 @@ sub DeckTakeTape(st as object, tape as dynamic)
         print "b0r3d TV VCR: left out a tape that isn't an http:// or https:// address of up to 2000 characters"
         return
     end if
-    ' what's over the screen goes first: the stand-in screen, Agent Ø's signal, Rukus
+    ' what's over the screen goes first: the stand-in screen, Agent Ø's signal, Ruckus
     if st.mode = "aside" then ComeBack(st)
     if st.screen = invalid then return
     if st.mode = "hijack" then StopHijack(st, true)

@@ -11,7 +11,7 @@
 function GameChannels() as object
     vcr = MakeChannel("video.vcr", "VCR", "VCR", "The VCR on channel 3, made by b0r3d", "vcr")
     vcr.n = "03"
-    cam = MakeChannel("cam.rukus", "Rukus Cam", "RUKUS", "Rukus's room, live, made by b0r3d", "cam")
+    cam = MakeChannel("cam.rukus", "Ruckus Cam", "RUCKUS", "Ruckus's room, live, made by b0r3d", "cam")
     cam.n = "09"
     stuck = MakeChannel("game.stuck", "Stuck Pixels", "STUCK", "Falling blocks, made by b0r3d", "game")
     stuck.n = "20"
@@ -44,7 +44,7 @@ function OkWord(ch as object) as string
     if ch.kind = "radio" then return "OK tunes to " + ch.name
     if ch.kind = "promo" then return "OK watches " + ch.name
     if ch.kind = "vcr" then return "OK turns on the " + ch.name
-    if ch.kind = "cam" then return "OK checks on Rukus"
+    if ch.kind = "cam" then return "OK checks on Ruckus"
     return "OK opens " + ch.name
 end function
 
@@ -149,14 +149,14 @@ function StuckWaitMs(st as object) as integer
     return left
 end function
 
-' Whether a run is being played (or is just ending), when Rukus must not come on.
+' Whether a run is being played (or is just ending), when Ruckus must not come on.
 function StuckBusy(st as object) as boolean
     if st.sp = invalid then return false
     return st.sp.view = "play" or st.sp.view = "signal"
 end function
 
 ' Main's loop calls this on every turn in the game: a frame when one is due, and once a second
-' the clock and the screensaver's chores (Rukus comes on only while the game is paused or on a
+' the clock and the screensaver's chores (Ruckus comes on only while the game is paused or on a
 ' menu).
 sub StuckTurn(st as object)
     sp = st.sp

@@ -39,7 +39,7 @@ sub DrawPhosphorGuide(st as object)
     line = Z(2, k)
     glow = Z(1, k)
 
-    ' The header: title, date and clock over a rule, with Rukus loafing on it.
+    ' The header: title, date and clock over a rule, with Ruckus loafing on it.
     titleEnd = DrawPhosphorHeader(st, "B0R3D TV // CHANNEL GUIDE", true)
     sc = Z(7, k)
     DrawSprite(s, RukusLoaf(), RukusColorsFor(st), titleEnd + Z(24, k), Z(86, k) - 9 * sc, sc)

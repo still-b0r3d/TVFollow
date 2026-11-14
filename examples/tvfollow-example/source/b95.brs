@@ -1,4 +1,4 @@
-' The b0r3d 95 look: a desktop with icons and Rukus, the "b0r3d TV Guide" window (title bar,
+' The b0r3d 95 look: a desktop with icons and Ruckus, the "b0r3d TV Guide" window (title bar,
 ' menu bar, the channel list with a scrollbar, a preview box, Open and Settings... buttons and a
 ' status bar) and a taskbar with Start and the clock. Settings and its pages open as dialogs.
 ' Laid out on the 1280 x 720 grid (scaled by st.k). W95FA has no bold, no middle dot and no
@@ -154,10 +154,10 @@ end sub
 
 ' The desktop behind every b0r3d 95 screen: one column of icons down the left (the TV's inputs,
 ' up to four, then b0r3d's own channels in their order, then Settings), the focused channel's
-' label lit (or the open channel's, or Settings'), Rukus by the taskbar, and the taskbar itself.
-' The column has to end above Rukus: when it wouldn't, the icons move closer together, then the
+' label lit (or the open channel's, or Settings'), Ruckus by the taskbar, and the taskbar itself.
+' The column has to end above Ruckus: when it wouldn't, the icons move closer together, then the
 ' channels that aren't games leave the desktop (they're in the guide), from the last: Commercial
-' Breaks, b0r3d FM, Rukus Cam, the VCR; then inputs, from the last. While a game is being played Rukus
+' Breaks, b0r3d FM, Ruckus Cam, the VCR; then inputs, from the last. While a game is being played Ruckus
 ' stays away: in a game he only comes on while it's paused.
 sub DrawB95Desktop(st as object, ch as dynamic, task as string)
     s = st.screen
@@ -569,7 +569,7 @@ end sub
 
 ' Which picture goes with a channel: a monitor for the PC's input, a TV for other inputs, a
 ' stack of pixels for Stuck Pixels, colour bars for Test Pattern, a VCR for the VCR, a camera
-' for Rukus Cam, a window for apps.
+' for Ruckus Cam, a window for apps.
 function B95IconFor(st as object, ch as object) as string
     if ch.id = "video.vcr" then return "vcr"
     if ch.id = "cam.rukus" then return "cam"
@@ -587,7 +587,7 @@ end function
 ' A small picture on a 28 x 26 grid, size pixels wide: "pc" (a monitor), "tv" (a TV with rabbit
 ' ears), "settings" (a panel of sliders), "stuck" (a stack of pixels with a stuck yellow one),
 ' "test" (colour bars on a little stand), "radio", "snake", "vcr" (a VCR with a tape slot and a
-' little display), "cam" (a camera on the wall, its red light on, Rukus's head under it) or "app"
+' little display), "cam" (a camera on the wall, its red light on, Ruckus's head under it) or "app"
 ' (a window with a play button).
 sub DrawB95Icon(s as object, kind as string, x as integer, y as integer, size as integer, c as object)
     u = size / 28

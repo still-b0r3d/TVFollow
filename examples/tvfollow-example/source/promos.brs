@@ -26,7 +26,7 @@ function PromoSpots() as object
             tag: "TONIGHT'S CREATURE FEATURE",
             title: "z0mbie crystal",
             sub: "A CITY FULL OF THE DEAD, ONE BLOCK AT A TIME.",
-            bullet1: "A roguelike run across the city, with Rukus in it somewhere.",
+            bullet1: "A roguelike run across the city, with Ruckus in it somewhere.",
             bullet2: "Every run is a new map, and a run can be saved and picked up later.",
             cta: "PLAY IT ON b0r3d.org",
             accent: &h00E5FFFF
@@ -36,13 +36,13 @@ function PromoSpots() as object
             title: "DON'T TOUCH THAT DIAL",
             sub: "b0r3d TV'S OWN CHANNELS: 3, 9 AND 20 TO 24.",
             bullet1: "A VCR, a cat cam, three games, a radio station and these commercials.",
-            bullet2: "Leave the remote alone for a while and Rukus comes by.",
+            bullet2: "Leave the remote alone for a while and Ruckus comes by.",
             cta: "THIS HAS BEEN A TEST. STAY TUNED.",
             accent: &hFFD700FF
         },
         {
             tag: "ALSO PLAYING ON b0r3d.org",
-            title: "RUKUS: LOCKED & LOAFED",
+            title: "RUCKUS: LOCKED & LOAFED",
             sub: "ONE CAT AND HIS DUAL GATLING RIG VS. THE ROBO-VACS.",
             bullet1: "Hold off the horde for ten minutes a stage, then the boss.",
             bullet2: "Three stages, each with its own online high scores.",
@@ -156,7 +156,7 @@ function PromoWaitMs(st as object) as integer
 end function
 
 ' Main's loop calls this on every turn on channel 24: once a second the clock and the chores
-' (the TV kept awake while the ads play; paused, Rukus may come on as in a paused game), the
+' (the TV kept awake while the ads play; paused, Ruckus may come on as in a paused game), the
 ' next card when one's time is up, and a frame about 15 times a second (once a second while
 ' paused, for the clock).
 sub PromoTurn(st as object)

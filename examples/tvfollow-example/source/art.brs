@@ -1,4 +1,4 @@
-' Pixel art. Rukus, loafing (the same sprite as b0r3d 95's buddy). In the rows a dot is
+' Pixel art. Ruckus, loafing (the same sprite as b0r3d 95's buddy). In the rows a dot is
 ' clear; the letters are looked up in RukusColors().
 
 function RukusLoaf() as object
@@ -15,7 +15,7 @@ function RukusLoaf() as object
     ]
 end function
 
-' Rukus's poses for the screensaver, 16 x 16 and facing left (the same sprites as b0r3d 95's
+' Ruckus's poses for the screensaver, 16 x 16 and facing left (the same sprites as b0r3d 95's
 ' buddy). The letters are the same as in RukusLoaf().
 function RukusPoses() as object
     return {

@@ -2,11 +2,11 @@
 ' Everything is drawn on one 2D screen: 1920 x 1080 where the TV allows it, else 1280 x 720.
 ' Screens (st.mode): the guide, Settings, the channel list, the TV check, the Screensaver check,
 ' About and clearing the high scores; "deck" while the VCR (channel 3, deck.brs) is on, "cam"
-' while Rukus Cam (channel 9, cam.brs) is on, "stuck" while Stuck Pixels (channel 20) is open
+' while Ruckus Cam (channel 9, cam.brs) is on, "stuck" while Stuck Pixels (channel 20) is open
 ' (stuckplay.brs), "testpat" while Test Pattern
 ' (channel 21) is open (tpplay.brs), "fm" for b0r3d FM (22, fm.brs), "snake" for Snake (23,
 ' snakeplay.brs), "promo" for Commercial Breaks (24, promos.brs); "hijack" while Agent Ø's
-' signal is on (hijack.brs); "saver" while Rukus is on, "aside" while b0r3d TV steps aside for
+' signal is on (hijack.brs); "saver" while Ruckus is on, "aside" while b0r3d TV steps aside for
 ' the TV's own screensaver (saver.brs). A deep link with a tape (tape=<a video's address>), at
 ' launch or later, turns the VCR on and plays it (deck.brs).
 
@@ -78,7 +78,7 @@ sub Main(args as dynamic)
                     ' a key the 2D screen passed on just as b0r3d TV stepped aside
                     ComeBack(st)
                 else if st.mode = "saver" then
-                    ' a key while Rukus is on only ends Rukus
+                    ' a key while Ruckus is on only ends Ruckus
                     StopSaver(st)
                 else if not HandleKey(st, code) then
                     exit while
@@ -273,7 +273,7 @@ sub OpenChannel(st as object)
 end sub
 
 ' Once a second (more often while the preview box plays a demo, or the RGB look's lights move):
-' the clock moves on, a channel that didn't open says so, Rukus comes on when b0r3d TV has sat
+' the clock moves on, a channel that didn't open says so, Ruckus comes on when b0r3d TV has sat
 ' idle long enough, and the screen is drawn again, since Roku's own screensaver can wipe it while
 ' b0r3d TV is open.
 sub Tick(st as object)

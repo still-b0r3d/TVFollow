@@ -1,14 +1,14 @@
-' The Rukus screensaver. Rukus walks on, sits, grooms, loafs, naps, stretches and wanders off,
+' The Ruckus screensaver. Ruckus walks on, sits, grooms, loafs, naps, stretches and wanders off,
 ' and now and then he chases a stuck pixel, while a clock in the look's font drifts slowly so
 ' nothing stays in one spot. One scene, two places:
 '   - The whole TV: RunScreenSaver() runs when "b0r3d TV" is picked in the TV's Settings,
 '     Theme, Screensavers. Roku starts it on its own, so it reads b0r3d TV's saved settings
 '     for the look, its colour and the clock.
 '   - Inside b0r3d TV: Roku shows no screensaver over a 2D app like this one (at the TV's
-'     screensaver time the screen just goes black), so b0r3d TV brings Rukus on itself, 30
+'     screensaver time the screen just goes black), so b0r3d TV brings Ruckus on itself, 30
 '     seconds before that time, and any key brings back the screen you were on. What happens
 '     at the TV's time is the Screensaver setting's pick (see SaverChores).
-' Laid out on the 1280 x 720 grid (scaled by st.k), like the looks. Rukus is 16 x 16 of his
+' Laid out on the 1280 x 720 grid (scaled by st.k), like the looks. Ruckus is 16 x 16 of his
 ' pixels, each 8 grid units wide; his feet stand on r.floor.
 
 sub RunScreenSaver()
@@ -35,7 +35,7 @@ sub RunScreenSaver()
     end while
 end sub
 
-' A fresh scene: Rukus just off screen, about to walk on, and the clock at a random spot.
+' A fresh scene: Ruckus just off screen, about to walk on, and the clock at a random spot.
 function NewSaver(st as object) as object
     k = st.k
     sv = {
@@ -160,7 +160,7 @@ sub SaverFrame(st as object)
     DrawSaver(st)
 end sub
 
-' --- Rukus ---
+' --- Ruckus ---
 
 sub StepRukus(sv as object, dt as dynamic)
     r = sv.r
@@ -533,17 +533,17 @@ end sub
 
 ' --- Inside b0r3d TV ---
 
-' Settings' picks. "keep": b0r3d TV resets the TV's idle clock so Rukus stays on (the first
+' Settings' picks. "keep": b0r3d TV resets the TV's idle clock so Ruckus stays on (the first
 ' try); "hand": b0r3d TV steps aside for the TV's own screensaver (the second try); "black": the
-' TV's black screen comes at its time, as in any 2D app; "off": no Rukus inside b0r3d TV.
+' TV's black screen comes at its time, as in any 2D app; "off": no Ruckus inside b0r3d TV.
 function SaverPicks() as object
     return ["keep", "hand", "black", "off"]
 end function
 
 function SaverPickWord(pick as string) as string
-    if pick = "keep" then return "Rukus, keeps the TV awake"
-    if pick = "hand" then return "Rukus, then the TV's screensaver"
-    if pick = "black" then return "Rukus, then black"
+    if pick = "keep" then return "Ruckus, keeps the TV awake"
+    if pick = "hand" then return "Ruckus, then the TV's screensaver"
+    if pick = "black" then return "Ruckus, then black"
     return "Off"
 end function
 
@@ -591,7 +591,7 @@ sub SaverProbes(st as object)
     st.canReset = true
     ' whether this run has seen the reset work (FinishIdleTest)
     st.keepWorks = false
-    st.idleResult = RegRead("idlereset", "not tried yet: it runs 20 s into a wait, when Rukus keeps the TV awake")
+    st.idleResult = RegRead("idlereset", "not tried yet: it runs 20 s into a wait, when Ruckus keeps the TV awake")
     try
         st.am.UpdateLastKeyPressTime()
     catch e
@@ -615,7 +615,7 @@ sub SaverProbes(st as object)
     st.quit = false
 end sub
 
-' How long Main's loop waits for a key: what's left of a frame (about 30 a second) while Rukus
+' How long Main's loop waits for a key: what's left of a frame (about 30 a second) while Ruckus
 ' is on, the open game's or channel's own frames, the demo's next step while the guide's
 ' preview plays one, else a second. The RGB look's lights move, so its guide and pages are drawn
 ' again up to 10 times a second, but, as with the demos, never more than half the time goes to
@@ -658,7 +658,7 @@ function RgbWaitMs(st as object) as integer
     return ms
 end function
 
-' Main's loop calls this on every turn while Rukus is on: a frame when one is due (whether the
+' Main's loop calls this on every turn while Ruckus is on: a frame when one is due (whether the
 ' wait ran out or a message came), then the chores, and now and then Agent Ø (hijack.brs).
 sub SaverTurn(st as object)
     if st.saver = invalid then return
@@ -674,7 +674,7 @@ function TvWaitSeconds(st as object) as integer
     return st.tvWaitPref * 60
 end function
 
-' Rukus comes on 30 seconds before the TV's time (after 5 minutes when the TV has none).
+' Ruckus comes on 30 seconds before the TV's time (after 5 minutes when the TV has none).
 function SaverStartSeconds(st as object) as integer
     tvTime = TvWaitSeconds(st)
     if tvTime <= 0 then return 300
@@ -682,9 +682,9 @@ function SaverStartSeconds(st as object) as integer
     return tvTime - 30
 end function
 
-' About once a second while b0r3d TV is open (from Tick, and from Rukus's frames): keeps the TV
-' awake when that's the pick, brings Rukus on when the wait is up, and steps aside for the TV's
-' own screensaver when that's the pick. Returns true when it has just brought Rukus on.
+' About once a second while b0r3d TV is open (from Tick, and from Ruckus's frames): keeps the TV
+' awake when that's the pick, brings Ruckus on when the wait is up, and steps aside for the TV's
+' own screensaver when that's the pick. Returns true when it has just brought Ruckus on.
 function SaverChores(st as object) as boolean
     if st.choreTimer.TotalMilliseconds() < 900 then return false
     st.choreTimer.Mark()
@@ -697,7 +697,7 @@ function SaverChores(st as object) as boolean
         if st.saverPick = "hand" and tvTime > 0 and not st.handTried and idle >= tvTime - 5 then StepAside(st)
         return false
     end if
-    ' in a game, Rukus only comes on while it's paused (or on its menus)
+    ' in a game, Ruckus only comes on while it's paused (or on its menus)
     if st.mode = "stuck" and StuckBusy(st) then return false
     if st.mode = "testpat" and TpBusy(st) then return false
     if st.mode = "snake" and SnakeBusy(st) then return false
@@ -707,11 +707,11 @@ function SaverChores(st as object) as boolean
 end function
 
 ' The chores for a channel that plays on its own (a radio station, the ads, a tape in the VCR,
-' Rukus Cam), about once a second.
-' While it plays, Rukus doesn't come on over it, but the TV is kept awake as SaverChores does
+' Ruckus Cam), about once a second.
+' While it plays, Ruckus doesn't come on over it, but the TV is kept awake as SaverChores does
 ' for the "keep" pick (without that, the TV turns the screen black at its screensaver time, as
-' over any 2D app, even mid-song). Paused, it's like a paused game: the usual chores, Rukus
-' included. Returns true when Rukus has just come on.
+' over any 2D app, even mid-song). Paused, it's like a paused game: the usual chores, Ruckus
+' included. Returns true when Ruckus has just come on.
 function MediaChores(st as object, playing as boolean) as boolean
     if not playing then return SaverChores(st)
     if st.choreTimer.TotalMilliseconds() < 900 then return false
@@ -721,9 +721,9 @@ function MediaChores(st as object, playing as boolean) as boolean
     return false
 end function
 
-' Rukus comes on over whichever screen is up; StopSaver brings that screen back.
+' Ruckus comes on over whichever screen is up; StopSaver brings that screen back.
 sub StartSaver(st as object)
-    print "b0r3d TV: Rukus comes on after "; st.idle.TotalSeconds(); " s without a key"
+    print "b0r3d TV: Ruckus comes on after "; st.idle.TotalSeconds(); " s without a key"
     st.saverFrom = st.mode
     st.mode = "saver"
     st.saver = NewSaver(st)
@@ -736,7 +736,7 @@ sub StopSaver(st as object)
     Redraw(st)
 end sub
 
-' The first try at keeping Rukus on past the TV's time: Roku's old hidden call that resets the
+' The first try at keeping Ruckus on past the TV's time: Roku's old hidden call that resets the
 ' TV's idle clock, every 20 s while b0r3d TV sits idle, for 2 hours at most (so the TV can still
 ' rest and switch itself off). The first time, it reads the TV's own idle count before, and again
 ' a second later (FinishIdleTest), for the Screensaver check page. The real proof is no black
@@ -803,7 +803,7 @@ end sub
 
 ' The second try: b0r3d TV closes its 2D screen (Roku allows other kinds of screen once the
 ' last 2D one is gone) and shows its splash picture on a small SceneGraph screen instead, so the
-' TV's own screensaver can come on over it: Rukus, when he's picked for the whole TV. Any key,
+' TV's own screensaver can come on over it: Ruckus, when he's picked for the whole TV. Any key,
 ' or that screensaver ending, brings the 2D screen back (ComeBack).
 sub StepAside(st as object)
     st.handTried = true
@@ -830,7 +830,7 @@ sub StepAside(st as object)
     if not ok then
         CloseStandIn(st)
         if not ReopenScreen(st) then return
-        SaveHandOver(st, "didn't work: the TV wouldn't show the stand-in screen, so Rukus stayed (" + ClockText(st, false) + ")")
+        SaveHandOver(st, "didn't work: the TV wouldn't show the stand-in screen, so Ruckus stayed (" + ClockText(st, false) + ")")
         st.mode = st.asideFrom
         StartSaver(st)
         return
@@ -897,18 +897,18 @@ sub ScreensaverEvent(st as object, info as dynamic)
         ComeBack(st)
         return
     end if
-    ' the TV's own black screen came over b0r3d TV, so Rukus didn't stay on past its time
+    ' the TV's own black screen came over b0r3d TV, so Ruckus didn't stay on past its time
     during = ""
-    if st.mode = "saver" then during = ", while Rukus was on"
+    if st.mode = "saver" then during = ", while Ruckus was on"
     if st.mode = "hijack" then during = ", while Agent Ø's signal was on"
     RegWrite("blank", "came on over b0r3d TV and went" + during + " (" + ClockText(st, false) + ")")
     if st.mode = "saver" then
         StopSaver(st)
     else if st.mode = "hijack" then
-        ' as a key: the signal ends, and from Rukus so does he
+        ' as a key: the signal ends, and from Ruckus so does he
         StopHijack(st, true)
     else
-        ' Rukus Cam goes straight back to its full frames
+        ' Ruckus Cam goes straight back to its full frames
         if st.mode = "cam" and st.cam <> invalid then st.cam.blank = false
         Redraw(st)
     end if
@@ -936,14 +936,14 @@ function SaverCheckRows(st as object) as object
         { label: "Idle-clock reset", value: st.idleResult },
         { label: "Hand over", value: RegRead("handover", "not tried yet") },
         { label: "TV's black screen", value: RegRead("blank", "not seen yet") },
-        { label: "Whole-TV Rukus", value: TvSaverAnswer() }
+        { label: "Whole-TV Ruckus", value: TvSaverAnswer() }
     ]
 end function
 
 function SaverPlan(st as object) as string
     if st.saverPick = "off" then return "off: at the TV's screensaver time the screen goes black, as in any 2D app"
     tvTime = TvWaitSeconds(st)
-    text = "Rukus comes on after " + SecondsWord(SaverStartSeconds(st)) + " without a key"
+    text = "Ruckus comes on after " + SecondsWord(SaverStartSeconds(st)) + " without a key"
     if tvTime <= 0 then return text + "; the TV's screensaver is off, so he stays"
     if st.saverPick = "keep" then return text + ", and b0r3d TV resets the TV's idle clock every 20 s so he stays (for up to 2 hours)"
     if st.saverPick = "hand" then return text + "; at " + SecondsWord(tvTime - 5) + " b0r3d TV steps aside, so the TV's own screensaver comes on at " + SecondsWord(tvTime)

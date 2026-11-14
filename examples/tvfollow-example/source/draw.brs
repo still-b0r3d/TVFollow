@@ -196,10 +196,10 @@ function NewPicture(w as integer, h as integer, alpha as boolean) as dynamic
     return bmp
 end function
 
-' For pictures that are only a saving (the RGB look's lettering made into pictures, Rukus's loaf
-' on its TV, Rukus Cam's words): after one couldn't be made, none is tried again for 5 seconds,
+' For pictures that are only a saving (the RGB look's lettering made into pictures, Ruckus's loaf
+' on its TV, Ruckus Cam's words): after one couldn't be made, none is tried again for 5 seconds,
 ' so a TV short of picture memory isn't asked (and the log isn't told) on every frame. Meanwhile
-' the RGB look draws its lettering and Rukus straight on the screen, and the camera leaves its
+' the RGB look draws its lettering and Ruckus straight on the screen, and the camera leaves its
 ' words out.
 sub PictureFailed(st as object)
     st.picFail = CreateObject("roTimespan")

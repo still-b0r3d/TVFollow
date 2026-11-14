@@ -4,13 +4,13 @@
 '   - From the guide: up up down down left right left right. Only the guide listens for it
 '     (elsewhere those keys play the games and skip songs), and the key that completes it does
 '     nothing else. (Paging keys make no code: two pages up and two down is just moving.)
-'   - Now and then while Rukus is on: after he's been on two minutes, a 1-in-300 chance each
-'     second, at most once each time he comes on. So it never comes before Rukus, never while
+'   - Now and then while Ruckus is on: after he's been on two minutes, a 1-in-300 chance each
+'     second, at most once each time he comes on. So it never comes before Ruckus, never while
 '     b0r3d TV has stepped aside for the TV's own screensaver (there's no screen then), and
 '     never once the TV may have turned the screen black (nobody would see it, but the static
 '     would be heard).
-' Any key after the static ends it; from Rukus, a key goes all the way back to the screen he
-' came over, as a key during Rukus does. Left alone, it ends 20 s after its last line. If the
+' Any key after the static ends it; from Ruckus, a key goes all the way back to the screen he
+' came over, as a key during Ruckus does. Left alone, it ends 20 s after its last line. If the
 ' TV's screensaver ends while it's on, that counts as a key.
 
 ' His lines, in his own voice: lowercase, short, dry. They say nothing about him that isn't
@@ -64,7 +64,7 @@ function NewHijack(st as object, returnMode as string) as object
     }
 end function
 
-' The hijack takes over the screen it broke into (the guide, or Rukus).
+' The hijack takes over the screen it broke into (the guide, or Ruckus).
 sub StartHijack(st as object)
     if st.mode = "hijack" or st.screen = invalid then return
     st.hijack = NewHijack(st, st.mode)
@@ -73,8 +73,8 @@ sub StartHijack(st as object)
     Redraw(st)
 end sub
 
-' Back to the screen it broke into. From Rukus with a key, all the way back to the screen he came
-' over; left alone, back to Rukus.
+' Back to the screen it broke into. From Ruckus with a key, all the way back to the screen he came
+' over; left alone, back to Ruckus.
 sub StopHijack(st as object, byKey as boolean)
     back = "guide"
     if st.hijack <> invalid then back = st.hijack.returnMode
@@ -108,7 +108,7 @@ end function
 sub HijackTurn(st as object)
     h = st.hijack
     if h = invalid then return
-    ' the screensaver's chores that don't bring Rukus on (the TV stays awake when that's the pick)
+    ' the screensaver's chores that don't bring Ruckus on (the TV stays awake when that's the pick)
     MediaChores(st, true)
     if h.stage = "static" then
         if h.stageTimer.TotalMilliseconds() >= h.staticMs then
@@ -158,7 +158,7 @@ function CheckHijackTrigger(st as object, code as integer) as boolean
     return true
 end function
 
-' Now and then while Rukus is on inside b0r3d TV (see the top of this file). SaverTurn calls it
+' Now and then while Ruckus is on inside b0r3d TV (see the top of this file). SaverTurn calls it
 ' on every turn; it looks once a second.
 sub MaybeIdleHijack(st as object)
     sv = st.saver

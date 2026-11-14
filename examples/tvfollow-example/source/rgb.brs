@@ -460,7 +460,7 @@ sub DrawRgbHints(st as object, keys as object)
     s.DrawText(st.version, rx - vw, by - f.ver.GetAscent(), c.dim, f.ver)
 end sub
 
-' Rukus at sc screen pixels a sprite pixel, made once into a picture (one draw a frame instead
+' Ruckus at sc screen pixels a sprite pixel, made once into a picture (one draw a frame instead
 ' of a hundred).
 function RgbRukus(st as object, sc as integer) as dynamic
     if st.rgbRukus <> invalid and st.rgbRukusScale = sc then return st.rgbRukus
@@ -517,7 +517,7 @@ sub DrawRgbGuide(st as object)
         DrawCentered(s, TrimToWidth(OkWord(ch), f.bigHint, pw - RgbPx(40, k)), px, top + bigH + gap, pw, hintH, c.dim, f.bigHint)
     end if
 
-    ' Rukus loafs on top of the TV
+    ' Ruckus loafs on top of the TV
     sc = RgbPx(6, k)
     if sc < 1 then sc = 1
     rukus = RgbRukus(st, sc)
