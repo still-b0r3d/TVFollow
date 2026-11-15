@@ -43,8 +43,10 @@ namespace TVFollow
         {
             public TvSettings Tv;
             public string Number = "";  // "2.  " in front of its name when there are several
-            public Label Name, State;
+            public Label Name, State, Shown;
             public ComboBox Input;
+            public Button Show;
+            public int ShowSeq;
         }
 
         // how the TV's address is shown (the screenshot tool shows a home-network one)
@@ -252,8 +254,12 @@ namespace TVFollow
             lines.Input = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200, Margin = new Padding(0, 2, 8, 0) };
             lines.Input.SelectedIndexChanged += delegate { InputChanged(lines); };
             inputRow.Controls.Add(lines.Input);
-            inputRow.Controls.Add(MakeButton("Show it on the TV", delegate { ShowOnTv(lines.Tv); }));
+            lines.Show = MakeButton("Show it on the TV", delegate { ShowOnTv(lines); });
+            inputRow.Controls.Add(lines.Show);
             inputRow.Margin = new Padding(0, 0, 0, 18); // a gap before the next TV, or the button
+            lines.Shown = Line("");
+            lines.Shown.Visible = false;
+            lines.Shown.Margin = new Padding(0, 0, 0, 14);
             return lines;
         }
 
@@ -494,6 +500,9 @@ namespace TVFollow
             var item = tv.Input.SelectedItem as InputItem;
             if (loading || item == null) return;
             tv.Tv.Input = item.Id.Substring("tvinput.".Length);
+            tv.ShowSeq++;
+            tv.Shown.Text = "";
+            tv.Shown.Visible = false;
             Log.Write("settings: " + (settings.SeveralTvs ? settings.LabelOf(tv.Tv) + "'s " : "") + "input " + tv.Tv.Input);
             Save();
         }
@@ -508,13 +517,42 @@ namespace TVFollow
             tray.DeveloperToolsChanged();
         }
 
-        void ShowOnTv(TvSettings tv)
+        async void ShowOnTv(TvLines lines)
         {
+            TvSettings tv = lines.Tv;
             var client = new RokuClient(tv.Ip, settings.Port);
             string id = tv.PcApp;
             DevTv tools = tray.Dev != null ? tray.Dev.Tvs.Find(d => d.Tv == tv) : null;
             if (tools != null) tools.Controller.NoteInputSwitch();
-            Task.Run(() => client.Launch(id, 3000));
+            int seq = ++lines.ShowSeq;
+            lines.Show.Enabled = false;
+            lines.Shown.Text = "Switching…";
+            lines.Shown.ForeColor = SetupPage.Muted;
+            lines.Shown.Visible = true;
+            int code = await Task.Run(() => client.Launch(id, 3000));
+            if (IsDisposed) return;
+            lines.Show.Enabled = true;
+            if (lines.ShowSeq != seq) return;
+            if (code >= 200 && code <= 299)
+            {
+                lines.Shown.Text = "Sent. This PC's screen should be on the TV now.";
+                lines.Shown.ForeColor = SystemColors.ControlText;
+            }
+            else if (code == 403)
+            {
+                lines.Shown.Text = "⚠  The TV said no. Check its Network access setting (Settings → System → Advanced system settings → Control by mobile apps → Network access → Enabled).";
+                lines.Shown.ForeColor = SetupPage.Warn;
+            }
+            else if (code == 0)
+            {
+                lines.Shown.Text = "⚠  The TV didn't answer. Is it on, and on this network?";
+                lines.Shown.ForeColor = SetupPage.Warn;
+            }
+            else
+            {
+                lines.Shown.Text = "⚠  The TV didn't switch (HTTP " + code + ").";
+                lines.Shown.ForeColor = SetupPage.Warn;
+            }
         }
 
         // start-with-Windows and the desktop shortcuts are part of the install

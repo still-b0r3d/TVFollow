@@ -10,6 +10,7 @@
 //                           do it to that TV alone
 //   TVFollow.exe uninstall  remove TVFollow from this PC (--quiet: don't ask)
 //   TVFollow.exe --version  print the version and the commit it was built from
+//   TVFollow.exe --help     print the commands (-h and /? too)
 // With the developer tools switched on in Settings, for test scripts (they print how it went):
 //   TVFollow.exe push <app folder or .zip> [TV]       push an app to the TV, with the password
 //                                                    saved in the developer tools
@@ -55,11 +56,12 @@ namespace TVFollow
             AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e) { Log.Write("crashed: " + e.ExceptionObject); };
 
             string cmd = args.Length > 0 ? args[0].ToLowerInvariant() : "";
-            if (cmd == "--version" || cmd == "-v")
+            int? immediate = QuickCommand(cmd);
+            if (immediate != null)
             {
                 AttachConsole(-1); // print into the window it was started from
-                Console.WriteLine("TVFollow " + FullVersion);
-                return 0;
+                Console.WriteLine(cmd == "--version" || cmd == "-v" ? "TVFollow " + FullVersion : HelpText());
+                return immediate.Value;
             }
 
             Application.EnableVisualStyles();
@@ -116,8 +118,37 @@ namespace TVFollow
             if (cmd == "follow") return Follow(settings, tvs, true, true);
             if (cmd.Length == 0) return Follow(settings, tvs, false, true);
 
-            MessageBox.Show("Unknown command: " + args[0] + "\n\nUse setup, on, off, pc, uninstall or --version.", "TVFollow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Box(UnknownCommandText(args[0]), MessageBoxIcon.Warning);
             return 2;
+        }
+
+        internal static int? QuickCommand(string cmd)
+        {
+            if (cmd == "--version" || cmd == "-v" || cmd == "--help" || cmd == "-h" || cmd == "/?" || cmd == "help") return 0;
+            return null;
+        }
+
+        internal static string UnknownCommandText(string arg)
+        {
+            return "Unknown command: " + arg + "\n\nUse setup, on, off, pc, push, screenshot, uninstall, --version or --help.";
+        }
+
+        internal static string HelpText()
+        {
+            return "TVFollow " + FullVersion + "\r\n\r\n" +
+                "Usage: TVFollow.exe [command]\r\n\r\n" +
+                "  (no command)            Set up on first run, or follow the monitors\r\n" +
+                "                          (while running: open Settings)\r\n" +
+                "  setup                   Run the setup wizard\r\n" +
+                "  on [TV]                 Turn the TVs on (or one TV, by number or name)\r\n" +
+                "  pc [TV]                 Turn the TVs on and switch them to this PC\r\n" +
+                "  off [TV]                Turn the TVs off\r\n" +
+                "  uninstall [--quiet]     Remove TVFollow from this PC\r\n" +
+                "  --version, -v           Show version and build\r\n" +
+                "  --help, -h, /?          Show this help\r\n\r\n" +
+                "With Developer tools on in Settings:\r\n" +
+                "  push <folder or .zip> [TV]        Push an app to the TV\r\n" +
+                "  screenshot <file or folder> [TV]  Save a picture of the TV's screen";
         }
 
         // push and screenshot are for test scripts, and a script can't click a message box
@@ -178,9 +209,15 @@ namespace TVFollow
                 return 2;
             }
             List<Controller> which = name.Length == 0 ? new List<Controller> { tvs[0] } : Pick(tvs, name);
-            if (which == null || which.Count != 1)
+            if (which == null)
             {
                 Console.WriteLine("TVFollow: no TV called " + name + ". Give a TV's number (1 to " + tvs.Count + ") or its name.");
+                return 2;
+            }
+            if (which.Count > 1)
+            {
+                string numbers = string.Join(", ", which.ConvertAll(c => (tvs.IndexOf(c) + 1).ToString(CultureInfo.InvariantCulture)).ToArray());
+                Console.WriteLine("TVFollow: more than one TV is called " + name + ". Give its number (" + numbers + ") instead.");
                 return 2;
             }
             string target;
@@ -239,7 +276,7 @@ namespace TVFollow
                 return 1;
             }
             // a folder gets the picture under the app's name and the time
-            if (Directory.Exists(path)) path = Path.Combine(path, DevTv.PictureName("TV", DevPicture.Kind(picture, extension)));
+            if (Directory.Exists(path)) path = Path.Combine(path, DevTv.PictureName(tv.AppName(), DevPicture.Kind(picture, extension)));
             // (the name it's saved under can differ from the one given: see DevPicture)
             try { path = DevPicture.Save(path, picture, extension); }
             catch (Exception e) { Console.WriteLine("TVFollow: couldn't save it: " + e.Message); return 1; }

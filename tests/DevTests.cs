@@ -21,10 +21,12 @@ namespace TVFollow.Tests
             Run("dev: the developer settings save and load, the password sealed", DevSettingsRoundTrip);
             Run("dev: device info says whether developer mode is on", DevDeviceInfo);
             Run("dev: a folder is zipped with the manifest at the top, junk left out", DevZipFolder);
+            Run("dev: a capitalized Manifest is still read and normalized", DevManifestCase);
             Run("dev: an app one folder down is found, in a folder or a zip", DevZipOneDown);
             Run("dev: the example app is built in, whole", DevExampleBuiltIn);
             Run("dev: the installer's messages are read, old and new", DevInstallerMessages);
             Run("dev: pushing an app, with the password", DevPushInstalls);
+            Run("dev: pushing the same files checks whether opening the app succeeded", DevPushSameChecksLaunch);
             Run("dev: pushing says what went wrong, and only this TV gets the password", DevPushProblems);
             Run("dev: screenshot, open and remove", DevScreenshotAndRemove);
             Run("dev: a vanished app goes back on before the TV turns off", DevPutBack);
@@ -32,6 +34,9 @@ namespace TVFollow.Tests
             Run("dev: saves the TV can't take: its own trouble is told once, the app's each time", DevPushOnSaveTellsOnce);
             Run("dev: only a folder on a drive letter is watched, never a network path", DevFolderOnADrive);
             Run("dev: the app log shows the TV's console", DevAppLog);
+            Run("dev: the app log keeps its place when scrolled up", DevAppLogScroll);
+            Run("dev: CLI help and unknown-command usage list all commands", DevCliHelp);
+            Run("dev: CLI reports two TVs sharing a name cleanly", DevCliAmbiguousName);
             Run("dev: the pushed app asks TVFollow to switch the TV's input", DevAppSwitchesInputs);
             Run("dev: nobody reads the app's console for asks unless switched on, and only on this TV", DevInputsOnlyWhenOn);
             Run("dev: the app opens when the TV goes to Roku's home screen, and Home twice stays home", DevHomeOpensApp);
@@ -1406,7 +1411,8 @@ namespace TVFollow.Tests
                     Check(Tv(s).DevFolder == "", "the command line changed the folder pushed on save: " + Tv(s).DevFolder);
                     Check(Program.DevCommand(s, tvs, "screenshot", new[] { "screenshot", parent }) == 0, "the picture");
                     string[] pictures = Directory.GetFiles(parent, "*.jpg");
-                    Check(pictures.Length == 1 && File.ReadAllBytes(pictures[0]).Length > 100, "the picture's file: " + pictures.Length);
+                    Check(pictures.Length == 1 && Path.GetFileName(pictures[0]).StartsWith("Command app ") && File.ReadAllBytes(pictures[0]).Length > 100,
+                        "the picture's file: " + (pictures.Length > 0 ? Path.GetFileName(pictures[0]) : "none"));
 
                     // A folder in quotes with a backslash at its end, "C:\my app\" (PowerShell's Tab
                     // key writes folders that way): Windows hands a program C:\my app" for it, with
@@ -1907,6 +1913,181 @@ namespace TVFollow.Tests
         [DllImport("user32.dll")] static extern bool GetWindowPlacement(IntPtr window, ref WindowPlacement placement);
         [DllImport("user32.dll")] static extern bool SetWindowPlacement(IntPtr window, ref WindowPlacement placement);
         [DllImport("user32.dll")] static extern bool IsIconic(IntPtr window);
+        [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        static void DevManifestCase()
+        {
+            string dir = TempFolder("Capital Manifest");
+            try
+            {
+                WriteFile(dir, "Manifest", "title=Capital App\nmajor_version=1\nminor_version=4\nbuild_version=2\n");
+                WriteFile(dir, "source/main.brs", "sub Main()\nend sub\n");
+                DevPackage fromFolder = DevPackage.FromFolder(dir);
+                Check(fromFolder.Title == "Capital App" && fromFolder.Version == "1.4.2", "folder Manifest: " + fromFolder);
+                Check(Entries(fromFolder.Zip).Contains("manifest"), "folder zip entry not normalized: " + string.Join(", ", Entries(fromFolder.Zip)));
+                Check(fromFolder.Note.Contains("named Manifest.") && fromFolder.Note.Contains("all in small letters"), "folder rename note missing: " + fromFolder.Note);
+
+                // raw zips created elsewhere with "Manifest" at root or one folder down
+                foreach (string prefix in new[] { "", "inner/" })
+                {
+                    string zipPath = Path.Combine(Path.GetDirectoryName(dir), prefix.Length == 0 ? "cap-root.zip" : "cap-sub.zip");
+                    using (var z = new ZipArchive(File.Create(zipPath), ZipArchiveMode.Create))
+                    {
+                        using (var w = new StreamWriter(z.CreateEntry(prefix + "Manifest").Open()))
+                            w.Write("title=Zipped Cap\nmajor_version=3\nminor_version=0\n");
+                        using (var w = new StreamWriter(z.CreateEntry(prefix + "source/main.brs").Open()))
+                            w.Write("sub Main()\nend sub\n");
+                    }
+                    if (prefix.Length == 0)
+                    {
+                        DevPackage described = DevPackage.Describe(File.ReadAllBytes(zipPath));
+                        Check(described.Title == "Zipped Cap" && described.Version == "3.0", "Describe Manifest: " + described);
+                    }
+                    DevPackage fromZip = DevPackage.FromZip(zipPath);
+                    Check(fromZip.Title == "Zipped Cap" && fromZip.Version == "3.0" && Entries(fromZip.Zip).Contains("manifest"),
+                        "zip (" + prefix + ") Manifest: " + fromZip);
+                    Check(fromZip.Note.Contains("named Manifest.") && fromZip.Note.Contains("all in small letters"), "zip rename note missing: " + fromZip.Note);
+                    if (prefix.Length > 0) Check(fromZip.Note.Contains("folder inner inside the zip"), "subfolder note lost: " + fromZip.Note);
+                }
+
+                // an app with a proper lowercase manifest gets no such note
+                string cleanDir = Path.Combine(Path.GetDirectoryName(dir), "Proper manifest");
+                WriteFile(cleanDir, "manifest", "title=Proper App\nmajor_version=1\nminor_version=0\n");
+                WriteFile(cleanDir, "source/main.brs", "sub Main()\nend sub\n");
+                DevPackage cleanFolder = DevPackage.FromFolder(cleanDir);
+                Check(cleanFolder.Note == "", "proper folder got note: " + cleanFolder.Note);
+                string cleanZipPath = Path.Combine(Path.GetDirectoryName(dir), "proper.zip");
+                File.WriteAllBytes(cleanZipPath, cleanFolder.Zip);
+                DevPackage cleanZip = DevPackage.FromZip(cleanZipPath);
+                Check(cleanZip.Note == "", "proper zip got note: " + cleanZip.Note);
+            }
+            finally { Directory.Delete(Path.GetDirectoryName(dir), true); }
+        }
+
+        static void DevPushSameChecksLaunch()
+        {
+            using (var tv = new FakeTv("127.0.0.1", 0))
+            using (var installer = new FakeInstaller(tv, 0))
+            {
+                tv.DeveloperEnabled = true;
+                Settings s = DevSettings(tv, installer);
+                DevTools tools = DevToolsFor(s);
+                try
+                {
+                    DevTv dev = tools.Tvs[0];
+                    Check(dev.Push(DevPackage.Example(), "pushed").Ok, "initial push");
+                    tv.App = "tvinput.hdmi1";
+                    tv.RefuseLaunch = true;
+                    DevReport r = dev.Push(DevPackage.Example(), "pushed");
+                    Check(!r.Ok && r.TvTrouble && r.Text.Contains("didn't open it"), "expected launch failure with TvTrouble on Same: " + r.Text);
+                }
+                finally { tools.Dispose(); }
+            }
+        }
+
+        static int FirstVisibleLine(TextBox box)
+        {
+            return (int)SendMessage(box.Handle, 0x00CE, IntPtr.Zero, IntPtr.Zero);
+        }
+
+        static void DevAppLogScroll()
+        {
+            using (var console = new FakeConsole("127.0.0.1", 0))
+            {
+                int before = DevClient.ConsolePort;
+                DevClient.ConsolePort = console.Port;
+                try
+                {
+                    var shared = new DevConsole(() => "127.0.0.1");
+                    using (var form = new DevLogForm(shared, "Test TV"))
+                    {
+                        OffScreen(form);
+                        form.Show();
+                        Pump(() => console.Connections == 1, 5);
+                        TextBox box = form.LogBox;
+
+                        var seed = new System.Text.StringBuilder();
+                        for (int i = 0; i < 80; i++) seed.Append("line ").Append(i).Append("\r\n");
+                        form.AppendChunk(seed.ToString());
+                        int bottomFirst = FirstVisibleLine(box);
+                        Check(bottomFirst > 10, "expected scrolling to the bottom: " + bottomFirst);
+
+                        form.AppendChunk("tail 1\r\n");
+                        Check(FirstVisibleLine(box) >= bottomFirst, "tailing at the bottom moved up: " + FirstVisibleLine(box) + " vs " + bottomFirst);
+
+                        SendMessage(box.Handle, 0x00B6, IntPtr.Zero, (IntPtr)(5 - FirstVisibleLine(box))); // EM_LINESCROLL
+                        Check(FirstVisibleLine(box) == 5, "couldn't scroll up to line 5: " + FirstVisibleLine(box));
+
+                        form.AppendChunk("more 1\r\nmore 2\r\n");
+                        Check(FirstVisibleLine(box) == 5, "appending while scrolled up jumped to line " + FirstVisibleLine(box));
+
+                        // trimming older lines at MaxChars keeps relative scroll instead of jumping to bottom or line 0
+                        box.Clear();
+                        string wide = new string('x', 990) + "\r\n"; // 992 chars per line -> 400 lines = 396,800 chars (< 400,000)
+                        var big = new System.Text.StringBuilder();
+                        for (int i = 0; i < 400; i++) big.Append(wide);
+                        form.AppendChunk(big.ToString());
+                        SendMessage(box.Handle, 0x00B6, IntPtr.Zero, (IntPtr)(250 - FirstVisibleLine(box)));
+                        int at250 = FirstVisibleLine(box);
+                        Check(at250 == 250, "couldn't scroll big log to line 250: " + at250);
+
+                        var extra = new System.Text.StringBuilder();
+                        for (int i = 0; i < 20; i++) extra.Append(wide);
+                        form.AppendChunk(extra.ToString());
+                        int afterTrim = FirstVisibleLine(box);
+                        Check(afterTrim > 0 && afterTrim < 250, "trimming while scrolled up jumped to line " + afterTrim);
+                        form.Close();
+                    }
+                    Pump(() => !shared.Connected, 5);
+                }
+                finally { DevClient.ConsolePort = before; }
+            }
+        }
+
+        static void DevCliHelp()
+        {
+            foreach (string h in new[] { "--help", "-h", "/?", "help", "--version", "-v" })
+                Check(Program.QuickCommand(h) == 0, h + " should succeed");
+            Check(Program.QuickCommand("on") == null && Program.QuickCommand("push") == null, "other commands");
+
+            string help = Program.HelpText();
+            foreach (string word in new[] { "setup", "on", "off", "pc", "push", "screenshot", "uninstall", "--version", "--help" })
+                Check(help.Contains(word), "help is missing " + word);
+
+            string unknown = Program.UnknownCommandText("--bogus");
+            foreach (string word in new[] { "push", "screenshot", "--help" })
+                Check(unknown.Contains(word), "unknown command list is missing " + word);
+        }
+
+        static void DevCliAmbiguousName()
+        {
+            using (var a = new FakeTv("127.0.0.1", 0))
+            using (var b = new FakeTv("127.0.0.2", a.Port))
+            {
+                a.Serial = "X000000001";
+                b.Serial = "X000000002";
+                Settings s = TwoTvs(a, b);
+                s.Tvs[0].Name = s.Tvs[1].Name = "Living Room TV";
+                s.DeveloperTools = true;
+                List<Controller> tvs = Controller.For(s);
+                string dir = TempFolder("Ambiguous");
+                TextWriter console = Console.Out;
+                var printed = new StringWriter();
+                Console.SetOut(printed);
+                try
+                {
+                    int rc = Program.DevCommand(s, tvs, "push", new[] { "push", dir, "Living Room TV" });
+                    string outText = printed.ToString();
+                    Check(rc == 2 && outText.Contains("more than one TV is called Living Room TV") && outText.Contains("(1, 2)"),
+                        "ambiguous TV message: rc=" + rc + " " + outText);
+                }
+                finally
+                {
+                    Console.SetOut(console);
+                    Directory.Delete(Path.GetDirectoryName(dir), true);
+                }
+            }
+        }
 
         // Minimized, and off the screen while minimized too: without a taskbar button, Windows would
         // park it as a little title bar at the bottom of the screen

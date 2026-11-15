@@ -30,6 +30,7 @@ namespace TVFollow.Tests
         public string RawDeviceInfo;              // answer device-info with exactly this
         public bool RefusePowerOn;                // say OK to PowerOn but stay off
         public bool IgnoreInput;                  // say OK to input changes but don't switch
+        public bool RefuseLaunch;                 // answer /launch/ with 403 Forbidden
         public int TransitHomeMs;                 // like a Roku TV: from an app to an input, the home screen shows this long first
         public string RedirectTo;                 // answer everything with "302 Found, go here" (no TV does this)
         public bool DeveloperEnabled;             // developer mode is on (its FakeInstaller takes apps)
@@ -194,7 +195,7 @@ namespace TVFollow.Tests
             if (path == "/keypress/PowerOff") { PowerMode = "DisplayOff"; screens++; if (DownWhenOff) Down = true; }
             else if (path == "/keypress/PowerOn") { if (!RefusePowerOn) PowerMode = "PowerOn"; }
             else if (path.StartsWith("/keypress/InputHDMI")) { if (IsOn && !IgnoreInput) SwitchTo("tvinput.hdmi" + path.Substring("/keypress/InputHDMI".Length)); }
-            else if (path.StartsWith("/launch/")) { if (IsOn && !IgnoreInput) SwitchTo(path.Substring("/launch/".Length)); }
+            else if (path.StartsWith("/launch/")) { if (RefuseLaunch) { status = 403; return; } if (IsOn && !IgnoreInput) SwitchTo(path.Substring("/launch/".Length)); }
             else if (path == "/keypress/Home") { if (IsOn) Show(""); }
             else if (!path.StartsWith("/keypress/")) status = 404; // any other remote key is fine, like a real TV
         }

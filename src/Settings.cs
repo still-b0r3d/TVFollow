@@ -287,10 +287,27 @@ namespace TVFollow
                 (Port != DefaultPort ? "port=" + Port + "\r\n" : ""));
             if (Tvs.Count > 1) text.Append("# the other TVs\r\n");
             for (int i = 1; i < Tvs.Count; i++) WriteTv(text, "tv" + (i + 1) + ".", Tvs[i]);
+            string body = text.ToString();
             string temp = FilePath + ".tmp";
-            File.WriteAllText(temp, text.ToString());
-            if (File.Exists(FilePath)) File.Replace(temp, FilePath, null);
-            else File.Move(temp, FilePath);
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    File.WriteAllText(temp, body);
+                    if (File.Exists(FilePath)) File.Replace(temp, FilePath, null);
+                    else File.Move(temp, FilePath);
+                    return;
+                }
+                catch (IOException) { if (attempt >= ReadRetries || IsReadOnly(FilePath)) throw; }
+                catch (UnauthorizedAccessException) { if (attempt >= ReadRetries || IsReadOnly(FilePath)) throw; }
+                Thread.Sleep(ReadRetryMs);
+            }
+        }
+
+        static bool IsReadOnly(string path)
+        {
+            try { return File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReadOnly) != 0; }
+            catch { return false; }
         }
 
         static void WriteTv(StringBuilder text, string prefix, TvSettings tv)

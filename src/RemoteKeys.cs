@@ -30,7 +30,8 @@ namespace TVFollow
                 case Keys.Space: return Play;
                 case Keys.Home: return Home;
                 case Keys.Add:
-                case Keys.Oemplus: return VolumeUp;
+                case Keys.Oemplus:
+                case Keys.Oemplus | Keys.Shift: return VolumeUp;
                 case Keys.Subtract:
                 case Keys.OemMinus: return VolumeDown;
                 default: return null;

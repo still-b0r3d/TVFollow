@@ -24,7 +24,8 @@ A new Settings window, and developer tools for putting your own Roku apps on the
   account (`dev_password=` in settings.ini). **Check** tries it on the TV.
 - **Push a .zip…**, **Push a folder…** (TVFollow zips it, leaving out `.git`, `Thumbs.db`
   and editors' temporary files) and **Push the example app**. An app one folder down is
-  found. When the TV refuses an app, its own words say why.
+  found. A manifest file with a capital letter in its name goes onto the TV as `manifest`,
+  and TVFollow says so. When the TV refuses an app, its own words say why.
 - The example app is b0r3d TV 0.71 (Build: fda3dd9), b0r3d's channel guide for Roku TVs
   that looks like an old cable box, with a VCR, a camera on Ruckus's room, three games, a
   radio station and late-night commercials. With **Let the app switch the TV's inputs**
@@ -35,7 +36,8 @@ A new Settings window, and developer tools for putting your own Roku apps on the
 - **Open on the TV**, **Remove**, **Screenshot…** (saves a picture of the app's screen)
   and **App log…** (the app's console: what it prints, and where it stopped if it
   crashed). Whatever TVFollow reads of the app log also goes into
-  `%APPDATA%\TVFollow\dev\<serial> app log.txt`, the newest 2 MB or so.
+  `%APPDATA%\TVFollow\dev\<serial> app log.txt`, the newest 2 MB or so. **App log…** keeps
+  its place while you scroll back or select something in it.
 - **Open the app whenever the TV goes to Roku's home screen** (off to start with): the app
   becomes the TV's home screen while this PC is on. Turning the TV on or backing out of
   another app lands in it. Switching from an app to one of the TV's inputs passes Roku's
@@ -48,7 +50,7 @@ A new Settings window, and developer tools for putting your own Roku apps on the
   with the saved password, which never leaves TVFollow. They print how it went and end
   with 0, 1 or 2. Nothing they have to say comes in a message box, so a script never waits
   on a click. A picture named `.png` or `.jpg` is saved as that kind, whichever of the two
-  the TV sent.
+  the TV sent. A picture saved into a folder is named after the app and the time.
 - **Put the app back when it disappears from the TV** (on to start with): TVFollow keeps
   a copy of the app pushed last and puts it back, if the TV lost it, just before it turns
   the TV off with your monitors. If developer mode itself went off, or the app couldn't
@@ -66,6 +68,19 @@ A new Settings window, and developer tools for putting your own Roku apps on the
 - A TV woken from deep standby is switched to your PC even when it comes up on Roku's home
   screen or on another input. Before, TVFollow took it for a TV that was on already and
   left it there. A TV that was on all along, and only slow to answer, is still left alone.
+- The remote's status line says how **TV to PC** went: it clears once the TV shows your PC,
+  and says so when the TV doesn't answer, when its Network access is on Limited, or when
+  it didn't switch. Before, it stayed on "Switching the TV to this PC…" whatever happened.
+- On the remote, **Shift+=** (the + on a keyboard without a number pad) turns the volume
+  up. Before, only **=** and the number pad's **+** did.
+- In the remote's typing box, **Ctrl+Backspace** takes the last word out of the box and
+  off the TV. Before, it put a stray character in the box and took one letter off the TV.
+- **Show it on the TV**, in Settings, says how it went: sent, no answer, or the TV said no.
+  Before, it said nothing either way.
+- Saving the settings waits a few seconds for a program that's holding `settings.ini` (a
+  backup or sync tool, say), as reading them already did. Before, a change made at that
+  moment wasn't saved until the next one.
+- `TVFollow.exe --help` (or `-h`, `/?`) prints the commands.
 - The version and the build are shown apart: `TVFollow v1.3 · Build: abc1234` at the bottom
   of the setup and Settings windows (on two lines there now), in the log and in
   `TVFollow.exe --version`. The exe's **Product version** says `1.3 build abc1234`.

@@ -128,12 +128,24 @@ namespace TVFollow.Tests
                 finally { release.Join(); } // let go of the file even if Load failed, or the next test can't use it
                 Check(loaded.LoadError == null && Tv(loaded).Ip == "192.168.1.50", "a briefly held file should still load: " + loaded.LoadError);
 
-                // held for good: no crash, and not "not set up" either
+                // held for a moment while saving, then let go: Save retries and succeeds
+                var saveHold = new FileStream(Settings.FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                var releaseSave = new Thread(() => { Thread.Sleep(300); saveHold.Dispose(); });
+                releaseSave.Start();
+                try { s.Save(); }
+                finally { releaseSave.Join(); }
+                Check(Tv(Settings.Load()).Ip == "192.168.1.50", "a briefly held file should still save");
+
+                // held for good: no crash, and not "not set up" either, and Save throws cleanly after retries
                 Settings.ReadRetries = 4;
                 using (new FileStream(Settings.FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
                 {
                     Settings held = Settings.Load();
                     Check(held.LoadError != null && !held.IsComplete, "a held file should read as unreadable");
+                    bool threwOnSave = false;
+                    try { s.Save(); }
+                    catch (IOException) { threwOnSave = true; }
+                    Check(threwOnSave, "a file held past retries should stop trying");
                 }
                 Check(LogText().Contains("couldn't read settings.ini"), "not logged");
             }
@@ -141,6 +153,27 @@ namespace TVFollow.Tests
             {
                 Settings.ReadRetryMs = retryMs;
                 Settings.ReadRetries = retries;
+                File.Delete(Settings.FilePath);
+            }
+
+            // a read-only settings.ini cannot ever be written, so Save fails at once instead of retrying
+            s.Save();
+            File.SetAttributes(Settings.FilePath, FileAttributes.ReadOnly);
+            try
+            {
+                var watch = Stopwatch.StartNew();
+                bool threwReadOnly = false;
+                try { s.Save(); }
+                catch (UnauthorizedAccessException) { threwReadOnly = true; }
+                catch (IOException) { threwReadOnly = true; }
+                watch.Stop();
+                Check(threwReadOnly, "a read-only settings.ini should fail Save");
+                Check(watch.ElapsedMilliseconds < 500, "read-only Save waited " + watch.ElapsedMilliseconds + " ms instead of failing at once");
+            }
+            finally
+            {
+                if (File.Exists(Settings.FilePath)) File.SetAttributes(Settings.FilePath, FileAttributes.Normal);
+                if (File.Exists(Settings.FilePath + ".tmp")) File.Delete(Settings.FilePath + ".tmp");
                 File.Delete(Settings.FilePath);
             }
         }

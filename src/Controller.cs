@@ -113,9 +113,9 @@ namespace TVFollow
         // take turns: the remote's other buttons (power, arrows, inputs, typing) and the Settings
         // window's "Show it on the TV" talk to the TV directly, and the desktop shortcuts run their
         // own TVFollow.exe. Each TV takes turns on its own; different TVs never wait for each other.
-        public void TurnOn(TurnOnMode mode)
+        public int TurnOn(TurnOnMode mode)
         {
-            lock (gate) TurnOnNow(mode);
+            lock (gate) return TurnOnNow(mode);
         }
 
         // TVFollow is switching this TV to an input (for the pushed app, from the remote or Settings,
@@ -141,7 +141,7 @@ namespace TVFollow
             }
         }
 
-        void TurnOnNow(TurnOnMode mode)
+        int TurnOnNow(TurnOnMode mode)
         {
             string tag = mode == TurnOnMode.Follow ? "on" : mode == TurnOnMode.ToPc ? "pc" : "on (button)";
             TvState s = WaitReachable(ReachMs);
@@ -155,11 +155,11 @@ namespace TVFollow
                 {
                     // a laptop away from home, say: don't wake or search anything on this network
                     Say(tag + ": this PC isn't on the TV's network, leaving it alone");
-                    return;
+                    return 0;
                 }
             }
             if (!s.Reachable && Rediscover(pressed)) s = Query();
-            if (!s.Reachable) { Say(tag + ": TV not found"); return; }
+            if (!s.Reachable) { Say(tag + ": TV not found"); return 0; }
 
             // The wake packet turns a TV in deep standby all the way on, so by the time it answers
             // it says it's on, showing Roku's home screen or the input it starts on. Nobody is
@@ -168,33 +168,40 @@ namespace TVFollow
             // this one was on all along and only slow to answer, and it's left alone as ever.
             bool cameOn = woken && s.IsOn && (s.App.Length == 0 || s.App.StartsWith("tvinput.", StringComparison.Ordinal));
 
+            int powerCode = 200;
             if (s.IsOn)
             {
-                if (mode == TurnOnMode.PowerOnly) { Say(tag + ": already on"); return; }
-                if (s.App == tv.PcApp) { Say(tag + ": already showing the PC"); return; }
-                if (mode == TurnOnMode.Follow && !cameOn) { Say(tag + ": TV is on and showing " + Describe(s.App) + ", leaving it alone"); return; }
+                if (mode == TurnOnMode.PowerOnly) { Say(tag + ": already on"); return 200; }
+                if (s.App == tv.PcApp) { Say(tag + ": already showing the PC"); return 200; }
+                if (mode == TurnOnMode.Follow && !cameOn) { Say(tag + ": TV is on and showing " + Describe(s.App) + ", leaving it alone"); return 200; }
             }
             else
             {
-                int code = client.Keypress("PowerOn", 4000);
-                Say(tag + ": power on (was " + s.PowerMode + ") -> " + code);
-                if (mode == TurnOnMode.PowerOnly) return;
+                powerCode = client.Keypress("PowerOn", 4000);
+                Say(tag + ": power on (was " + s.PowerMode + ") -> " + powerCode);
+                if (mode == TurnOnMode.PowerOnly) return powerCode;
             }
 
+            bool everOn = s.IsOn;
+            int lastCode = 0;
             for (int i = 0; i < 8; i++)
             {
                 // a TV that was already on can take the input press at once; one just turned on,
                 // or just woken, needs a moment first
                 if (i > 0 || !s.IsOn || cameOn) Thread.Sleep(i == 0 ? FirstCheckMs : RetryMs);
                 TvState now = Query();
-                if (now.IsOn && now.App == tv.PcApp) { Say(tag + ": showing the PC"); return; }
+                if (now.IsOn && now.App == tv.PcApp) { Say(tag + ": showing the PC"); return 200; }
                 if (!now.IsOn) continue;
+                everOn = true;
                 NoteInputSwitch();
                 int code = client.Keypress("Input" + tv.Input.ToUpperInvariant(), 4000);
                 if (code < 200 || code > 299) code = client.Launch(tv.PcApp, 4000);
+                lastCode = code;
                 if (i == 0) Say(tag + ": switching to the PC -> " + code);
             }
             Say(tag + ": gave up waiting for the PC input");
+            if (!everOn) return powerCode == 403 ? 403 : 0;
+            return lastCode == 403 ? 403 : -1;
         }
 
         // Someone pressed a TV button (not the automatic following) on a network that has the TV's

@@ -237,6 +237,13 @@ namespace TVFollow
 
         RokuClient Ecp() { return new RokuClient(Tv.Ip, settings.Port); }
 
+        public string AppName()
+        {
+            bool answered;
+            DevApp app = Ecp().GetDevApp(AskMs, out answered);
+            return app != null ? app.Name : "";
+        }
+
         DevClient Installer() { return new DevClient(Tv.Ip, Tv.DevPassword); }
 
         public DevStatus Status(int timeoutMs)
@@ -303,12 +310,10 @@ namespace TVFollow
         DevReport PushNow(DevPackage app, string why, int timeoutMs)
         {
             DevResult r = Ready() ?? FromInstaller(Installer().Push(app.Zip, timeoutMs));
-            // the TV leaves the same files alone, without opening them
-            if (r.Outcome == DevOutcome.Same) Ecp().Launch("dev", AskMs);
             string size = DevPackage.Size(app.Zip.Length);
-            Controller.Say("developer tools: " + why + " " + app + " (" + size + "): " + LogWords(r));
             if (!r.Ok)
             {
+                Controller.Say("developer tools: " + why + " " + app + " (" + size + "): " + LogWords(r));
                 string problem = r.Problem;
                 // Roku OS 15 turns away zips under 512 bytes as corrupt (Roku's own tools say so too)
                 if (app.Zip.Length < 512 && (r.Message.IndexOf("corrupt", StringComparison.OrdinalIgnoreCase) >= 0 || r.Message.IndexOf("unzip", StringComparison.OrdinalIgnoreCase) >= 0))
@@ -320,6 +325,19 @@ namespace TVFollow
             lastPushed = Fingerprint(app.Zip);
             toldDevModeOff = toldPutBackFailed = false;
             toldSaveTrouble = null;
+            if (r.Outcome == DevOutcome.Same)
+            {
+                // the TV leaves the same files alone, without opening them
+                int launched = Ecp().Launch("dev", AskMs);
+                if (launched < 200 || launched >= 300)
+                {
+                    Controller.Say("developer tools: " + why + " " + app + " (" + size + "): the TV had the same files, but wouldn't open it (" + launched + ")");
+                    return new DevReport(false, launched == 0
+                        ? "The TV already had these very files, but didn't answer when TVFollow tried to open the app."
+                        : "The TV already had these very files, so TVFollow tried to open it, but the TV didn't open it.", true);
+                }
+            }
+            Controller.Say("developer tools: " + why + " " + app + " (" + size + "): " + LogWords(r));
             string text = r.Outcome == DevOutcome.Same
                 ? "The TV already had these very files, so TVFollow opened the app."
                 : "Pushed " + app + " (" + size + "). It's open on the TV.";

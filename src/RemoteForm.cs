@@ -23,6 +23,7 @@ namespace TVFollow
         Controller current;             // the TV the buttons go to
         PadButton tvMenu;               // picks it, when there are several
         int inputsAsked;                // which TV's inputs are wanted: an answer for an earlier pick is dropped
+        int toPcTurn;                   // which "TV to PC" click owns the status line right now
         readonly RemoteSender sender;
         readonly ToolTip tips = new ToolTip();
         readonly Panel board = new Panel();
@@ -98,6 +99,7 @@ namespace TVFollow
                 tvMenu.Invalidate();
             }
             showing = "";
+            toPcTurn++;
             ShowInputs();
             SetStatus(null, "");
             LoadInputs();
@@ -242,12 +244,25 @@ namespace TVFollow
             toPc.Click += delegate
             {
                 Controller c = current;
+                int mine = ++toPcTurn;
+                SetStatus(null, "Switching the TV to this PC…");
                 Task.Run(() =>
                 {
-                    try { c.TurnOn(TurnOnMode.ToPc); }
+                    int answer = 0;
+                    try { answer = c.TurnOn(TurnOnMode.ToPc); }
                     catch (Exception e) { Log.Write("pc: error: " + e.Message); }
+                    try
+                    {
+                        if (IsHandleCreated && !IsDisposed)
+                            BeginInvoke(new Action(() =>
+                            {
+                                if (IsDisposed || current != c || toPcTurn != mine) return;
+                                if (answer == -1) SetStatus(false, "The TV didn't switch to this PC.");
+                                else ShowAnswer(answer);
+                            }));
+                    }
+                    catch (InvalidOperationException) { }
                 });
-                SetStatus(null, "Switching the TV to this PC…");
             };
         }
 
@@ -363,13 +378,38 @@ namespace TVFollow
                     return;
                 }
                 firstHalf = '\0';
-                // control characters (Ctrl+V, Ctrl+Backspace's 0x7F) aren't letters; they are left
-                // unhandled so the box still does what they mean
+                // control characters (such as Ctrl+V's 0x16) aren't letters, so leave them to the box;
+                // Ctrl+Backspace is handled in KeyDown and suppressed before any 0x7F arrives
                 if (c >= ' ' && c != (char)0x7F) sender.Press(RemoteKeys.Letter(c));
             };
             box.KeyDown += (s, e) =>
             {
-                if (e.KeyCode == Keys.Back) sender.Press("Backspace");
+                if (e.KeyCode == Keys.Back && !e.Alt)
+                {
+                    if (!e.Control) { sender.Press("Backspace"); return; }
+                    string text = box.Text;
+                    int start = Math.Max(0, Math.Min(box.SelectionStart, text.Length));
+                    int length = Math.Max(0, Math.Min(box.SelectionLength, text.Length - start));
+                    if (length == 0)
+                    {
+                        int end = start;
+                        while (start > 0 && char.IsWhiteSpace(text[start - 1])) start--;
+                        while (start > 0 && !char.IsWhiteSpace(text[start - 1])) start--;
+                        length = end - start;
+                    }
+                    if (length > 0)
+                    {
+                        string removed = text.Substring(start, length);
+                        box.Select(start, length);
+                        box.SelectedText = "";
+                        for (int i = 0; i < removed.Length; i++)
+                        {
+                            if (i + 1 < removed.Length && char.IsHighSurrogate(removed[i]) && char.IsLowSurrogate(removed[i + 1])) i++;
+                            sender.Press("Backspace");
+                        }
+                    }
+                    e.SuppressKeyPress = true;
+                }
                 else if (e.KeyCode == Keys.Enter) { sender.Press("Enter"); e.SuppressKeyPress = true; }
             };
             box.Pasted = text => { foreach (string key in RemoteKeys.Letters(text)) sender.Press(key); };
@@ -502,6 +542,7 @@ namespace TVFollow
 
         void ShowAnswer(int code)
         {
+            toPcTurn++;
             if (code == 403)
                 SetStatus(false, "Your TV's Network access is on Limited, so it ignores these buttons. On the TV: Settings → System → " +
                     "Advanced system settings → Control by mobile apps → Network access → Enabled.");

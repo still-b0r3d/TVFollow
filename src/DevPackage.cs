@@ -157,12 +157,13 @@ namespace TVFollow
             }
             catch (InvalidDataException) { throw new DevPackageException("That file isn't a zip Windows can open."); }
             string note = "";
-            if (!items.Exists(i => i.Name == "manifest"))
+            if (!items.Exists(i => string.Equals(i.Name, "manifest", StringComparison.OrdinalIgnoreCase)))
             {
                 // everything in one folder, with the manifest at that folder's top
                 int slash = items.Count > 0 ? items[0].Name.IndexOf('/') : -1;
                 string top = slash > 0 ? items[0].Name.Substring(0, slash + 1) : null;
-                if (top == null || !items.TrueForAll(i => i.Name.StartsWith(top)) || !items.Exists(i => i.Name == top + "manifest"))
+                if (top == null || !items.TrueForAll(i => i.Name.StartsWith(top)) ||
+                    !items.Exists(i => string.Equals(i.Name, top + "manifest", StringComparison.OrdinalIgnoreCase)))
                     throw new DevPackageException(NoManifest("zip"));
                 foreach (Item i in items) i.Name = i.Name.Substring(top.Length);
                 note = "The app was in the folder " + top.TrimEnd('/') + " inside the zip, so that's what went.";
@@ -224,6 +225,9 @@ namespace TVFollow
                 using (var archive = new ZipArchive(new MemoryStream(zip), ZipArchiveMode.Read))
                 {
                     ZipArchiveEntry manifest = archive.GetEntry("manifest");
+                    if (manifest == null)
+                        foreach (ZipArchiveEntry entry in archive.Entries)
+                            if (string.Equals(entry.FullName, "manifest", StringComparison.OrdinalIgnoreCase)) { manifest = entry; break; }
                     if (manifest != null) ReadManifest(Encoding.UTF8.GetString(ReadEntry(manifest, 64 * 1024)), app);
                     app.Files = archive.Entries.Count;
                 }
@@ -234,6 +238,16 @@ namespace TVFollow
 
         static DevPackage Pack(List<Item> items, string note)
         {
+            if (!items.Exists(i => i.Name == "manifest"))
+            {
+                Item m = items.Find(i => string.Equals(i.Name, "manifest", StringComparison.OrdinalIgnoreCase));
+                if (m != null)
+                {
+                    string renameNote = "The manifest file is named " + m.Name + ". A Roku TV wants it named manifest, all in small letters, so it went under that name.";
+                    note = note.Length > 0 ? note + " " + renameNote : renameNote;
+                    m.Name = "manifest";
+                }
+            }
             // in name order, so the same files always make the same zip
             items.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
             var app = new DevPackage { Note = note };

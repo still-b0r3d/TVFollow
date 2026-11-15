@@ -349,8 +349,9 @@ TVFollow also takes commands, for hotkeys, Stream Deck buttons or scripts:
 | `TVFollow.exe setup` | Opens the setup window |
 | `TVFollow.exe uninstall` | Removes TVFollow (`--quiet` skips the questions) |
 | `TVFollow.exe --version` | Prints the version and the build, which is the commit it was built from (`TVFollow v1.3 · Build: abc1234`) |
+| `TVFollow.exe --help` | Prints the commands (`-h` and `/?` do the same) |
 | `TVFollow.exe push <folder or .zip>` | With the [developer tools](#developer-tools) on: pushes an app to the TV, like **Push a folder…**, with the password saved in them (it never leaves TVFollow). For test scripts: it prints how it went, and ends with 0 when it worked, 1 when it didn't, 2 for a wrong command. What it has to say is printed, never shown in a message box, so a script doesn't wait on a click. A TV's number or name after it picks the TV |
-| `TVFollow.exe screenshot <picture or folder>` | With the developer tools on: saves a picture of the TV's screen (the pushed app's), into that file, or into that folder under the time. A name ending in `.png` or `.jpg` gets that kind of picture, whichever of the two the TV sent; any other name gets the picture's kind added (`shot` becomes `shot.jpg`). Prints and ends like `push` |
+| `TVFollow.exe screenshot <picture or folder>` | With the developer tools on: saves a picture of the TV's screen (the pushed app's), into that file, or into that folder under the app's name and the time. A name ending in `.png` or `.jpg` gets that kind of picture, whichever of the two the TV sent; any other name gets the picture's kind added (`shot` becomes `shot.jpg`). Prints and ends like `push` |
 
 After setup, TVFollow lives in `%LOCALAPPDATA%\Programs\TVFollow`.
 

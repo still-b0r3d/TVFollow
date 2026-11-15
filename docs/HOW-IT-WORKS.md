@@ -44,7 +44,7 @@ TVFollow uses only these:
 |---|---|
 | `GET /query/device-info` | Is it on? Is it the right TV (serial number)? Is control allowed? |
 | `GET /query/active-app` | What is it showing? (`tvinput.hdmi1` means HDMI 1) |
-| `GET /query/apps` | The HDMI inputs and their names (setup only) |
+| `GET /query/apps` | The TV's inputs and their names, and (with developer tools on) the pushed app |
 | `POST /keypress/PowerOff`, `PowerOn` | Turning it off and on |
 | `POST /keypress/InputHDMI1` (or `/launch/tvinput.hdmi1`) | Switching to your PC |
 | `POST /keypress/Up`, `Down`, `Left`, `Right`, `Select`, `Back`, `Home`, `Info`, `InstantReplay`, `Search`, `Rev`, `Play`, `Fwd`, `VolumeUp`, `VolumeDown`, `VolumeMute` | The remote's buttons |
