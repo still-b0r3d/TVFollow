@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.3 (not released yet)
+## 1.3 (2026-11-15)
 
 A window of its own, a new Settings window, and developer tools for putting your own Roku
 apps on the TV.
