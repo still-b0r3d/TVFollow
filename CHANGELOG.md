@@ -26,7 +26,7 @@ A new Settings window, and developer tools for putting your own Roku apps on the
   and editors' temporary files) and **Push the example app**. An app one folder down is
   found. A manifest file with a capital letter in its name goes onto the TV as `manifest`,
   and TVFollow says so. When the TV refuses an app, its own words say why.
-- The example app is b0r3d TV 0.71 (Build: fda3dd9), b0r3d's channel guide for Roku TVs
+- The example app is b0r3d TV 0.71 (Build: 28016c2), b0r3d's channel guide for Roku TVs
   that looks like an old cable box, with a VCR, a camera on Ruckus's room, three games, a
   radio station and late-night commercials. With **Let the app switch the TV's inputs**
   ticked, the TV's inputs are channels in its guide. Its source is in

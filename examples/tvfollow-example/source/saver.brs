@@ -415,12 +415,15 @@ end sub
 ' frame only copies it (drawing text is slow on a Roku). It drifts and bounces off the edges.
 ' The picture is filled with the screen's own dark colour, so the lettering's soft edges are
 ' worked out once, against that colour.
+' The old picture is let go before the new one is made, so the two are never held at once. If
+' the TV has no picture memory left for the new one, the clock is left out (DrawSaver draws
+' Ruckus without it) and made again once PicturesFailing's 5 seconds are up.
 
 sub MakeSaverClock(st as object, sv as object)
     text = ClockText(st, false)
     day = st.clock.date
     if text + "|" + day = sv.clockText then return
-    sv.clockText = text + "|" + day
+    if PicturesFailing(st) then return
     f = sv.fonts
     c = sv.colors
     k = st.k
@@ -433,7 +436,15 @@ sub MakeSaverClock(st as object, sv as object)
     w = w + 2 * pad
     timeH = f.time.GetOneLineHeight()
     h = timeH + gap + f.date.GetOneLineHeight() + 2 * pad
-    bmp = CreateObject("roBitmap", { width: w, height: h, AlphaEnable: true })
+    sv.clockBmp = invalid
+    sv.clockText = ""
+    sv.clockW = w / k
+    sv.clockH = h / k
+    bmp = NewPicture(w, h, true)
+    if bmp = invalid then
+        PictureFailed(st)
+        return
+    end if
     bmp.Clear(sv.bg)
     tx = (w - tw) \ 2
     if c.glow <> 0 then
@@ -443,8 +454,7 @@ sub MakeSaverClock(st as object, sv as object)
     end if
     bmp.DrawText(day, (w - dw) \ 2, pad + timeH + gap, c.date, f.date)
     sv.clockBmp = bmp
-    sv.clockW = w / k
-    sv.clockH = h / k
+    sv.clockText = text + "|" + day
 end sub
 
 sub StepClock(sv as object, dt as dynamic)

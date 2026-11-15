@@ -581,12 +581,15 @@ sub DrawSnakePreview(st as object, x as integer, y as integer, w as integer, h a
     if st.look = "cable" then tColor = &hFFD23FFF
     if st.look = "phosphor" then tColor = kit.head
     if st.look = "vcr" then tColor = &hFFFFFFFF
-    if st.look = "b95" then tColor = &h000000FF
+    ' the b0r3d 95 look's box is the desktop's teal, where the previews write in white (the
+    ' kit's black label is for the grey panels of the game's own screen)
+    if st.look = "b95" then tColor = st.kit.white
 
     GText(st, s, title, tx, ty, titleFont, tColor, true)
     ty = ty + titleFont.GetOneLineHeight() + Z(6, k)
 
     infoColor = kit.label
+    if st.look = "b95" then infoColor = st.kit.white
 
     GText(st, s, "SCORE: " + g.score.ToStr(), tx, ty, statFont, infoColor, false)
     ty = ty + statFont.GetOneLineHeight() + Z(4, k)

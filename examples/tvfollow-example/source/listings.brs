@@ -10,7 +10,7 @@ function ChannelListing(st as object, ch as dynamic) as string
     if c = invalid then return defaultNow
     if c.hours = invalid or c.mins = invalid then return defaultNow
     slotMin = (c.mins \ 30) * 30
-    return SlotTimeText(c.hours, slotMin, st.clock24 = true) + "  " + ShowForChannel(ch, c.hours, slotMin \ 30)
+    return SlotTimeText(c.hours, slotMin, st.clock24 = true) + "  " + ShowForChannel(st, ch, c.hours, slotMin \ 30)
 end function
 
 ' A half hour's start: "11:30 PM", or "23:30" on the 24-hour clock.
@@ -24,11 +24,14 @@ function SlotTimeText(hours as integer, mins as integer, is24 as boolean) as str
 end function
 
 ' What's on a channel in a half hour of the day.
-function ShowForChannel(ch as object, hour as integer, slotIndex as integer) as string
+function ShowForChannel(st as object, ch as object, hour as integer, slotIndex as integer) as string
     if ch = invalid or ch.id = invalid then return ""
     slot = hour * 2 + slotIndex
-    ' b0r3d's own channels
-    if ch.id = "video.vcr" then return "VCR: No Tape"
+    ' b0r3d's own channels (the VCR's line follows the tape, as its preview box does)
+    if ch.id = "video.vcr" then
+        if DeckTapeIn(st) then return "VCR: Tape In"
+        return "VCR: No Tape"
+    end if
     if ch.id = "cam.rukus" then return "Ruckus Cam: Live from His Room"
     if ch.id = "game.stuck" then return PickShow(StuckShows(), slot)
     if ch.id = "game.test" then return PickShow(TestPatternShows(), slot)

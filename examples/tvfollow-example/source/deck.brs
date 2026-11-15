@@ -21,6 +21,7 @@ function NewDeckState() as object
         osd: true,
         osdAuto: false,
         osdTimer: CreateObject("roTimespan"),
+        loadTimer: CreateObject("roTimespan"),
         blink: CreateObject("roTimespan"),
         lit: true,
         clockTimer: CreateObject("roTimespan")
@@ -87,9 +88,17 @@ sub DeckPlay(st as object)
     d.player.SetContentList([{ Stream: { Url: d.tape }, StreamFormat: fmt }])
     d.player.Play()
     d.state = "load"
+    d.loadTimer.Mark()
     print "b0r3d TV VCR: play "; DeckLogUrl(d.tape); " as "; fmt
     DeckRedraw(st)
 end sub
+
+' How long a tape may take to start, in milliseconds. The player says so itself when a tape
+' can't play (no such file, a format it doesn't know), but on an address that nothing answers it
+' can go on waiting. Half a minute also leaves room for a stream that has only just begun.
+function DeckLoadLimitMs() as integer
+    return 30000
+end function
 
 ' Back stops the tape and goes back to the guide. OK or Play pauses and carries on, or plays the
 ' tape again after its end (or after it failed). The options key shows or hides the display over
@@ -192,7 +201,8 @@ end sub
 
 ' Main's loop calls this on every turn on channel 3: once a second the clock and the chores (the
 ' TV kept awake while a tape plays or starts; on the blue screen or paused, Ruckus may come on, as
-' in a paused game), the display going 5 s after play starts, and the 12:00 blinking.
+' in a paused game), a tape that hasn't started in time given up on (NO SIGNAL, and OK tries it
+' again), the display going 5 s after play starts, and the 12:00 blinking.
 sub DeckTurn(st as object)
     d = st.deck
     if d = invalid then return
@@ -200,6 +210,12 @@ sub DeckTurn(st as object)
         d.clockTimer.Mark()
         st.clock = ClockNow()
         if MediaChores(st, d.state = "play" or d.state = "load") then return
+    end if
+    if d.state = "load" and d.loadTimer.TotalMilliseconds() >= DeckLoadLimitMs() then
+        print "b0r3d TV VCR: the tape didn't start in "; (DeckLoadLimitMs() \ 1000).ToStr(); " s"
+        if d.player <> invalid then d.player.Stop()
+        DeckFailed(st)
+        return
     end if
     if d.state = "play" and d.osdAuto and d.osdTimer.TotalMilliseconds() >= 5000 then
         d.osd = false
@@ -362,8 +378,7 @@ sub DrawDeckPreview(st as object, x as integer, y as integer, w as integer, h as
         st.deckDemoTimer.Mark()
         st.deckDemoLit = not st.deckDemoLit
     end if
-    tapeIn = false
-    if st.deck <> invalid then tapeIn = (st.deck.tape <> "")
+    tapeIn = DeckTapeIn(st)
 
     sh = Z(2, k)
     pad = Z(18, k)
@@ -383,6 +398,13 @@ sub DrawDeckPreview(st as object, x as integer, y as integer, w as integer, h as
 end sub
 
 ' --- Putting a tape in ---
+
+' Whether a tape is in the VCR (it stays in until b0r3d TV closes). The guide's preview box and
+' its ON NOW column both say so.
+function DeckTapeIn(st as object) as boolean
+    if st.deck = invalid then return false
+    return st.deck.tape <> ""
+end function
 
 ' Whether a launch's or an input event's parameters carry a tape.
 function DeckHasTape(params as dynamic) as boolean

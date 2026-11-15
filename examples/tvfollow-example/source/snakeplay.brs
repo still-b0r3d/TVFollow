@@ -481,6 +481,14 @@ function SnakeRunRows(score as integer, length as integer, speed as integer, tim
     ]
 end function
 
+' The results page's title: a win (the whole arena filled) keeps the words of its banner.
+function SnakeResultsTitle(sn as object) as string
+    if sn.result <> invalid then
+        if sn.result.how = "won" then return "Arena Clear"
+    end if
+    return "Game Over"
+end function
+
 function SnakeResultsRows(st as object) as object
     sn = st.snake
     r = sn.result
@@ -559,7 +567,7 @@ sub DrawSnake(st as object)
     else if v = "pause" then
         DrawPanel(st, { title: "Paused", rows: SnakePauseRows(st), sel: sn.sel, info: false, hint: "OK picks · Play or Back carries on" })
     else if v = "results" then
-        DrawPanel(st, { title: "Game Over", rows: SnakeResultsRows(st), sel: sn.sel, info: false, hint: "OK picks · Back goes to the menu" })
+        DrawPanel(st, { title: SnakeResultsTitle(sn), rows: SnakeResultsRows(st), sel: sn.sel, info: false, hint: "OK picks · Back goes to the menu" })
     else if v = "initials" then
         DrawPanel(st, { title: "New high score", rows: SnakeInitialsRows(st), sel: sn.sel, info: false, hint: "Left and right pick a letter · OK goes on · Back saves" })
     else if v = "scores" then
