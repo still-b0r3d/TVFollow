@@ -274,6 +274,7 @@ remote_layout=classic
 | `remote_layout` | `classic` (the default), `compact` or `strip` |
 | `paused` | Only there while paused from the tray (`paused=yes`) |
 | `developer_tools` | Only there while the developer tools are switched on (`developer_tools=yes`) |
+| `presses_saved`, `presses_saved_today`, `presses_saved_on` | The main window's **Presses saved for you**: all of them, today's, and the day today's is for. Counted each time the automatic following wakes a TV and it comes on, or presses a TV's power on, power off or the input for your PC and the TV accepts the press (the buttons, the remote, the shortcuts and the developer tools don't count). Written a few seconds after a press, and when TVFollow quits or Windows shuts down. The first time 1.3 runs, they're counted from the log (`TVFollow.log` and `TVFollow.log.old`), by the same rule, once; a log that can't be read then is read at the next start |
 | `dev_password` | The developer mode password, encrypted for your Windows account (`dpapi:` and Windows' own encryption). Copied to another PC or account, it can't be read, and the password box is empty again |
 | `dev_folder` | The app's folder pushed last (empty once a zip or the example is on the TV instead) |
 | `dev_push_back`, `dev_on_save`, `dev_inputs`, `dev_home` | The developer tools' four options (`dev_push_back=no`, `dev_on_save=yes`, `dev_inputs=yes` and `dev_home=yes` are only written when set that way) |

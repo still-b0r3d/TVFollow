@@ -4,7 +4,7 @@ namespace TVFollow
 {
     // Only one TVFollow follows the monitors at a time, installed or portable. When setup saves
     // new settings, the new copy asks the running one to stop and takes over. Opening TVFollow
-    // again while it runs asks the running one to show its Settings window.
+    // again while it runs asks the running one to show its window.
     static class Instance
     {
         // a trial copy (TVFOLLOW_HOME) keeps to itself
@@ -17,7 +17,9 @@ namespace TVFollow
 
         public static string MutexName { get { return @"Local\TVFollow" + Suffix; } }
         public static string QuitName { get { return @"Local\TVFollow.Quit" + Suffix; } }
-        public static string SettingsName { get { return @"Local\TVFollow.Settings" + Suffix; } }
+        // (named for the Settings window it showed before 1.3: a copy of either age opened while
+        // the other runs still brings that one up)
+        public static string ShowName { get { return @"Local\TVFollow.Settings" + Suffix; } }
 
         public static bool IsRunning()
         {
@@ -35,7 +37,7 @@ namespace TVFollow
 
         public static void AskToQuit() { Signal(QuitName); }
 
-        public static void AskToShowSettings() { Signal(SettingsName); }
+        public static void AskToShow() { Signal(ShowName); }
 
         static void Signal(string name)
         {

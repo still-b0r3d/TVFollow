@@ -92,14 +92,15 @@ versions) and whether to install it or run it portable, then click **Finish**.
 TVFollow runs from a small TV icon in the taskbar corner. You might need to click the
 **^** arrow to see it. Right-click it:
 
-![The tray menu: Remote, TV on, TV off, TV to PC, Pause following, Settings, Open log, Quit](docs/images/6-tray-menu.png)
+![The tray menu: Open TVFollow, Remote, TV on, TV off, TV to PC, Pause following, Settings, Open log, Quit](docs/images/6-tray-menu.png)
 
+- **Open TVFollow**: TVFollow's window (below). Double-clicking the icon does the same.
 - **Remote…**: a TV remote on your screen (below).
 - **TV on / TV off / TV to PC**: buttons for the TV, any time.
 - **Pause following**: leave the TV alone until you resume (even across restarts), for
   example while someone watches TV and your PC goes to sleep. The icon turns grey while
   paused.
-- **Settings…**: the Settings window (below). Double-clicking the icon does the same.
+- **Settings…**: the Settings window (below).
 - **Developer tools…**: only there once you've switched on the
   [developer tools](#developer-tools) in Settings. It opens Settings on their pages.
 - **Open log**: what TVFollow did and when, handy if something seems off.
@@ -111,6 +112,25 @@ PC**, and each TV gets a menu of its own (named as the TV calls itself) with its
 on, TV off, TV to PC and remote.
 
 ![The tray menu with two TVs: All TVs on, off and to PC, then a menu for each TV](docs/images/12-tray-menu-two-tvs.png)
+
+### TVFollow's window
+
+Double-click the tray icon, pick **Open TVFollow**, or open TVFollow from the Start menu
+while it's running. The window says whether TVFollow is following your monitors and how
+each TV is right now (asked every few seconds while the window is open, but not while
+it's minimized, the monitors are off or the PC is locked). The big button
+is **Pause following** / **Resume following**, the same as the tray's, and **Remote…**
+opens the remote. **Settings…**, **Developer tools…** (while they're switched on) and
+**Quit TVFollow** are in its **TVFollow** menu; **Help** has this page and the log.
+Closing the window leaves TVFollow running in the tray. It doesn't open at sign-in.
+
+**Presses saved for you** counts the presses of the TV's remote TVFollow saved you: each
+time, following your monitors, it woke the TV and the TV came on, or it pressed the TV's
+power on, power off or the input for your PC and the TV accepted the press (an input
+pressed again while the TV gets there counts once). Today's starts again at midnight; with
+several TVs it's one count. The buttons, the remote and the shortcuts don't count, since
+those are presses you made. The first time 1.3 runs, the count starts from what TVFollow's
+log has.
 
 ### The remote
 
@@ -141,9 +161,9 @@ Settings**, then the arrows.
 
 ### Settings
 
-Right-click the icon → **Settings…**, double-click the icon, or open TVFollow from the
-Start menu while it's running. Pick a page from the list down the left (the arrow keys work
-too). Changes apply straight away.
+Right-click the icon → **Settings…**, or **TVFollow → Settings…** in TVFollow's window.
+Pick a page from the list down the left (the arrow keys work too). Changes apply straight
+away.
 
 ![The Settings window](docs/images/10-settings.png)
 
@@ -184,8 +204,9 @@ More detail in [How it works](docs/HOW-IT-WORKS.md).
 
 ## Change settings or uninstall
 
-- **Change settings:** right-click the tray icon → **Settings…**, or open **TVFollow**
-  from the Start menu while it's running (if it isn't running, that starts it).
+- **Change settings:** right-click the tray icon → **Settings…**, or **TVFollow →
+  Settings…** in TVFollow's window (opening **TVFollow** from the Start menu while it's
+  running brings the window up; if it isn't running, that starts it).
 - **Add, remove or change TVs, or switch between installed and portable:** **Settings… →
   Add or change TVs…** or the "run setup again" link there.
 - **Uninstall:** **Settings → Apps → Installed apps → TVFollow → Uninstall** (on

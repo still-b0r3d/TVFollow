@@ -24,5 +24,22 @@ namespace TVFollow
 
         // the page list, with words in the colour Windows writes in lists
         public static Color List { get { return HighContrast() ? SystemColors.Window : Grey; } }
+
+        // The main window's coloured words: the quiet grey of its version line and status, and
+        // the green and amber of how the TVs are (the Settings window's TV page uses the same).
+        // In high contrast they're the theme's own text colours: the ✔ and ⚠ in front still
+        // say which is which.
+        public static Color Quiet { get { return HighContrast() ? SystemColors.GrayText : SetupPage.Muted; } }
+        public static Color Good { get { return HighContrast() ? SystemColors.WindowText : SetupPage.Good; } }
+        public static Color Warn { get { return HighContrast() ? SystemColors.WindowText : SetupPage.Warn; } }
+
+        // the windows' titles: Segoe UI Semibold where Windows has it, else the body's font in bold
+        public static Font TitleFont(Font body, float size)
+        {
+            var font = new Font("Segoe UI Semibold", size);
+            if (font.Name == "Segoe UI Semibold") return font;
+            font.Dispose();
+            return new Font(body.FontFamily, size, FontStyle.Bold);
+        }
     }
 }

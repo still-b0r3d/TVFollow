@@ -1,7 +1,7 @@
 // TVFollow: turns TVs with Roku built in on and off along with this PC's monitors.
 //
 //   TVFollow.exe            set up on first run, then follow the monitors from the taskbar
-//                           corner; opened again while running, it shows the Settings window
+//                           corner; opened again while running, it shows its window
 //   TVFollow.exe setup      show the setup window
 //   TVFollow.exe on         turn the TVs on (whatever they show)
 //   TVFollow.exe pc         turn the TVs on and switch them to this PC
@@ -74,9 +74,9 @@ namespace TVFollow
             // "home" is the install folder, or for a portable copy the folder it runs from
             bool home = Settings.IsPortable || Installer.SamePath(Application.ExecutablePath, InstallPaths.ForThisPC().Exe);
             Opening opening = WhatOpens(cmd, settings.IsComplete, Instance.IsRunning(), home);
-            if (opening == Opening.Settings)
+            if (opening == Opening.Window)
             {
-                Instance.AskToShowSettings(); // the running copy shows its Settings window
+                Instance.AskToShow(); // the running copy shows its window
                 return 0;
             }
             if (opening == Opening.Setup)
@@ -138,7 +138,7 @@ namespace TVFollow
             return "TVFollow " + FullVersion + "\r\n\r\n" +
                 "Usage: TVFollow.exe [command]\r\n\r\n" +
                 "  (no command)            Set up on first run, or follow the monitors\r\n" +
-                "                          (while running: open Settings)\r\n" +
+                "                          (while running: open its window)\r\n" +
                 "  setup                   Run the setup wizard\r\n" +
                 "  on [TV]                 Turn the TVs on (or one TV, by number or name)\r\n" +
                 "  pc [TV]                 Turn the TVs on and switch them to this PC\r\n" +
@@ -300,18 +300,18 @@ namespace TVFollow
             return named.Count > 0 ? named : null;
         }
 
-        public enum Opening { Follow, Setup, Settings }
+        public enum Opening { Follow, Setup, Window }
 
         // Opening TVFollow: the setup wizard the first time, and whenever it's opened from anywhere
         // but its home folder (a new download: finishing setup installs it over the old one, or
-        // makes it portable). Opened again from home while it runs: the running copy's Settings
-        // window. Otherwise it starts following.
+        // makes it portable). Opened again from home while it runs: the running copy's window.
+        // Otherwise it starts following.
         public static Opening WhatOpens(string cmd, bool setUp, bool running, bool home)
         {
             if (cmd == "setup") return Opening.Setup;
             if (cmd.Length > 0) return Opening.Follow; // the other commands are handled on their own
             if (!setUp || !home) return Opening.Setup;
-            return running ? Opening.Settings : Opening.Follow;
+            return running ? Opening.Window : Opening.Follow;
         }
 
         // After setup, portable: nothing is installed; this exe follows from where it is.
@@ -437,14 +437,16 @@ namespace TVFollow
                 try
                 {
                     Log.Write("started " + FullVersion + ", following the monitors" + (tvs.Count > 1 ? " with " + tvs.Count + " TVs" : ""));
+                    // before the following starts: the presses it saves count on from there
+                    SavedPresses.FromLogOnce(settings);
                     var follower = new Follower(settings, tvs);
                     follower.Start();
+                    // (the tray shows its window when TVFollow is opened again)
                     using (var tray = new Tray(follower))
                     using (var dev = new DevTools(settings, tvs))
                     {
                         dev.Notify = tray.Notify;
                         tray.Dev = dev;
-                        follower.SettingsRequested += tray.ShowSettings;
                         if (greet) tray.Greet();
                         var updates = new UpdateWatcher(tray, settings); // checks only while the setting is on
                         Application.Run();
@@ -452,7 +454,12 @@ namespace TVFollow
                     }
                     GC.KeepAlive(follower);
                 }
-                finally { mutex.ReleaseMutex(); }
+                finally
+                {
+                    // the presses saved not written yet, before the next copy (or an uninstall) can start
+                    SavedPresses.Flush();
+                    mutex.ReleaseMutex();
+                }
             }
             return 0;
         }

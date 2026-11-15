@@ -34,10 +34,30 @@ namespace TVFollow
         uint dimmedAt;
         bool longDim;  // the dim went on long enough to count as the monitors going off
 
+        // Are the monitors dark: off, or dimmed long enough to count as off? The main window
+        // doesn't ask the TVs how they are meanwhile. (Sleep leaves it as it was, unlike the
+        // rules' own state: the screens say again when the PC wakes.)
+        public bool MonitorsDark { get; private set; }
+        public Action DarkChanged = delegate { };
+
+        void Dark(bool value)
+        {
+            if (MonitorsDark == value) return;
+            MonitorsDark = value;
+            DarkChanged();
+        }
+
         // Windows' display state: 0 off, 1 on, 2 dimmed. Coming back from a short dim isn't the
         // monitors coming back on (they never went off), so it's ignored; on after on still
         // counts, since sleep doesn't always send "off" first.
         public void Display(int state)
+        {
+            Decide(state);
+            if (state == 0) Dark(true);
+            else if (state == 1) Dark(false);
+        }
+
+        void Decide(int state)
         {
             int before = lastDisplay;
             lastDisplay = state;
@@ -100,6 +120,7 @@ namespace TVFollow
             longDim = true;
             Log.Write("monitors dimmed for " + LongDimSec + "s, so they count as off");
             Off();
+            Dark(true);
         }
     }
 
@@ -130,12 +151,16 @@ namespace TVFollow
     // the TVs never wait on each other.
     class Follower : NativeWindow
     {
-        const int WM_QUERYENDSESSION = 0x11, WM_ENDSESSION = 0x16, WM_POWERBROADCAST = 0x218;
+        const int WM_QUERYENDSESSION = 0x11, WM_ENDSESSION = 0x16, WM_POWERBROADCAST = 0x218, WM_WTSSESSION_CHANGE = 0x2B1;
         const int PBT_APMSUSPEND = 0x4, PBT_POWERSETTINGCHANGE = 0x8013;
+        const int WTS_SESSION_LOCK = 0x7, WTS_SESSION_UNLOCK = 0x8, NOTIFY_FOR_THIS_SESSION = 0;
         static Guid GUID_CONSOLE_DISPLAY_STATE = new Guid("6FE69556-704A-47A0-8F24-C28D936FDA47");
 
         [DllImport("user32.dll", SetLastError = true)]
         static extern IntPtr RegisterPowerSettingNotification(IntPtr hRecipient, ref Guid powerSettingGuid, int flags);
+
+        [DllImport("wtsapi32.dll", SetLastError = true)]
+        static extern bool WTSRegisterSessionNotification(IntPtr hWnd, int flags);
 
         public readonly FollowRules Rules = new FollowRules();
 
@@ -161,6 +186,25 @@ namespace TVFollow
             Rules.OffWithMonitors = settings.OffWithMonitors;
             Rules.Paused = settings.Paused;
             Rules.Want = Want;
+            Rules.DarkChanged = () => ScreensChanged();
+        }
+
+        // ---- can anyone see the screens? Only then does the main window ask the TVs how they are ----
+
+        bool locked;
+
+        // the monitors are off (or dimmed long enough to count as off), or the PC is locked
+        public bool NobodyLooking { get { return locked || Rules.MonitorsDark; } }
+
+        // NobodyLooking may have changed, on the window's thread
+        public event Action ScreensChanged = delegate { };
+
+        // the PC locked or unlocked (Windows tells the hidden window; the tests call it)
+        public void SessionLocked(bool value)
+        {
+            if (locked == value) return;
+            locked = value;
+            ScreensChanged();
         }
 
         public void Start()
@@ -172,9 +216,19 @@ namespace TVFollow
             CreateHandle(cp); // hidden top-level window, so it also hears sleep and shutdown
             // Windows answers right away with the current state, which turns the TV on at sign-in
             RegisterPowerSettingNotification(Handle, ref GUID_CONSOLE_DISPLAY_STATE, 0);
+            // the PC being locked and unlocked: the following ignores it, the main window doesn't
+            if (!WTSRegisterSessionNotification(Handle, NOTIFY_FOR_THIS_SESSION))
+                Log.Write("couldn't listen for the PC being locked (error " + Marshal.GetLastWin32Error() + ")");
+            Listen();
+        }
 
+        // Twice a second: the other copies' signals (a new copy taking over asks this one to
+        // stop; TVFollow opened again asks it to show its window), and the input and the dim the
+        // rules wait for. Start does this; the tests listen alone, and stop again.
+        public void Listen()
+        {
             quit = new EventWaitHandle(false, EventResetMode.AutoReset, Instance.QuitName);
-            showSettings = new EventWaitHandle(false, EventResetMode.AutoReset, Instance.SettingsName);
+            showWindow = new EventWaitHandle(false, EventResetMode.AutoReset, Instance.ShowName);
             tick = new System.Windows.Forms.Timer();
             tick.Interval = 500;
             tick.Tick += delegate
@@ -182,20 +236,29 @@ namespace TVFollow
                 if (quit.WaitOne(0))
                 {
                     Log.Write("stopping: a new copy with new settings is taking over");
+                    // it has saved them: presses not written yet aren't written over them
+                    SavedPresses.Forget();
                     tick.Stop();
                     Application.ExitThread();
                     return;
                 }
-                if (showSettings.WaitOne(0)) SettingsRequested();
+                if (showWindow.WaitOne(0)) ShowRequested();
                 Rules.CheckForInput();
                 Rules.CheckDim();
             };
             tick.Start();
         }
 
-        // TVFollow was opened again while this copy runs
-        public event Action SettingsRequested = delegate { };
-        EventWaitHandle showSettings;
+        public void StopListening()
+        {
+            tick.Dispose();
+            quit.Dispose();
+            showWindow.Dispose();
+        }
+
+        // TVFollow was opened again while this copy runs (the tray shows the main window)
+        public event Action ShowRequested = delegate { };
+        EventWaitHandle showWindow;
 
         // the TVs' threads; Start starts them, and the tests start them alone to drive the rules
         // without the window
@@ -278,6 +341,14 @@ namespace TVFollow
             {
                 Log.Write("PC shutting down");
                 QuickOff();
+                // the presses saved so far, the off just now included, before Windows ends TVFollow
+                SavedPresses.Flush();
+            }
+            if (m.Msg == WM_WTSSESSION_CHANGE)
+            {
+                int ev = m.WParam.ToInt32();
+                if (ev == WTS_SESSION_LOCK) SessionLocked(true);
+                else if (ev == WTS_SESSION_UNLOCK) SessionLocked(false);
             }
             base.WndProc(ref m);
         }

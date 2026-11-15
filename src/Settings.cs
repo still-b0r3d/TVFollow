@@ -106,6 +106,13 @@ namespace TVFollow
         public string RemoteLayout = "classic";  // classic, compact or strip
         public bool DeveloperTools;  // the developer tools are shown, and do their work in the background
 
+        // The presses of the remote TVFollow saved by following the monitors (SavedPresses counts
+        // them; the main window shows them): today's, the day they're for, and all of them.
+        // PressesKept: the counts are kept in this file, so the log is never counted again.
+        public int PressesToday, PressesAllTime;
+        public string PressesDay = "";
+        public bool PressesKept;
+
         public bool IsComplete { get { return Tvs.Count > 0 && Tvs.TrueForAll(t => t.IsComplete); } }
 
         public bool SeveralTvs { get { return Tvs.Count > 1; } }
@@ -200,6 +207,15 @@ namespace TVFollow
                         value = value.ToLowerInvariant();
                         if (value == "classic" || value == "compact" || value == "strip") s.RemoteLayout = value;
                         break;
+                    case "presses_saved":
+                        int all;
+                        if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out all)) { s.PressesAllTime = all; s.PressesKept = true; }
+                        break;
+                    case "presses_saved_today":
+                        int today;
+                        if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out today)) s.PressesToday = today;
+                        break;
+                    case "presses_saved_on": s.PressesDay = value; break;
                 }
             }
             if (first != null) s.Tvs.Add(first);
@@ -285,6 +301,15 @@ namespace TVFollow
                 (Paused ? "paused=yes\r\n" : "") +
                 (DeveloperTools ? "developer_tools=yes\r\n" : "") +
                 (Port != DefaultPort ? "port=" + Port + "\r\n" : ""));
+            int today, all;
+            string day;
+            bool kept;
+            lock (SavedPresses.CountLock) { today = PressesToday; all = PressesAllTime; day = PressesDay; kept = PressesKept; }
+            if (kept)
+                text.Append(
+                    "presses_saved=" + all.ToString(CultureInfo.InvariantCulture) + "\r\n" +
+                    "presses_saved_today=" + today.ToString(CultureInfo.InvariantCulture) + "\r\n" +
+                    "presses_saved_on=" + OneLine(day) + "\r\n");
             if (Tvs.Count > 1) text.Append("# the other TVs\r\n");
             for (int i = 1; i < Tvs.Count; i++) WriteTv(text, "tv" + (i + 1) + ".", Tvs[i]);
             string body = text.ToString();

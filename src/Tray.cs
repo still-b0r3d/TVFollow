@@ -19,8 +19,9 @@ namespace TVFollow
         }
     }
 
-    // The TV in the taskbar corner: the remote, TV buttons, Pause, Settings, the developer tools
-    // (only while they're switched on in Settings), the log and Quit.
+    // The TV in the taskbar corner: TVFollow's window, the remote, TV buttons, Pause, Settings,
+    // the developer tools (only while they're switched on in Settings), the log and Quit.
+    // Double-clicking it opens TVFollow's window, as Open TVFollow does.
     // With several TVs the TV buttons do every TV, and each TV has a menu of its own.
     class Tray : IDisposable
     {
@@ -35,12 +36,14 @@ namespace TVFollow
         RemoteForm remote;
         Controller remoteTv; // the TV the remote was last on, so it opens on it again
         SettingsForm settingsWindow;
+        MainForm mainWindow;
         readonly System.Threading.SynchronizationContext ui;  // the windows' thread, for messages from other threads
 
         // the developer tools (Program sets them once the tray is up)
         public DevTools Dev;
 
-        // runs on the Settings window just before it first shows (the tests move it off the screen)
+        // runs on the main window and the Settings window just before they first show (the
+        // tests move them off the screen)
         public static Action<Form> PlaceWindow = delegate { };
 
         public event Action<bool> PausedChanged = delegate { };
@@ -53,13 +56,15 @@ namespace TVFollow
             paused = AppIcons.Load("tv-paused.ico", SystemInformation.SmallIconSize);
 
             var menu = new ContextMenuStrip { ShowImageMargin = false };
+            // in bold, as the menu's default: what double-clicking the icon does
+            var open = new ToolStripMenuItem("Open TVFollow", null, delegate { ShowMain(); });
+            open.Font = new Font(menu.Font, FontStyle.Bold);
             state = new ToolStripMenuItem { Enabled = false };
             pause = new ToolStripMenuItem("Pause following", null, delegate { SetPaused(!follower.Rules.Paused); });
-            var remoteItem = new ToolStripMenuItem("Remote…", null, delegate { ShowRemote(null); });
-            remoteItem.Font = new Font(menu.Font, FontStyle.Bold);
+            menu.Items.Add(open);
             menu.Items.Add(state);
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(remoteItem);
+            menu.Items.Add("Remote…", null, delegate { ShowRemote(null); });
             bool several = tvs.Count > 1;
             menu.Items.Add(several ? "All TVs on" : "TV on", null, delegate { Do("on (button)", tvs, c => c.TurnOn(TurnOnMode.PowerOnly)); });
             menu.Items.Add(several ? "All TVs off" : "TV off", null, delegate { Do("off (button)", tvs, c => c.TurnOff(true, false)); });
@@ -79,7 +84,9 @@ namespace TVFollow
             menu.Opening += delegate { foreach (var pair in tvMenus) pair.Key.Text = MenuText(pair.Value.Label); };
 
             icon.ContextMenuStrip = menu;
-            icon.DoubleClick += delegate { ShowSettings(); };
+            icon.DoubleClick += delegate { ShowMain(); };
+            // TVFollow opened again while it runs
+            follower.ShowRequested += ShowMain;
             icon.BalloonTipClicked += delegate { if (balloonUrl != null) SetupForm.OpenUrl(balloonUrl); };
             Show();
             icon.Visible = true;
@@ -113,7 +120,7 @@ namespace TVFollow
             {
                 update = new ToolStripMenuItem { Font = new Font(icon.ContextMenuStrip.Font, FontStyle.Bold) };
                 update.Click += delegate { SetupForm.OpenUrl((string)update.Tag); };
-                icon.ContextMenuStrip.Items.Insert(1, update);
+                icon.ContextMenuStrip.Items.Insert(icon.ContextMenuStrip.Items.IndexOf(state) + 1, update);
             }
             update.Text = "Get TVFollow " + version + "…";
             update.Tag = url;
@@ -196,8 +203,20 @@ namespace TVFollow
             ShowRemote(null);
         }
 
-        // One Settings window at a time: Settings… in the menu, double-clicking the icon, or
-        // opening TVFollow again
+        // TVFollow's window: Open TVFollow, double-clicking the icon, or opening TVFollow again.
+        // There's one; closing it only hides it, so it comes back as it was.
+        public void ShowMain()
+        {
+            if (mainWindow == null || mainWindow.IsDisposed)
+            {
+                mainWindow = new MainForm(follower, this);
+                PlaceWindow(mainWindow);
+            }
+            if (!mainWindow.Visible) mainWindow.Show();
+            BringBack(mainWindow);
+        }
+
+        // One Settings window at a time: Settings… in this menu or in the main window's
         public void ShowSettings()
         {
             if (settingsWindow != null && !settingsWindow.IsDisposed) { BringBack(settingsWindow); return; }
@@ -223,11 +242,12 @@ namespace TVFollow
             window.Activate();
         }
 
-        // the switch in Settings: the background work starts or stops, and the tray menu's
-        // Developer tools… goes with it
+        // the switch in Settings: the background work starts or stops, and Developer tools… in
+        // the tray menu and the main window's menu goes with it
         public void DeveloperToolsChanged()
         {
             developer.Available = follower.Settings.DeveloperTools;
+            if (mainWindow != null && !mainWindow.IsDisposed) mainWindow.DeveloperToolsChanged();
             if (Dev != null) Dev.Refresh();
         }
 
@@ -244,8 +264,10 @@ namespace TVFollow
 
         public void Dispose()
         {
+            follower.ShowRequested -= ShowMain;
             if (remote != null && !remote.IsDisposed) remote.Close();
             if (settingsWindow != null && !settingsWindow.IsDisposed) settingsWindow.Close();
+            if (mainWindow != null && !mainWindow.IsDisposed) mainWindow.CloseForGood();
             icon.Visible = false;
             icon.Dispose();
         }

@@ -7,7 +7,7 @@ using System.Windows.Forms;
 
 namespace TVFollow
 {
-    // The Settings window of the running TVFollow (tray → Settings…, or opening TVFollow again):
+    // The Settings window of the running TVFollow (Settings… in the tray menu or the main window's):
     // a page for each part, picked from the list down its left side, like Windows' own Settings.
     // Every change applies and saves right away. Adding, removing or changing TVs, or switching
     // between installed and portable, runs the setup wizard. The developer tools are pages here
@@ -67,7 +67,7 @@ namespace TVFollow
             ClientSize = new Size(780, 560);
             BackColor = SystemColors.Window;
             try { Icon = AppIcons.Load("tv.ico", SystemInformation.IconSize); } catch { }
-            titleFont = TitleFont(Font);
+            titleFont = Look.TitleFont(Font, 15f);
 
             bool several = settings.SeveralTvs;
             Page(TvsPage, several ? "TVs" : "TV", (char)0xE7F4,
@@ -155,15 +155,6 @@ namespace TVFollow
             Load += delegate { foreach (TvLines tv in tvs) LoadTv(tv); };
             // the list has the focus, so the arrow keys move between pages straight away
             Shown += delegate { nav.Focus(); };
-        }
-
-        // the pages' titles: Segoe UI Semibold where Windows has it
-        static Font TitleFont(Font body)
-        {
-            var font = new Font("Segoe UI Semibold", 15f);
-            if (font.Name == "Segoe UI Semibold") return font;
-            font.Dispose();
-            return new Font(body.FontFamily, 15f, FontStyle.Bold);
         }
 
         protected override void Dispose(bool disposing)
@@ -407,30 +398,16 @@ namespace TVFollow
 
         async void LoadTv(TvLines tv)
         {
-            var client = new RokuClient(tv.Tv.Ip, settings.Port);
-            DeviceInfo info = null;
-            List<KeyValuePair<string, string>> inputs = null;
-            string showing = null;
-            await Task.Run(() =>
-            {
-                info = client.GetDeviceInfo(2500);
-                if (info != null)
-                {
-                    inputs = client.GetHdmiInputs(2500);
-                    showing = client.GetActiveApp(2500);
-                }
-            });
+            TvSettings which = tv.Tv;
+            int port = settings.Port;
+            TvCheck check = await Task.Run(() => TvCheck.Ask(which, port, true));
             if (IsDisposed) return;
-            if (info == null)
+            DeviceInfo info = check.Info;
+            List<KeyValuePair<string, string>> inputs = check.Inputs;
+            // not this TV answering (or nothing): its name stays as it was
+            if (check.State == TvCheck.Kind.NoAnswer || check.State == TvCheck.Kind.OtherRoku)
             {
-                SetState(tv, false, "Not answering right now. Is it on, and on this network?");
-                return;
-            }
-            if (info.Serial != tv.Tv.Serial)
-            {
-                // the router gave the TV's address to something else: the TV gets looked for when
-                // TVFollow next needs it, and its name stays as it was
-                SetState(tv, false, "Another Roku answers at this address right now. TVFollow looks for your TV by itself when it needs it.");
+                SetState(tv, TvCheck.Mark(check.State), TvCheck.Words(check.State));
                 return;
             }
             if (info.Name.Length > 0 && info.Name != tv.Tv.Name)
@@ -441,13 +418,7 @@ namespace TVFollow
             }
             string where = info.Location.Length > 0 ? "  ·  " + info.Location : "";
             tv.Name.Text = tv.Number + (info.Name.Length > 0 ? info.Name : "TV") + where + "  ·  " + ShownAddress(tv.Tv.Ip);
-            if (!info.AllowsControl)
-                SetState(tv, false, "Network access is on Limited, so TVFollow can't press its buttons. On the TV: Settings → System → " +
-                    "Advanced system settings → Control by mobile apps → Network access → Enabled.");
-            else if (!info.IsOn) SetState(tv, null, "Off right now.");
-            else if (showing == tv.Tv.PcApp) SetState(tv, true, "On, showing this PC.");
-            else if (showing == "") SetState(tv, null, "On, showing Roku's home screen.");
-            else SetState(tv, null, "On, showing something else.");
+            SetState(tv, TvCheck.Mark(check.State), TvCheck.Words(check.State));
             if (inputs != null && inputs.Count > 0)
             {
                 loading = true;
@@ -458,7 +429,7 @@ namespace TVFollow
 
         static void SetState(TvLines tv, bool? ok, string text)
         {
-            tv.State.Text = (ok == null ? "" : ok.Value ? "✔  " : "⚠  ") + text;
+            tv.State.Text = TvCheck.Marked(ok, text);
             tv.State.ForeColor = ok == null ? SystemColors.ControlText : ok.Value ? SetupPage.Good : SetupPage.Warn;
         }
 

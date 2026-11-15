@@ -168,6 +168,12 @@ namespace TVFollow
             // this one was on all along and only slow to answer, and it's left alone as ever.
             bool cameOn = woken && s.IsOn && (s.App.Length == 0 || s.App.StartsWith("tvinput.", StringComparison.Ordinal));
 
+            // What the following does by itself is a press of the remote saved for whoever's at
+            // the PC (the main window counts them): waking the TV on, its power on, its switch
+            // to the PC. A button's presses are presses someone made.
+            bool following = mode == TurnOnMode.Follow;
+            if (following && cameOn) Saved();
+
             int powerCode = 200;
             if (s.IsOn)
             {
@@ -179,10 +185,13 @@ namespace TVFollow
             {
                 powerCode = client.Keypress("PowerOn", 4000);
                 Say(tag + ": power on (was " + s.PowerMode + ") -> " + powerCode);
+                if (following && Ok(powerCode)) Saved();
                 if (mode == TurnOnMode.PowerOnly) return powerCode;
             }
 
             bool everOn = s.IsOn;
+            bool toldPress = false;    // the first press of the input is in the log
+            bool switchTook = false;   // the input is pressed again while the TV gets there: the first one it takes is the press saved
             int lastCode = 0;
             for (int i = 0; i < 8; i++)
             {
@@ -197,7 +206,16 @@ namespace TVFollow
                 int code = client.Keypress("Input" + tv.Input.ToUpperInvariant(), 4000);
                 if (code < 200 || code > 299) code = client.Launch(tv.PcApp, 4000);
                 lastCode = code;
-                if (i == 0) Say(tag + ": switching to the PC -> " + code);
+                // the log has the first press, and the first one the TV took if that wasn't it, so
+                // every press the main window counts has its line (the count can come from the log)
+                bool took = Ok(code) && !switchTook;
+                if (!toldPress || took) Say(tag + ": switching to the PC -> " + code);
+                toldPress = true;
+                if (took)
+                {
+                    switchTook = true;
+                    if (following) Saved();
+                }
             }
             Say(tag + ": gave up waiting for the PC input");
             if (!everOn) return powerCode == 403 ? 403 : 0;
@@ -318,8 +336,18 @@ namespace TVFollow
                 if (s.App != tv.PcApp && s.App != "dev") { Say(tag + ": TV is showing " + Describe(s.App) + " now, leaving it on"); return; }
             }
             Say(tag + ": sending power off"); // logged first: at shutdown the PC may stop before the reply
-            Say(tag + ": power off -> " + client.Keypress("PowerOff", quick ? 800 : 4000));
+            int code = client.Keypress("PowerOff", quick ? 800 : 4000);
+            Say(tag + ": power off -> " + code);
+            // the following's off is a press of the remote saved; a button's isn't (see TurnOnNow)
+            if (!force && Ok(code)) Saved();
         }
+
+        static bool Ok(int code) { return code >= 200 && code <= 299; }
+
+        // One press of the remote saved, for the main window's count: counted at once, and written
+        // to settings.ini a moment later on a thread of its own, so a settings file another
+        // program holds never holds up this TV's turn or its switch to the PC.
+        void Saved() { SavedPresses.Count(settings); }
 
         // the usual query; the quick path at sleep and shutdown calls Query(800) directly, so it
         // never stops to look at the network

@@ -31,6 +31,9 @@ namespace TVFollow.Tests
 
             string home = Path.Combine(Path.GetTempPath(), "TVFollowTests-" + Guid.NewGuid().ToString("N"));
             Settings.Dir = home;
+            // the presses saved are written at once, so no write lands in a later test's settings.ini
+            // (PressesWrittenLater turns TVFollow's wait back on)
+            SavedPresses.WriteAfterMs = 0;
 
             Run("settings save and load", SettingsRoundTrip);
             Run("settings read the old 'mac' key", SettingsOldMacKey);
@@ -68,6 +71,7 @@ namespace TVFollow.Tests
             RunReviewFixes();
             RunDevTests();
             RunSettingsWindowTests();
+            RunMainWindowTests();
             Run("version matches the exe's version", VersionMatches);
             Run("the version line fits beside the buttons", VersionLineFits);
 

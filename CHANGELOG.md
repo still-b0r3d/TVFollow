@@ -2,8 +2,16 @@
 
 ## 1.3 (not released yet)
 
-A new Settings window, and developer tools for putting your own Roku apps on the TV.
+A window of its own, a new Settings window, and developer tools for putting your own Roku
+apps on the TV.
 
+- **TVFollow has a window of its own**, opened by double-clicking the tray icon, **Open
+  TVFollow** (the tray menu's new first item) or opening TVFollow again while it runs
+  (double-clicking the icon and opening it again used to open Settings). It shows how each
+  TV is (asked every few seconds, never while the monitors are off or the PC is locked), a
+  big **Pause following** button, **Remote…** and **Presses saved for you** (today's and all
+  of them, counted from the log the first time); **Settings…** and **Developer tools…** are
+  in its **TVFollow** menu.
 - **The Settings window has a page for each part**, picked from a list down its left side,
   like Windows' own Settings: TV, Following, Remote, This PC, Updates and Developer tools.
   It keeps one size; a page with more than fits scrolls. **Tab** goes from the list into
@@ -63,8 +71,8 @@ A new Settings window, and developer tools for putting your own Roku apps on the
 - **Let the app switch the TV's inputs** (off to start with): a Roku TV won't let an app
   switch its inputs, so the pushed app can ask TVFollow, which switches the TV while this
   PC is on. The README says how an app asks.
-- **Settings…** in the tray menu, double-clicking the icon and opening TVFollow again all
-  bring a minimized Settings window back up. Before, it stayed down in the taskbar.
+- **Settings…** brings a minimized Settings window back up, and the tray icon and opening
+  TVFollow again do the same for the main window. Before, it stayed down in the taskbar.
 - A TV woken from deep standby is switched to your PC even when it comes up on Roku's home
   screen or on another input. Before, TVFollow took it for a TV that was on already and
   left it there. A TV that was on all along, and only slow to answer, is still left alone.

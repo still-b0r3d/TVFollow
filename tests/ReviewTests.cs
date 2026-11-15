@@ -315,7 +315,7 @@ namespace TVFollow.Tests
         static void SetupShowsWhen()
         {
             Check(Program.WhatOpens("", false, false, true) == Program.Opening.Setup, "first run: setup");
-            Check(Program.WhatOpens("", true, true, true) == Program.Opening.Settings, "opened again while running: Settings");
+            Check(Program.WhatOpens("", true, true, true) == Program.Opening.Window, "opened again while running: its window");
             Check(Program.WhatOpens("", true, false, false) == Program.Opening.Setup, "a new download, nothing running: setup");
             Check(Program.WhatOpens("", true, true, false) == Program.Opening.Setup, "a new download while running: setup (to update)");
             Check(Program.WhatOpens("", true, false, true) == Program.Opening.Follow, "home, not running: just follow");
