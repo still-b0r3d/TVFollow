@@ -31,9 +31,12 @@ end sub
 
 function NewSnakeGame() as object
     savedInitials = RegRead("snake.initials", RegRead("sp.initials", "AAA"))
+    mode = RegRead("snake.mode", "wrap")
+    if mode <> "walls" then mode = "wrap"
     sn = {
         view: "menu",
         sel: 0,
+        mode: mode,
         initials: CleanInitials(savedInitials),
         letters: ["A", "A", "A"],
         g: invalid,
@@ -46,12 +49,18 @@ function NewSnakeGame() as object
         fps: { frames: 0, timer: CreateObject("roTimespan") },
         result: invalid,
         bestText: "---",
+        scoresMode: mode,
         scoresOnline: false,
         scoresFrom: "menu",
         howtoFrom: "menu",
         sounds: LoadSnakeSounds()
     }
     return sn
+end function
+
+function SnakeModeTitle(mode as string) as string
+    if mode = "walls" then return "Solid walls"
+    return "Wrap edges"
 end function
 
 ' --- Sounds: sound effects played when Sound is on ---
@@ -148,15 +157,16 @@ end sub
 
 sub StartSnakeRun(st as object)
     sn = st.snake
-    sn.g = SnakeNew(GameSeed())
+    RegWrite("snake.mode", sn.mode)
+    sn.g = SnakeNew(GameSeed(), sn.mode)
     sn.g.events.Clear()
-    sn.bestText = SnakeBestShort()
+    sn.bestText = SnakeBestShort(sn.mode)
     sn.result = invalid
     sn.art = invalid
     sn.view = "play"
     sn.clock.Mark()
     sn.lastMs = 0
-    RequestRunToken(st, BoardKeyFor("snake", ""))
+    RequestRunToken(st, BoardKeyFor("snake", sn.mode))
     Redraw(st)
 end sub
 
@@ -186,6 +196,7 @@ sub FinishSnakeSignal(st as object)
 
     r = {
         how: g.state,
+        mode: g.mode,
         score: g.score,
         length: g.snake.Count(),
         speed: g.speed,
@@ -195,7 +206,7 @@ sub FinishSnakeSignal(st as object)
         saved: false
     }
     ' a run with no points doesn't go on the table
-    if g.score > 0 then r.place = ScoreRank(LoadSnakeScores(), r.value, false)
+    if g.score > 0 then r.place = ScoreRank(LoadSnakeScores(g.mode), r.value, false)
     sn.result = r
     sn.sel = 0
 
@@ -212,12 +223,12 @@ sub SaveSnakeInitials(st as object)
     sn = st.snake
     r = sn.result
     initials = sn.letters[0] + sn.letters[1] + sn.letters[2]
-    list = LoadSnakeScores()
+    list = LoadSnakeScores(r.mode)
     entry = { i: initials, v: r.value, s: r.score, l: r.length, t: r.time }
     r.place = ScoreInsert(list, entry, false)
     r.saved = (r.place >= 0)
-    SaveSnakeScores(list)
-    SubmitOnlineScore(st, BoardKeyFor("snake", ""), initials, r.score)
+    SaveSnakeScores(list, r.mode)
+    SubmitOnlineScore(st, BoardKeyFor("snake", r.mode), initials, r.score)
     sn.initials = initials
     RegWrite("snake.initials", initials)
     RegWrite("sp.initials", initials)
@@ -225,34 +236,45 @@ sub SaveSnakeInitials(st as object)
     sn.sel = 0
 end sub
 
-function LoadSnakeScores() as object
+function LoadSnakeScores(mode = "wrap" as string) as object
+    if mode = "walls" then return CleanScoreTable(ParseJson(RegRead("snake.best.walls", "[]")))
     raw = RegRead("snake.best", RegRead("sp.best.snake", "[]"))
     return CleanScoreTable(ParseJson(raw))
 end function
 
-sub SaveSnakeScores(list as object)
+sub SaveSnakeScores(list as object, mode = "wrap" as string)
     json = FormatJson(list)
+    if mode = "walls" then
+        RegWrite("snake.best.walls", json)
+        return
+    end if
     RegWrite("snake.best", json)
     RegWrite("sp.best.snake", json)
 end sub
 
 function SnakeScoresCount() as integer
-    return LoadSnakeScores().Count()
+    n = 0
+    for each mode in SnakeModes()
+        n = n + LoadSnakeScores(mode).Count()
+    end for
+    return n
 end function
 
 sub ClearSnakeScores()
-    SaveSnakeScores([])
+    for each mode in SnakeModes()
+        SaveSnakeScores([], mode)
+    end for
 end sub
 
-function SnakeBestShort() as string
-    list = LoadSnakeScores()
+function SnakeBestShort(mode = "wrap" as string) as string
+    list = LoadSnakeScores(mode)
     if list.Count() = 0 then return "---"
     e = list[0]
     return e.i + " " + e.v.ToStr()
 end function
 
-function SnakeBestWord() as string
-    list = LoadSnakeScores()
+function SnakeBestWord(mode = "wrap" as string) as string
+    list = LoadSnakeScores(mode)
     if list.Count() = 0 then return "None yet"
     e = list[0]
     return e.i + ", " + e.v.ToStr() + " points"
@@ -260,7 +282,7 @@ end function
 
 function SnakeScoreRanks(g as object) as boolean
     if g = invalid or g.score <= 0 then return false
-    return ScoreRank(LoadSnakeScores(), g.score, false) >= 0
+    return ScoreRank(LoadSnakeScores(g.mode), g.score, false) >= 0
 end function
 
 ' --- Remote Controls ---
@@ -288,13 +310,22 @@ sub SnakeKey(st as object, code as integer)
     else if v = "initials" then
         SnakeInitialsKey(st, code)
     else if v = "scores" then
-        if code = 0 or code = 6 then
-            sn.view = sn.scoresFrom
-            sn.sel = 0
+        board = BoardKeyFor("snake", sn.scoresMode)
+        if code = 4 or code = 5 then
+            delta = 1
+            if code = 4 then delta = -1
+            sn.scoresMode = NextIn(SnakeModes(), sn.scoresMode, delta)
+            board = BoardKeyFor("snake", sn.scoresMode)
+            if board = "" then sn.scoresOnline = false
+            FetchOnlineScores(st, board)
             Redraw(st)
-        else if code = 2 or code = 3 then
+        else if (code = 2 or code = 3) and board <> "" then
             ' up and down: the TV's own table or the online one
             sn.scoresOnline = not sn.scoresOnline
+            Redraw(st)
+        else if code = 0 or code = 6 then
+            sn.view = sn.scoresFrom
+            sn.sel = 0
             Redraw(st)
         end if
     else if v = "howto" then
@@ -333,11 +364,15 @@ sub SnakeMenuKey(st as object, code as integer)
         delta = 1
         if code = 2 then delta = -1
         sn.sel = PanelStep(rows, sn.sel, delta)
+    else if code = 4 or code = 5 then
+        delta = 1
+        if code = 4 then delta = -1
+        if id = "mode" then sn.mode = NextIn(SnakeModes(), sn.mode, delta)
     else if code = 6 then
         if id = "play" then
             StartSnakeRun(st)
         else if id = "scores" then
-            ShowSnakeScores(st, "menu")
+            ShowSnakeScores(st, sn.mode, "menu")
         else if id = "howto" then
             sn.howtoFrom = "menu"
             sn.view = "howto"
@@ -401,7 +436,7 @@ sub SnakeResultsKey(st as object, code as integer)
         if id = "again" then
             StartSnakeRun(st)
         else if id = "scores" then
-            ShowSnakeScores(st, "results")
+            ShowSnakeScores(st, sn.result.mode, "results")
         else if id = "menu" then
             sn.view = "menu"
             sn.sel = 0
@@ -443,10 +478,19 @@ end sub
 ' --- Panel Rows ---
 
 function SnakeMenuRows(st as object) as object
+    sn = st.snake
+    ruleText = "Wrap edges · Eat to grow and speed up"
+    boardText = "Posts top 10 to still.b0r3d.org"
+    if sn.mode = "walls" then
+        ruleText = "Solid walls · Hitting any edge ends the run"
+        boardText = "Local top 10 only (stays on TV)"
+    end if
     return [
-        { id: "play", label: "Play", value: "Retro snake arcade", kind: "open" },
-        { id: "best", label: "Best", value: SnakeBestWord(), kind: "info", dim: true },
-        { id: "rules", label: "Rules", value: "Wrap arena · Eat to grow and speed up", kind: "info", dim: true },
+        { id: "play", label: "Play", value: SnakeModeTitle(sn.mode), kind: "open" },
+        { id: "mode", label: "Arena", value: SnakeModeTitle(sn.mode), kind: "choice" },
+        { id: "rules", label: "Rules", value: ruleText, kind: "info", dim: true },
+        { id: "board", label: "Online board", value: boardText, kind: "info", dim: true },
+        { id: "best", label: "Best", value: SnakeBestWord(sn.mode), kind: "info", dim: true },
         { id: "scores", label: "Leaderboard", value: "Top 10 players", kind: "open" },
         { id: "howto", label: "How to play", value: "Controls and scoring", kind: "open" },
         { id: "guide", label: "Back to the guide", value: "", kind: "open" }
@@ -495,12 +539,13 @@ function SnakeResultsRows(st as object) as object
     table = "Top 10 leaderboard"
     if r.saved then table = PlaceWord(r.place) + " place, as " + sn.initials
     rows = [
-        { id: "again", label: "Play again", value: "New run", kind: "open" },
+        { id: "again", label: "Play again", value: SnakeModeTitle(r.mode), kind: "open" },
         { id: "scores", label: "Leaderboard", value: table, kind: "open" },
         { id: "menu", label: "Menu", value: "Back to snake menu", kind: "open" },
         { id: "guide", label: "Back to the guide", value: "", kind: "open" }
     ]
     rows.Append(SnakeRunRows(r.score, r.length, r.speed, r.time))
+    rows.Push(OnlinePostRow(st, BoardKeyFor("snake", r.mode), r))
     return rows
 end function
 
@@ -517,23 +562,27 @@ function SnakeInitialsRows(st as object) as object
     ]
 end function
 
-' The scores page opens on the TV's own table and asks still.b0r3d.org for the online one.
-sub ShowSnakeScores(st as object, from as string)
+' The scores page opens on the TV's own table and asks still.b0r3d.org for the online one
+' (Wrap edges only).
+sub ShowSnakeScores(st as object, mode as string, from as string)
     sn = st.snake
+    sn.scoresMode = mode
     sn.scoresFrom = from
     sn.scoresOnline = false
     sn.view = "scores"
-    FetchOnlineScores(st, BoardKeyFor("snake", ""))
+    FetchOnlineScores(st, BoardKeyFor("snake", mode))
 end sub
 
 ' The TV's own top 10 (or, with up or down, the online board's).
 function SnakeScoreRows(st as object) as object
     sn = st.snake
-    if sn.scoresOnline then return OnlineScoreRows(st, BoardKeyFor("snake", ""))
-    list = LoadSnakeScores()
+    mode = sn.scoresMode
+    board = BoardKeyFor("snake", mode)
+    if sn.scoresOnline and board <> "" then return OnlineScoreRows(st, board)
+    list = LoadSnakeScores(mode)
     rows = []
     newPlace = -1
-    if sn.result <> invalid and sn.result.saved then newPlace = sn.result.place
+    if sn.result <> invalid and sn.result.saved and sn.result.mode = mode then newPlace = sn.result.place
     for i = 0 to list.Count() - 1
         e = list[i]
         val = AsInt(e.s).ToStr() + " points, length " + AsInt(e.l).ToStr() + ", " + TimeWord(AsInt(e.t))
@@ -546,10 +595,10 @@ end function
 
 function SnakeHowToRows() as object
     return [
-        { label: "Steer", value: "Use the D-pad (Up, Down, Left, Right) to change direction" },
+        { label: "Steer", value: "Use the D-pad (Up, Down, Left, Right); rapid U-turns queue cleanly" },
         { label: "Food", value: "Each bite of food makes the snake one longer and scores a point" },
         { label: "Speed", value: "Each bite speeds up the snake by 3 ms, down to 70 ms" },
-        { label: "Wrap", value: "Moving past any board edge wraps around to the other side" },
+        { label: "Arena", value: "Wrap edges carries you to the other side; Solid walls ends on any edge" },
         { label: "Danger", value: "Biting your own body ends the run immediately" },
         { label: "Pause", value: "Press Play or Back anytime to pause the run" }
     ]
@@ -563,7 +612,7 @@ sub DrawSnake(st as object)
     if v = "play" or v = "signal" then
         DrawSnakePlay(st)
     else if v = "menu" then
-        DrawPanel(st, { title: "Snake", rows: SnakeMenuRows(st), sel: sn.sel, info: false, hint: "OK picks · Back goes to the guide" })
+        DrawPanel(st, { title: "Snake", rows: SnakeMenuRows(st), sel: sn.sel, info: false, hint: "Left and right change the arena · OK picks · Back goes to the guide" })
     else if v = "pause" then
         DrawPanel(st, { title: "Paused", rows: SnakePauseRows(st), sel: sn.sel, info: false, hint: "OK picks · Play or Back carries on" })
     else if v = "results" then
@@ -571,9 +620,13 @@ sub DrawSnake(st as object)
     else if v = "initials" then
         DrawPanel(st, { title: "New high score", rows: SnakeInitialsRows(st), sel: sn.sel, info: false, hint: "Left and right pick a letter · OK goes on · Back saves" })
     else if v = "scores" then
-        title = "Leaderboard: Snake"
-        if sn.scoresOnline then title = "Online board: Snake"
-        DrawPanel(st, { title: title, rows: SnakeScoreRows(st), sel: -1, info: true, hint: "Up and down switch between this TV and online · Back goes back" })
+        title = "Leaderboard: " + SnakeModeTitle(sn.scoresMode)
+        hint = "Left and right switch the arena · Back goes back"
+        if BoardKeyFor("snake", sn.scoresMode) <> "" then
+            if sn.scoresOnline then title = "Online board: " + SnakeModeTitle(sn.scoresMode)
+            hint = "Left and right switch the arena · Up and down: this TV or online · Back goes back"
+        end if
+        DrawPanel(st, { title: title, rows: SnakeScoreRows(st), sel: -1, info: true, hint: hint })
     else if v = "howto" then
         DrawPanel(st, { title: "How to play", rows: SnakeHowToRows(), sel: -1, info: true, hint: "Back goes back" })
     end if

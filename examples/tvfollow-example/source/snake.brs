@@ -8,6 +8,10 @@
 ' and speeds up movement from 140 ms down to 70 ms. Colliding with one's own body
 ' ends the run.
 
+function SnakeModes() as object
+    return ["wrap", "walls"]
+end function
+
 function SnakeRules() as object
     return {
         cols: 20,
@@ -18,7 +22,8 @@ function SnakeRules() as object
     }
 end function
 
-function SnakeNew(seed as integer) as object
+function SnakeNew(seed as integer, mode = "wrap" as string) as object
+    if mode <> "walls" then mode = "wrap"
     r = SnakeRules()
     rng = GameRng(seed)
     midX = r.cols \ 2
@@ -30,6 +35,7 @@ function SnakeNew(seed as integer) as object
     ]
     food = SnakePlaceFood(snake, r.cols, r.rows, rng)
     return {
+        mode: mode,
         cols: r.cols,
         rows: r.rows,
         baseSpeed: r.baseSpeed,
@@ -38,6 +44,7 @@ function SnakeNew(seed as integer) as object
         snake: snake,
         dir: { x: 1, y: 0 },
         nextDir: { x: 1, y: 0 },
+        turnQueue: [],
         food: food,
         score: 0,
         speed: r.baseSpeed,
@@ -82,25 +89,49 @@ function SnakePlaceFood(snake as object, cols as integer, rows as integer, rng a
     return empty[idx]
 end function
 
-' Changes next direction. Reversing directly into the neck is ignored.
+' Buffers up to two turns ahead so rapid U-turns execute cleanly over consecutive ticks.
+' Repeats and direct 180-degree reversals against the latest queued turn are ignored.
 function SnakeTurnDir(g as object, nx as integer, ny as integer) as boolean
     if g = invalid or g.state <> "play" then return false
-    if g.snake.Count() > 1 and nx = -g.dir.x and ny = -g.dir.y then return false
-    g.nextDir = { x: nx, y: ny }
+    if g.turnQueue = invalid then g.turnQueue = []
+    ref = g.dir
+    if g.turnQueue.Count() > 0 then ref = g.turnQueue[g.turnQueue.Count() - 1]
+    if nx = ref.x and ny = ref.y then return false
+    if g.snake.Count() > 1 and nx = -ref.x and ny = -ref.y then return false
+    if g.turnQueue.Count() >= 2 then return false
+    g.turnQueue.Push({ x: nx, y: ny })
+    g.nextDir = g.turnQueue[0]
     return true
 end function
 
-' One step in the current direction.
+' One step in the current (or next queued) direction.
 function SnakeStep(g as object) as boolean
     if g = invalid or g.state <> "play" then return false
-    g.dir = g.nextDir
+    if g.turnQueue <> invalid and g.turnQueue.Count() > 0 then
+        g.dir = g.turnQueue.Shift()
+        if g.turnQueue.Count() > 0 then
+            g.nextDir = g.turnQueue[0]
+        else
+            g.nextDir = g.dir
+        end if
+    else
+        g.dir = g.nextDir
+    end if
     head = { x: g.snake[0].x + g.dir.x, y: g.snake[0].y + g.dir.y }
 
-    ' Wrap around edges
-    if head.x < 0 then head.x = g.cols - 1
-    if head.x >= g.cols then head.x = 0
-    if head.y < 0 then head.y = g.rows - 1
-    if head.y >= g.rows then head.y = 0
+    if g.mode = "walls" then
+        if head.x < 0 or head.x >= g.cols or head.y < 0 or head.y >= g.rows then
+            g.state = "over"
+            g.events.Push({ kind: "over" })
+            return false
+        end if
+    else
+        ' Wrap around edges
+        if head.x < 0 then head.x = g.cols - 1
+        if head.x >= g.cols then head.x = 0
+        if head.y < 0 then head.y = g.rows - 1
+        if head.y >= g.rows then head.y = 0
+    end if
 
     ' Collision check: tail vacates its position on this tick unless food is eaten
     willEat = (head.x = g.food.x and head.y = g.food.y)
@@ -161,32 +192,42 @@ sub SnakeAutoplay(g as object)
 
     for each c in candidates
         if not (g.snake.Count() > 1 and c.x = -g.dir.x and c.y = -g.dir.y) then
-            nx = (head.x + c.x + g.cols) mod g.cols
-            ny = (head.y + c.y + g.rows) mod g.rows
-            willEat = (nx = g.food.x and ny = g.food.y)
-            bodyCount = g.snake.Count()
-            if not willEat then bodyCount = bodyCount - 1
-            hit = false
-            for i = 0 to bodyCount - 1
-                seg = g.snake[i]
-                if seg.x = nx and seg.y = ny then
-                    hit = true
-                    exit for
-                end if
-            end for
-            if not hit then
-                ' Torus distance to food
-                dx = Abs(nx - g.food.x)
-                if g.cols - dx < dx then dx = g.cols - dx
-                dy = Abs(ny - g.food.y)
-                if g.rows - dy < dy then dy = g.rows - dy
-                dist = dx + dy
-                keepsDir = (c.x = g.dir.x and c.y = g.dir.y)
+            nx = head.x + c.x
+            ny = head.y + c.y
+            inBounds = true
+            if g.mode = "walls" then
+                if nx < 0 or nx >= g.cols or ny < 0 or ny >= g.rows then inBounds = false
+            else
+                nx = (nx + g.cols) mod g.cols
+                ny = (ny + g.rows) mod g.rows
+            end if
+            if inBounds then
+                willEat = (nx = g.food.x and ny = g.food.y)
+                bodyCount = g.snake.Count()
+                if not willEat then bodyCount = bodyCount - 1
+                hit = false
+                for i = 0 to bodyCount - 1
+                    seg = g.snake[i]
+                    if seg.x = nx and seg.y = ny then
+                        hit = true
+                        exit for
+                    end if
+                end for
+                if not hit then
+                    dx = Abs(nx - g.food.x)
+                    dy = Abs(ny - g.food.y)
+                    if g.mode <> "walls" then
+                        if g.cols - dx < dx then dx = g.cols - dx
+                        if g.rows - dy < dy then dy = g.rows - dy
+                    end if
+                    dist = dx + dy
+                    keepsDir = (c.x = g.dir.x and c.y = g.dir.y)
 
-                if dist < bestDist or (dist = bestDist and keepsDir) or bestDir = invalid then
-                    bestDist = dist
-                    bestDir = c
-                    bestKeeps = keepsDir
+                    if dist < bestDist or (dist = bestDist and keepsDir) or bestDir = invalid then
+                        bestDist = dist
+                        bestDir = c
+                        bestKeeps = keepsDir
+                    end if
                 end if
             end if
         end if

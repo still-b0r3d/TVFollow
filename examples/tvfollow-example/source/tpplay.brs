@@ -598,6 +598,7 @@ function TpResultsRows(st as object) as object
         { id: "guide", label: "Back to the guide", value: "", kind: "open" }
     ]
     rows.Append(TpRunRows(r.mode, r.diff, r.score, r.wall, -1, r.time))
+    rows.Push(OnlinePostRow(st, BoardKeyFor("testpat", r.mode), r))
     return rows
 end function
 

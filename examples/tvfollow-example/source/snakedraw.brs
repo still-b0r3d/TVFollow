@@ -150,7 +150,9 @@ end function
 ' chrome is drawn straight onto the screen every frame instead.
 function SnakeArt(st as object) as object
     sn = st.snake
-    key = st.look + "|" + st.colour.ToStr() + "|" + st.w.ToStr() + "|" + OnOff(st.scan)
+    arenaMode = sn.mode
+    if sn.g <> invalid then arenaMode = sn.g.mode
+    key = st.look + "|" + st.colour.ToStr() + "|" + st.w.ToStr() + "|" + OnOff(st.scan) + "|" + arenaMode
     if sn.art <> invalid then
         if sn.art.key = key then
             if st.look = "b95" and sn.art.chrome <> invalid and sn.art.clockText <> ClockText(st, false) then
@@ -234,11 +236,20 @@ function SnakeChromeFor(st as object, s as object, a as object) as object
 
     if st.look = "b95" then
         s.Clear(c.bg)
+        winTitle = "Snake"
+        if st.snake.g <> invalid and st.snake.g.mode = "walls" then winTitle = "Snake - Solid walls"
         ' the arena in a window, with its title bar
         B95Raised(s, ax - Z(18, k), ay - Z(42, k), aw + Z(36, k), ah + Z(60, k), Z(3, k), c)
         s.DrawRect(ax - Z(15, k), ay - Z(39, k), aw + Z(30, k), Z(24, k), c.navy)
-        GText(st, s, "Snake", ax - Z(8, k), ay - Z(35, k), f.box, c.white, true)
+        GText(st, s, winTitle, ax - Z(8, k), ay - Z(35, k), f.box, c.white, true)
         B95Sunken(s, ax - Z(4, k), ay - Z(4, k), aw + Z(8, k), ah + Z(8, k), Z(2, k), c, invalid)
+        if st.snake.g <> invalid and st.snake.g.mode = "walls" then
+            wallW = Z(2, k)
+            s.DrawRect(ax - wallW, ay - wallW, aw + 2 * wallW, wallW, kit.food)
+            s.DrawRect(ax - wallW, ay + ah, aw + 2 * wallW, wallW, kit.food)
+            s.DrawRect(ax - wallW, ay, wallW, ah, kit.food)
+            s.DrawRect(ax + aw, ay, wallW, ah, kit.food)
+        end if
         DrawSnakeArena(st, s, a)
         ' left: the score and the best
         B95Sunken(s, Z(60, k), ay, Z(280, k), Z(150, k), Z(2, k), c, c.face)
@@ -276,12 +287,23 @@ function SnakeChromeFor(st as object, s as object, a as object) as object
         GText(st, s, "CH 23", Z(200, k), Z(44, k), f.label, c.soft, false)
     end if
 
-    ' the arena's frame (lit on the RGB look)
+    ' the arena's frame (lit on the RGB look; tinted when solid walls end a run)
     borderW = Z(3, k)
     if st.look = "rgb" then
         DrawRgbEdge(st, s, ax, ay, aw, ah)
+        if st.snake.g <> invalid and st.snake.g.mode = "walls" then
+            s.DrawRect(ax - Z(1, k), ay - Z(1, k), aw + Z(2, k), Z(2, k), kit.food)
+            s.DrawRect(ax - Z(1, k), ay + ah - Z(1, k), aw + Z(2, k), Z(2, k), kit.food)
+            s.DrawRect(ax - Z(1, k), ay, Z(2, k), ah, kit.food)
+            s.DrawRect(ax + aw - Z(1, k), ay, Z(2, k), ah, kit.food)
+        end if
     else
-        s.DrawRect(ax - borderW, ay - borderW, aw + 2 * borderW, ah + 2 * borderW, kit.border)
+        frameCol = kit.border
+        if st.snake.g <> invalid and st.snake.g.mode = "walls" then frameCol = kit.food
+        s.DrawRect(ax - borderW, ay - borderW, aw + 2 * borderW, ah + 2 * borderW, frameCol)
+    end if
+    if st.snake.g <> invalid and st.snake.g.mode = "walls" then
+        GText(st, s, "SOLID WALLS", Z(60, k), ay + Z(240, k), f.box, kit.label, true)
     end if
 
     ' left: the score and the best

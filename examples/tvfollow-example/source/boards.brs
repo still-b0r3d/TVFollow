@@ -21,6 +21,7 @@ function BoardKeyFor(game as string, mode as string) as string
         if mode = "endless" then return "b0r3dtv_test_pattern_endless"
         return "b0r3dtv_test_pattern"
     else if game = "snake" then
+        if mode = "walls" then return ""
         return "b0r3dtv_snake"
     end if
     return ""
@@ -77,7 +78,9 @@ sub RequestRunToken(st as object, boardKey as string)
     if boardKey = "" then return
     if st.boardReqs = invalid then st.boardReqs = {}
     if st.runTokens = invalid then st.runTokens = {}
+    if st.boardPost = invalid then st.boardPost = {}
     st.runTokens.Delete(boardKey)
+    st.boardPost.Delete(boardKey)
     xfer = NewBoardTransfer(st, boardKey + "/start")
     if xfer = invalid then return
     xfer.AddHeader("Content-Type", "application/json")
@@ -90,25 +93,45 @@ end sub
 
 ' Posts a finished run's score with its run token, which is spent by it. The boards refuse a
 ' score without one, so with no token (the start didn't reach the server) nothing is sent; a
-' run with no points isn't sent either.
+' run with no points isn't sent either. Records what happened so the results screen can show it.
 sub SubmitOnlineScore(st as object, boardKey as string, initials as string, score as integer)
-    if boardKey = "" or score <= 0 then return
+    if boardKey = "" then return
     if st.boardReqs = invalid then st.boardReqs = {}
     if st.runTokens = invalid then st.runTokens = {}
+    if st.boardPost = invalid then st.boardPost = {}
+    if score <= 0 then
+        st.boardPost[boardKey] = "zero"
+        return
+    end if
     token = st.runTokens[boardKey]
     st.runTokens.Delete(boardKey)
     if token = invalid then
         print "b0r3d TV: no run token for "; boardKey; ", so the score stays on the TV"
+        asking = false
+        for each id in st.boardReqs
+            req = st.boardReqs[id]
+            if req.kind = "token" and req.boardKey = boardKey then asking = true
+        end for
+        if asking then
+            st.boardPost[boardKey] = "notoken"
+        else
+            st.boardPost[boardKey] = "offline"
+        end if
         return
     end if
     xfer = NewBoardTransfer(st, boardKey + "/submit")
-    if xfer = invalid then return
+    if xfer = invalid then
+        st.boardPost[boardKey] = "failed"
+        return
+    end if
     xfer.AddHeader("Content-Type", "application/json")
     payload = { name: initials, score: score, runToken: token }
     reqId = xfer.GetIdentity().ToStr()
     st.boardReqs[reqId] = { kind: "submit", boardKey: boardKey, xfer: xfer }
+    st.boardPost[boardKey] = "sending"
     if not xfer.AsyncPostFromString(FormatJson(payload)) then
         st.boardReqs.Delete(reqId)
+        st.boardPost[boardKey] = "failed"
     end if
 end sub
 
@@ -120,6 +143,7 @@ sub BoardUrlEvent(st as object, msg as object)
     req = st.boardReqs[reqId]
     st.boardReqs.Delete(reqId)
     if st.boardAsk = invalid then st.boardAsk = {}
+    if st.boardPost = invalid then st.boardPost = {}
 
     code = msg.GetResponseCode()
     data = invalid
@@ -131,6 +155,10 @@ sub BoardUrlEvent(st as object, msg as object)
             st.boardAsk[req.boardKey] = "failed"
             if code >= 400 and code < 500 then st.boardAsk[req.boardKey] = "unavailable"
             if ScoresPageVisible(st, req.boardKey) then Redraw(st)
+        else if req.kind = "submit" then
+            st.boardPost[req.boardKey] = "failed"
+            if code >= 400 and code < 500 then st.boardPost[req.boardKey] = "rejected"
+            if ScoresPageVisible(st, req.boardKey) or ResultsPageVisible(st, req.boardKey) then Redraw(st)
         end if
         return
     end if
@@ -143,7 +171,11 @@ sub BoardUrlEvent(st as object, msg as object)
     else if req.kind = "scores" or req.kind = "submit" then
         if type(data.scores) = "roArray" then SaveOnlineScoresCache(req.boardKey, data.scores)
         if req.kind = "scores" then st.boardAsk[req.boardKey] = "ok"
-        if ScoresPageVisible(st, req.boardKey) then Redraw(st)
+        if req.kind = "submit" then
+            st.boardPost[req.boardKey] = "ok"
+            if data.ok = false then st.boardPost[req.boardKey] = "rejected"
+        end if
+        if ScoresPageVisible(st, req.boardKey) or ResultsPageVisible(st, req.boardKey) then Redraw(st)
     end if
 end sub
 
@@ -156,9 +188,45 @@ function ScoresPageVisible(st as object, boardKey as string) as boolean
         if st.tp.view = "scores" then return BoardKeyFor("testpat", st.tp.scoresMode) = boardKey
     end if
     if st.mode = "snake" and st.snake <> invalid then
-        if st.snake.view = "scores" then return BoardKeyFor("snake", "") = boardKey
+        if st.snake.view = "scores" then return BoardKeyFor("snake", AsText(st.snake.scoresMode)) = boardKey
     end if
     return false
+end function
+
+' Whether a game's results page for this board is on screen, so it updates once /submit answers.
+function ResultsPageVisible(st as object, boardKey as string) as boolean
+    if boardKey = "" then return false
+    if st.mode = "stuck" and st.sp <> invalid then
+        if st.sp.view = "results" and st.sp.result <> invalid then
+            return BoardKeyFor("stuck", st.sp.result.mode) = boardKey
+        end if
+    end if
+    if st.mode = "testpat" and st.tp <> invalid then
+        if st.tp.view = "results" and st.tp.result <> invalid then
+            return BoardKeyFor("testpat", st.tp.result.mode) = boardKey
+        end if
+    end if
+    if st.mode = "snake" and st.snake <> invalid then
+        if st.snake.view = "results" and st.snake.result <> invalid then
+            return BoardKeyFor("snake", AsText(st.snake.result.mode)) = boardKey
+        end if
+    end if
+    return false
+end function
+
+' One dim row for a game's results screen, showing whether the run went to still.b0r3d.org.
+function OnlinePostRow(st as object, boardKey as string, res as object) as object
+    if boardKey = "" then return { label: "Online board", value: "This TV only", kind: "info", dim: true }
+    if not res.saved then return { label: "Online board", value: "Needs TV top 10 to post", kind: "info", dim: true }
+    if res.score <= 0 then return { label: "Online board", value: "Zero points isn't posted", kind: "info", dim: true }
+    post = ""
+    if st.boardPost <> invalid then post = AsText(st.boardPost[boardKey])
+    if post = "sending" then return { label: "Online board", value: "Posting to still.b0r3d.org...", kind: "info", dim: true }
+    if post = "ok" then return { label: "Online board", value: "Posted to still.b0r3d.org", kind: "info", dim: true }
+    if post = "offline" then return { label: "Online board", value: "Not posted (offline at start)", kind: "info", dim: true }
+    if post = "notoken" then return { label: "Online board", value: "Not posted (no run token)", kind: "info", dim: true }
+    if post = "rejected" then return { label: "Online board", value: "still.b0r3d.org declined it", kind: "info", dim: true }
+    return { label: "Online board", value: "still.b0r3d.org didn't answer", kind: "info", dim: true }
 end function
 
 ' A board's table for the scores page: place, initials and points, best first. With nothing

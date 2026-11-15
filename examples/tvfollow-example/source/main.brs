@@ -39,6 +39,7 @@ sub Main(args as dynamic)
         snakeDemoTimer: invalid,
         boardReqs: {},
         boardAsk: {},
+        boardPost: {},
         runTokens: {},
         tickMs: 0
     }

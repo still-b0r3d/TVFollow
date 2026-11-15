@@ -30,9 +30,18 @@ function FmTracks() as object
 end function
 
 function NewFmState() as object
+    playOrder = RegRead("fm.order", "loop")
+    if playOrder <> "loop" and playOrder <> "shuffle" and playOrder <> "repeat" then playOrder = "loop"
     return {
         tracks: FmTracks(),
         index: 0,
+        nextIndex: 1,
+        playOrder: playOrder,
+        shuffleBag: [],
+        history: [],
+        seeking: false,
+        listOpen: false,
+        listSel: 0,
         player: invalid,
         playing: false,
         paused: false,
@@ -43,9 +52,97 @@ function NewFmState() as object
         frameTimer: CreateObject("roTimespan"),
         bars: [12, 18, 25, 30, 22, 16, 28, 35, 40, 32, 24, 19, 27, 33, 38, 29, 21, 15, 26, 31, 36, 28, 20, 14],
         peaks: [12, 18, 25, 30, 22, 16, 28, 35, 40, 32, 24, 19, 27, 33, 38, 29, 21, 15, 26, 31, 36, 28, 20, 14],
-        beat: 0
+        beat: 0,
+        animTick: 0,
+        zs: []
     }
 end function
+
+function FmOrderWord(playOrder as string) as string
+    if playOrder = "shuffle" then return "Shuffle"
+    if playOrder = "repeat" then return "Repeat 1"
+    return "In order"
+end function
+
+' Refills the shuffle bag with every track once, never starting right back on avoidIdx.
+sub FmFillShuffleBag(fm as object, avoidIdx as integer)
+    bag = []
+    count = fm.tracks.Count()
+    for i = 0 to count - 1
+        bag.Push(i)
+    end for
+    for i = count - 1 to 1 step -1
+        j = Rnd(i + 1) - 1
+        tmp = bag[i]
+        bag[i] = bag[j]
+        bag[j] = tmp
+    end for
+    if bag.Count() > 1 and bag[0] = avoidIdx then
+        tmp = bag[0]
+        bag[0] = bag[bag.Count() - 1]
+        bag[bag.Count() - 1] = tmp
+    end if
+    fm.shuffleBag = bag
+end sub
+
+' Which track should follow fm.index naturally under fm.playOrder (peeks shuffleBag without
+' consuming it until we actually advance into that song).
+function FmScheduleNext(fm as object) as integer
+    count = fm.tracks.Count()
+    if count <= 0 then return 0
+    if fm.playOrder = "repeat" then return fm.index
+    if fm.playOrder = "shuffle" then
+        if fm.shuffleBag = invalid or fm.shuffleBag.Count() = 0 then FmFillShuffleBag(fm, fm.index)
+        if fm.shuffleBag.Count() > 0 then return fm.shuffleBag[0]
+    end if
+    return (fm.index + 1) mod count
+end function
+
+sub FmConsumeQueuedShuffle(fm as object, idx as integer)
+    if fm.shuffleBag = invalid then return
+    if fm.shuffleBag.Count() > 0 and fm.shuffleBag[0] = idx then fm.shuffleBag.Shift()
+end sub
+
+sub FmCycleOrder(st as object)
+    fm = st.fm
+    if fm = invalid then return
+    if fm.playOrder = "loop" then
+        fm.playOrder = "shuffle"
+    else if fm.playOrder = "shuffle" then
+        fm.playOrder = "repeat"
+    else
+        fm.playOrder = "loop"
+    end if
+    RegWrite("fm.order", fm.playOrder)
+    fm.shuffleBag = []
+    fm.nextIndex = FmScheduleNext(fm)
+    if fm.player <> invalid and (fm.playing or fm.paused) then fm.player.SetNext(fm.nextIndex)
+end sub
+
+' Steps forward or back on user skip (even in Repeat 1; keeps history in Shuffle).
+sub FmStepTrack(st as object, dir as integer)
+    fm = st.fm
+    if fm = invalid then return
+    if dir > 0 then
+        if fm.playOrder = "shuffle" then
+            if fm.history = invalid then fm.history = []
+            fm.history.Push(fm.index)
+            if fm.history.Count() > 24 then fm.history.Shift()
+            target = FmScheduleNext(fm)
+            FmConsumeQueuedShuffle(fm, target)
+            FmPlayTrack(st, target)
+        else
+            FmPlayTrack(st, fm.index + 1)
+        end if
+    else
+        if fm.playOrder = "shuffle" and fm.history <> invalid and fm.history.Count() > 0 then
+            target = fm.history.Pop()
+            FmPlayTrack(st, target)
+        else
+            FmPlayTrack(st, fm.index - 1)
+        end if
+    end if
+end sub
 
 ' Tuning in: the player gets the song list and plays the song the station was on.
 sub OpenB0r3dFm(st as object)
@@ -53,6 +150,8 @@ sub OpenB0r3dFm(st as object)
     fm = st.fm
     st.mode = "fm"
     fm.fails = 0
+    fm.listOpen = false
+    fm.zs = []
     if fm.player = invalid then
         fm.player = CreateObject("roAudioPlayer")
         if fm.player <> invalid then
@@ -82,6 +181,9 @@ sub CloseB0r3dFm(st as object)
         fm.playing = false
         fm.paused = false
         fm.buffering = false
+        fm.seeking = false
+        fm.listOpen = false
+        fm.zs = []
     end if
     st.mode = "guide"
     Redraw(st)
@@ -97,6 +199,8 @@ sub FmPlayTrack(st as object, i as integer)
     fm.elapsedMs = 0
     fm.paused = false
     fm.failed = false
+    fm.zs = []
+    fm.nextIndex = FmScheduleNext(fm)
     if fm.player = invalid then
         fm.playing = false
         fm.buffering = false
@@ -104,6 +208,7 @@ sub FmPlayTrack(st as object, i as integer)
         Redraw(st)
         return
     end if
+    fm.seeking = true
     fm.player.Stop()
     fm.player.SetNext(fm.index)
     fm.player.Play()
@@ -116,6 +221,57 @@ sub FmKey(st as object, code as integer)
     fm = st.fm
     if fm = invalid then return
 
+    ' Replay: cycle In order -> Shuffle -> Repeat 1 (works from main screen or tracklist)
+    if code = 7 then
+        FmCycleOrder(st)
+        Redraw(st)
+        return
+    end if
+
+    ' Options (*): toggle the 16-track list
+    if code = 10 then
+        fm.listOpen = not fm.listOpen
+        if fm.listOpen then fm.listSel = fm.index
+        Redraw(st)
+        return
+    end if
+
+    if fm.listOpen then
+        count = fm.tracks.Count()
+        if code = 0 then
+            fm.listOpen = false
+            Redraw(st)
+        else if code = 2 then
+            fm.listSel = (fm.listSel - 1 + count) mod count
+            Redraw(st)
+        else if code = 3 then
+            fm.listSel = (fm.listSel + 1) mod count
+            Redraw(st)
+        else if code = 4 then
+            fm.listSel = fm.listSel - 4
+            if fm.listSel < 0 then fm.listSel = 0
+            Redraw(st)
+        else if code = 5 then
+            fm.listSel = fm.listSel + 4
+            if fm.listSel > count - 1 then fm.listSel = count - 1
+            Redraw(st)
+        else if code = 8 then
+            fm.fails = 0
+            FmStepTrack(st, -1)
+        else if code = 9 then
+            fm.fails = 0
+            FmStepTrack(st, 1)
+        else if code = 6 then
+            fm.fails = 0
+            FmConsumeQueuedShuffle(fm, fm.listSel)
+            fm.listOpen = false
+            FmPlayTrack(st, fm.listSel)
+        else if code = 13 then
+            FmTogglePause(st)
+        end if
+        return
+    end if
+
     ' Back returns to the guide
     if code = 0 then
         CloseB0r3dFm(st)
@@ -124,30 +280,37 @@ sub FmKey(st as object, code as integer)
 
     ' OK or Play: pause, carry on from the same spot, or (after the station stopped) try again
     if code = 6 or code = 13 then
-        if fm.failed or fm.player = invalid then
-            fm.fails = 0
-            FmPlayTrack(st, fm.index)
-        else if fm.paused then
-            fm.player.Resume()
-            fm.paused = false
-            fm.playing = true
-            Redraw(st)
-        else if fm.playing then
-            fm.player.Pause()
-            fm.paused = true
-            fm.playing = false
-            Redraw(st)
-        end if
+        FmTogglePause(st)
         return
     end if
 
     ' Right, Fast-forward or Down: the next song; Left, Rewind or Up: the one before
     if code = 5 or code = 9 or code = 3 then
         fm.fails = 0
-        FmPlayTrack(st, fm.index + 1)
+        FmStepTrack(st, 1)
     else if code = 4 or code = 8 or code = 2 then
         fm.fails = 0
-        FmPlayTrack(st, fm.index - 1)
+        FmStepTrack(st, -1)
+    end if
+end sub
+
+sub FmTogglePause(st as object)
+    fm = st.fm
+    if fm = invalid then return
+    if fm.failed or fm.player = invalid then
+        fm.fails = 0
+        FmPlayTrack(st, fm.index)
+    else if fm.paused then
+        fm.player.Resume()
+        fm.paused = false
+        fm.playing = true
+        fm.zs = []
+        Redraw(st)
+    else if fm.playing then
+        fm.player.Pause()
+        fm.paused = true
+        fm.playing = false
+        Redraw(st)
     end if
 end sub
 
@@ -157,9 +320,31 @@ sub FmAudioEvent(st as object, msg as object)
     if fm = invalid then return
     if fm.player = invalid then return
     if msg.isListItemSelected() then
-        ' a song starts, the player's own move at the end of the last one included
-        fm.index = msg.GetIndex()
-        fm.elapsedMs = 0
+        got = msg.GetIndex()
+        if fm.seeking then
+            fm.seeking = false
+            fm.index = got
+            fm.elapsedMs = 0
+            fm.nextIndex = FmScheduleNext(fm)
+            fm.player.SetNext(fm.nextIndex)
+        else
+            ' the player moved on at the end of a song: keep Shuffle / Repeat 1 exact even if
+            ' Roku moved to the next index instead of SetNext's
+            if fm.playOrder = "shuffle" then
+                if fm.history = invalid then fm.history = []
+                fm.history.Push(fm.index)
+                if fm.history.Count() > 24 then fm.history.Shift()
+                FmConsumeQueuedShuffle(fm, fm.nextIndex)
+            end if
+            if fm.nextIndex >= 0 and got <> fm.nextIndex then
+                FmPlayTrack(st, fm.nextIndex)
+                return
+            end if
+            fm.index = got
+            fm.elapsedMs = 0
+            fm.nextIndex = FmScheduleNext(fm)
+            fm.player.SetNext(fm.nextIndex)
+        end if
         Redraw(st)
     else if msg.isStatusMessage() then
         status = msg.GetMessage()
@@ -168,7 +353,9 @@ sub FmAudioEvent(st as object, msg as object)
         status = LCase(status)
         if status = "start of play" or status = "playing" then
             fm.buffering = false
+            fm.seeking = false
             fm.fails = 0
+            if fm.nextIndex >= 0 then fm.player.SetNext(fm.nextIndex)
         else if status = "buffering" or status = "startup progress" then
             fm.buffering = true
         else if status = "end of stream" or status = "end of playlist" then
@@ -186,10 +373,11 @@ sub FmAudioEvent(st as object, msg as object)
             fm.playing = false
             fm.paused = false
             fm.buffering = false
+            fm.seeking = false
             fm.failed = true
             Redraw(st)
         else
-            FmPlayTrack(st, fm.index + 1)
+            FmStepTrack(st, 1)
         end if
     end if
 end sub
@@ -212,7 +400,12 @@ sub FmTurn(st as object)
     fm.frameTimer.Mark()
 
     ' the song's time only runs while it really plays
-    if fm.playing and not fm.buffering then fm.elapsedMs = fm.elapsedMs + dt
+    if fm.playing and not fm.buffering then
+        fm.elapsedMs = fm.elapsedMs + dt
+        fm.animTick = (fm.animTick + 1) mod 240
+    else if fm.paused then
+        FmStepSleepZs(fm)
+    end if
 
     ' the visualizer's bars
     if fm.playing and not fm.buffering then
@@ -238,6 +431,19 @@ sub FmTurn(st as object)
     end if
 
     Redraw(st)
+end sub
+
+' Gentle rising Zs while paused on b0r3d FM.
+sub FmStepSleepZs(fm as object)
+    if fm.zs = invalid then fm.zs = []
+    fm.animTick = (fm.animTick + 1) mod 240
+    if fm.animTick mod 36 = 0 then fm.zs.Push({ age: 0 })
+    kept = []
+    for each zee in fm.zs
+        zee.age = zee.age + 1
+        if zee.age < 54 then kept.Push(zee)
+    end for
+    fm.zs = kept
 end sub
 
 function FmFonts(st as object) as object
@@ -396,23 +602,31 @@ function FmKit(st as object) as object
     }
 end function
 
-' Main draw dispatcher for b0r3d FM
-sub DrawFmScreen(st as object)
-    s = st.screen
+' Frame box styled in the active look, shared by the visualizer well and the tracklist.
+sub DrawFmBox(st as object, s as object, kit as object, bx as integer, by as integer, bw as integer, bh as integer)
+    k = st.k
+    if st.look = "b95" then
+        B95Sunken(s, bx, by, bw, bh, Z(2, k), st.kit, kit.well)
+    else if st.look = "rgb" then
+        s.DrawRect(bx, by, bw, bh, kit.well)
+        DrawRgbEdge(st, s, bx, by, bw, bh)
+    else if st.look = "phosphor" then
+        DrawFrame(s, bx, by, bw, bh, Z(2, k), kit.wellBorder)
+    else if st.look = "vcr" then
+        s.DrawRect(bx + Z(4, k), by + Z(4, k), bw, bh, st.kit.shadow)
+        s.DrawRect(bx, by, bw, bh, kit.wellBorder)
+        b = Z(4, k)
+        s.DrawRect(bx + b, by + b, bw - 2 * b, bh - 2 * b, kit.well)
+    else
+        s.DrawRect(bx, by, bw, bh, kit.well)
+        DrawFrame(s, bx, by, bw, bh, Z(2, k), kit.wellBorder)
+    end if
+end sub
+
+' Shared header and bottom divider for b0r3d FM and its tracklist.
+sub DrawFmHeader(st as object, s as object, kit as object, f as object, left as integer, right as integer, w as integer)
     k = st.k
     fm = st.fm
-    if s = invalid or fm = invalid then return
-
-    kit = FmKit(st)
-    s.Clear(kit.bg)
-
-    f = FmFonts(st)
-
-    left = Z(48, k)
-    right = Z(1232, k)
-    w = right - left
-
-    ' Header bar
     headY = Z(38, k)
     if st.look = "rgb" then
         DrawRgbLedBar(st, s, left, headY + Z(2, k), f.brand.GetOneLineHeight() - Z(6, k))
@@ -451,29 +665,144 @@ sub DrawFmScreen(st as object)
     s.DrawText(statusWord, right - clockW, statusY, statusCol, f.clock)
 
     s.DrawRect(left, Z(98, k), w, Z(2, k), kit.rule)
+end sub
+
+' Builds the 16x9 loaf sprite matching Ruckus's listening mood (open green eyes, tail swish,
+' subtle ear twitch and natural blinks while playing; eyes closed when paused or waiting).
+function FmRukusRows(alive as boolean, animStep as integer) as object
+    if not alive then return RukusLoaf()
+    poses = RukusPoses()
+    tailUp = ((animStep \ 8) mod 2 = 1)
+    src = poses.loaf
+    if tailUp then src = poses.loaf2
+    out = []
+    for i = 6 to 14
+        out.Push(src[i])
+    end for
+    if (animStep \ 4) mod 6 = 0 then out[0] = "..k....k........"
+    blinking = (animStep mod 84) < 4
+    if not blinking then out[3] = ".k3k1k3k" + Right(out[3], 8)
+    return out
+end function
+
+sub DrawFmNote(s as object, col as dynamic, x as integer, y as integer, k as dynamic)
+    u = Z(3, k)
+    if u < 2 then u = 2
+    s.DrawRect(x + 2 * u, y, 2 * u, u, col)
+    s.DrawRect(x + 3 * u, y + u, u, u, col)
+    s.DrawRect(x + 2 * u, y, u, 5 * u, col)
+    s.DrawRect(x, y + 4 * u, 3 * u, 2 * u, col)
+end sub
+
+sub DrawFmSleepZs(s as object, col as dynamic, x as integer, y as integer, k as dynamic, zs as object)
+    if zs = invalid or zs.Count() = 0 then return
+    for each zee in zs
+        u = Z(2, k)
+        if zee.age >= 24 then u = Z(3, k)
+        zx = x + Z(zee.age \ 3 + ((zee.age \ 6) mod 3) - 1, k)
+        zy = y - Z(zee.age, k)
+        s.DrawRect(zx, zy, 4 * u, u, col)
+        s.DrawRect(zx + 2 * u, zy + u, u, u, col)
+        s.DrawRect(zx + u, zy + 2 * u, u, u, col)
+        s.DrawRect(zx, zy + 3 * u, 4 * u, u, col)
+    end for
+end sub
+
+function FmListColors(st as object, kit as object) as object
+    if st.look = "b95" then return { text: st.kit.white, soft: st.kit.face, selBg: st.kit.navy, selText: st.kit.white, div: st.kit.shadow }
+    if st.look = "vcr" then return { text: kit.title, soft: kit.soft, selBg: kit.accent, selText: st.kit.shadow, div: kit.wellBorder }
+    if st.look = "phosphor" then return { text: kit.title, soft: kit.soft, selBg: kit.accent, selText: st.kit.bg, div: kit.rule }
+    if st.look = "rgb" then return { text: kit.title, soft: kit.soft, selBg: kit.accent, selText: st.kit.card, div: kit.rule }
+    return { text: kit.title, soft: kit.soft, selBg: kit.accent, selText: st.kit.ink, div: kit.rule }
+end function
+
+sub DrawFmTracklist(st as object, s as object, kit as object, f as object, left as integer, right as integer, w as integer)
+    k = st.k
+    fm = st.fm
+    lc = FmListColors(st, kit)
+    count = fm.tracks.Count()
+
+    boxX = left
+    boxY = Z(116, k)
+    boxW = w
+    boxH = Z(506, k)
+    DrawFmBox(st, s, kit, boxX, boxY, boxW, boxH)
+
+    ' Box subheader
+    padX = Z(24, k)
+    headY = boxY + Z(16, k)
+    headText = "TRACKLIST (" + TwoDigits(fm.listSel + 1) + " / " + count.ToStr() + ")"
+    s.DrawText(headText, boxX + padX, headY, lc.text, f.now)
+    DrawRight(s, "Order: " + FmOrderWord(fm.playOrder), boxX + boxW - padX, headY, lc.soft, f.now)
+    s.DrawRect(boxX + Z(8, k), boxY + Z(52, k), boxW - Z(16, k), Z(2, k), lc.div)
+
+    visible = 8
+    first = ListTop(fm.listSel, count, visible)
+    rowH = Z(54, k)
+    topY = boxY + Z(62, k)
+    textH = f.now.GetOneLineHeight()
+    for r = 0 to visible - 1
+        idx = first + r
+        if idx >= count then exit for
+        tr = fm.tracks[idx]
+        ry = topY + r * rowH
+        sel = (idx = fm.listSel)
+        fg = lc.text
+        dimFg = lc.soft
+        if sel then
+            s.DrawRect(boxX + Z(12, k), ry, boxW - Z(24, k), rowH - Z(4, k), lc.selBg)
+            fg = lc.selText
+            dimFg = lc.selText
+        end if
+        mark = "  "
+        if idx = fm.index then mark = "> "
+        label = mark + TwoDigits(idx + 1) + ". " + tr.title
+        durText = FmTimeText(tr.sec)
+        if idx = fm.index then durText = "[NOW]  " + durText
+        ty = ry + (rowH - Z(4, k) - textH) \ 2
+        durW = f.now.GetOneLineWidth(durText, 99999)
+        maxTitleW = boxW - 2 * padX - durW - Z(24, k)
+        s.DrawText(TrimToWidth(label, f.now, maxTitleW), boxX + padX, ty, fg, f.now)
+        DrawRight(s, durText, boxX + boxW - padX, ty, dimFg, f.now)
+    end for
+
+    barY = Z(652, k)
+    s.DrawRect(left, barY - Z(8, k), w, Z(2, k), kit.rule)
+    hintText = "[UP/DN] PICK  [OK] PLAY  [REPLAY] MODE  [BACK/*] CLOSE"
+    s.DrawText(hintText, left, barY, kit.bar, f.bar)
+    DrawRight(s, "CH 22 - b0r3d FM", right, barY, kit.bar, f.bar)
+
+    if ScanlinesOn(st) then DrawScanlines(st)
+    s.SwapBuffers()
+end sub
+
+' Main draw dispatcher for b0r3d FM
+sub DrawFmScreen(st as object)
+    s = st.screen
+    k = st.k
+    fm = st.fm
+    if s = invalid or fm = invalid then return
+
+    kit = FmKit(st)
+    s.Clear(kit.bg)
+    f = FmFonts(st)
+
+    left = Z(48, k)
+    right = Z(1232, k)
+    w = right - left
+
+    DrawFmHeader(st, s, kit, f, left, right, w)
+    if fm.listOpen then
+        DrawFmTracklist(st, s, kit, f, left, right, w)
+        return
+    end if
 
     ' Equalizer Well (Spectrum Analyzer)
     eqX = left
     eqY = Z(120, k)
     eqW = w
     eqH = Z(260, k)
-
-    if st.look = "b95" then
-        B95Sunken(s, eqX, eqY, eqW, eqH, Z(2, k), st.kit, kit.well)
-    else if st.look = "rgb" then
-        s.DrawRect(eqX, eqY, eqW, eqH, kit.well)
-        DrawRgbEdge(st, s, eqX, eqY, eqW, eqH)
-    else if st.look = "phosphor" then
-        DrawFrame(s, eqX, eqY, eqW, eqH, Z(2, k), kit.wellBorder)
-    else if st.look = "vcr" then
-        s.DrawRect(eqX + Z(4, k), eqY + Z(4, k), eqW, eqH, st.kit.shadow)
-        s.DrawRect(eqX, eqY, eqW, eqH, kit.wellBorder)
-        b = Z(4, k)
-        s.DrawRect(eqX + b, eqY + b, eqW - 2 * b, eqH - 2 * b, kit.well)
-    else
-        s.DrawRect(eqX, eqY, eqW, eqH, kit.well)
-        DrawFrame(s, eqX, eqY, eqW, eqH, Z(2, k), kit.wellBorder)
-    end if
+    DrawFmBox(st, s, kit, eqX, eqY, eqW, eqH)
 
     ' Draw the animated equalizer bars
     numBars = fm.bars.Count()
@@ -527,24 +856,48 @@ sub DrawFmScreen(st as object)
     if fm.failed then infoText = "The station can't be reached right now. OK tries again."
     s.DrawText(infoText, left, infoY + Z(44, k), kit.soft, f.now)
 
-    ' Ruckus, sitting by the song, clear of the bars' frame above him
+    ' Ruckus, listening beside the track (bobs on the beat while playing; naps with Zs paused)
     sc = Z(7, k)
     rukusX = right - 16 * sc - Z(16, k)
     rukusY = infoY - Z(10, k)
-    DrawSprite(s, RukusLoaf(), RukusColorsFor(st), rukusX, rukusY, sc)
+    alive = (fm.playing and not fm.buffering and not fm.failed)
+    animStep = AsInt(fm.animTick)
+    bobY = 0
+    if alive and ((animStep \ 6) mod 2 = 1) then bobY = -Z(3, k)
+    DrawSprite(s, FmRukusRows(alive, animStep), RukusColorsFor(st), rukusX, rukusY + bobY, sc)
+    if alive then
+        floatY = Z((animStep mod 32) \ 3, k)
+        DrawFmNote(s, kit.accent, rukusX - Z(20, k), rukusY + Z(6, k) - floatY, k)
+    else if fm.paused then
+        DrawFmSleepZs(s, kit.soft, rukusX + 3 * sc, rukusY - Z(4, k), k, fm.zs)
+    end if
 
     ' Track progress bar
     progY = infoY + Z(80, k)
-    progW = w - Z(160, k)
+    progW = w - Z(180, k)
     s.DrawRect(left, progY, progW, Z(6, k), kit.barTrack)
     fillW = Int(progW * (elapsedSec / track.sec) + 0.5)
     if fillW > progW then fillW = progW
     s.DrawRect(left, progY, fillW, Z(6, k), kit.barFill)
 
+    ' Playback order & up-next cue below progress bar
+    nextIdx = fm.nextIndex
+    if nextIdx < 0 or nextIdx >= fm.tracks.Count() then nextIdx = FmScheduleNext(fm)
+    nextTr = fm.tracks[nextIdx]
+    metaLine = "Order: " + FmOrderWord(fm.playOrder)
+    if fm.playOrder = "repeat" then
+        metaLine = metaLine + "   ·   Looping this track"
+    else
+        metaLine = metaLine + "   ·   Up next: " + TwoDigits(nextIdx + 1) + ". " + nextTr.title
+    end if
+    orderCol = kit.soft
+    if fm.playOrder <> "loop" then orderCol = kit.accent
+    s.DrawText(TrimToWidth(metaLine, f.now, progW), left, progY + Z(20, k), orderCol, f.now)
+
     ' Remote hints bar
     barY = Z(652, k)
     s.DrawRect(left, barY - Z(8, k), w, Z(2, k), kit.rule)
-    hintText = "[OK/PLAY] PAUSE/RESUME   [<>] SKIP TRACK   [BACK] GUIDE"
+    hintText = "[OK] PAUSE  [<>] SKIP  [REPLAY] MODE  [*] TRACKS  [BACK]"
     s.DrawText(hintText, left, barY, kit.bar, f.bar)
     DrawRight(s, "CH 22 - b0r3d FM", right, barY, kit.bar, f.bar)
 
@@ -559,7 +912,11 @@ sub DrawFmPreview(st as object, x as integer, y as integer, w as integer, h as i
     f = FmFonts(st)
     kit = FmKit(st)
     if st.fmDemoTimer = invalid then st.fmDemoTimer = CreateObject("roTimespan")
-    if st.fmDemoTimer.TotalMilliseconds() >= 95 then st.fmDemoTimer.Mark()
+    if st.fmDemoBeat = invalid then st.fmDemoBeat = 0
+    if st.fmDemoTimer.TotalMilliseconds() >= 95 then
+        st.fmDemoTimer.Mark()
+        st.fmDemoBeat = (st.fmDemoBeat + 1) mod 32
+    end if
 
     s.DrawRect(x, y, w, h, kit.well)
     DrawFrame(s, x, y, w, h, Z(2, k), kit.wellBorder)
@@ -594,5 +951,6 @@ sub DrawFmPreview(st as object, x as integer, y as integer, w as integer, h as i
     end for
 
     sc = Z(5, k)
-    DrawSprite(s, RukusLoaf(), RukusColorsFor(st), x + w \ 2 - 8 * sc, baseY - Z(50, k), sc)
+    demoBob = -(st.fmDemoBeat mod 2) * Z(2, k)
+    DrawSprite(s, FmRukusRows(true, st.fmDemoBeat * 4), RukusColorsFor(st), x + w \ 2 - 8 * sc, baseY - Z(50, k) + demoBob, sc)
 end sub
