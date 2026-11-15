@@ -25,6 +25,7 @@ sub CloseTestPattern(st as object)
     tp.art = invalid
     tp.fx = []
     tp.view = "menu"
+    GuardGuideBack(st)
     st.mode = "guide"
     Redraw(st)
 end sub
@@ -53,6 +54,9 @@ function NewTestPattern() as object
         scoresOnline: false,
         scoresFrom: "menu",
         howtoFrom: "menu",
+        leaveFrom: "menu",
+        leaveSel: 1,
+        toGuide: false,
         sounds: LoadTpSounds()
     }
     if not InList(TpModes(), tp.mode) then tp.mode = "campaign"
@@ -235,8 +239,9 @@ sub ResumeTp(st as object)
 end sub
 
 ' The run's over (out of lives, or every campaign wall cleared): its result, and its place on
-' its mode's table, which ranks by score.
-sub FinishTpSignal(st as object)
+' its mode's table, which ranks by score. leaving (the pause page's Back to the guide) ends in
+' the guide once the initials are saved.
+sub FinishTpSignal(st as object, leaving = false as boolean)
     tp = st.tp
     g = tp.g
     r = { how: g.state, mode: g.mode, diff: g.difficulty, score: g.score, wall: g.wall + 1, time: g.elapsed, place: -1, saved: false }
@@ -245,9 +250,11 @@ sub FinishTpSignal(st as object)
     tp.result = r
     tp.fx = []
     tp.sel = 0
+    tp.toGuide = false
     if r.place >= 0 then
         tp.letters = [Mid(tp.initials, 1, 1), Mid(tp.initials, 2, 1), Mid(tp.initials, 3, 1)]
         tp.view = "initials"
+        tp.toGuide = leaving
     else
         tp.view = "results"
     end if
@@ -268,6 +275,12 @@ sub SaveTpInitials(st as object)
     RegWrite("tp.initials", initials)
     tp.view = "results"
     tp.sel = 0
+    ' a run left from the pause page goes on to the guide; the post above carries on without
+    ' the game (its answer only needs st, BoardUrlEvent)
+    if tp.toGuide then
+        tp.toGuide = false
+        CloseTestPattern(st)
+    end if
 end sub
 
 function LoadTpScores(mode as string) as object
@@ -319,6 +332,8 @@ sub TpKey(st as object, code as integer)
         TpMenuKey(st, code)
     else if v = "pause" then
         TpPauseKey(st, code)
+    else if v = "leave" then
+        TpLeaveKey(st, code)
     else if v = "results" then
         TpResultsKey(st, code)
     else if v = "initials" then
@@ -366,7 +381,7 @@ sub TpMenuKey(st as object, code as integer)
     if tp.sel > rows.Count() - 1 then tp.sel = 0
     id = rows[tp.sel].id
     if code = 0 then
-        CloseTestPattern(st)
+        OpenTpLeave(st)
     else if code = 2 or code = 3 then
         delta = 1
         if code = 2 then delta = -1
@@ -398,8 +413,10 @@ sub TpPauseKey(st as object, code as integer)
     rows = TpPauseRows(st)
     if tp.sel > rows.Count() - 1 then tp.sel = 0
     id = rows[tp.sel].id
-    if code = 0 or code = 13 then
+    if code = 13 then
         ResumeTp(st)
+    else if code = 0 then
+        OpenTpLeave(st)
     else if code = 2 or code = 3 then
         delta = 1
         if code = 2 then delta = -1
@@ -417,14 +434,52 @@ sub TpPauseKey(st as object, code as integer)
             tp.howtoFrom = "pause"
             tp.view = "howto"
         else if id = "guide" then
-            if TpScoreRanks(tp.g) then
-                FinishTpSignal(st)
-            else
-                CloseTestPattern(st)
-            end if
+            LeaveTpRun(st)
         end if
     end if
 end sub
+
+' The pause page's Back to the guide: a run whose score makes the table goes to the initials
+' first, and saving them goes on to the guide.
+sub LeaveTpRun(st as object)
+    if TpScoreRanks(st.tp.g) then
+        FinishTpSignal(st, true)
+    else
+        CloseTestPattern(st)
+    end if
+end sub
+
+' Back on the menu or the pause page: the leave page, on Back to the guide. The page it came
+' from keeps its highlight for Stay here.
+sub OpenTpLeave(st as object)
+    tp = st.tp
+    tp.leaveFrom = tp.view
+    tp.leaveSel = 1
+    tp.view = "leave"
+end sub
+
+' OK on Back to the guide does what that page's own Back to the guide row does; Stay here, Back
+' or Play go back to the page.
+sub TpLeaveKey(st as object, code as integer)
+    tp = st.tp
+    pick = LeaveKey(tp, code)
+    if pick = "" then return
+    tp.view = tp.leaveFrom
+    if pick <> "guide" then return
+    if tp.leaveFrom = "pause" then
+        LeaveTpRun(st)
+    else
+        CloseTestPattern(st)
+    end if
+end sub
+
+function TpLeaveSpec(st as object) as object
+    tp = st.tp
+    paused = (tp.leaveFrom = "pause")
+    ranks = false
+    if paused then ranks = TpScoreRanks(tp.g)
+    return LeavePage("Leave Test Pattern?", LeaveEnds(paused, ranks), tp.leaveSel)
+end function
 
 function TpScoreRanks(g as object) as boolean
     if g = invalid or g.score <= 0 then return false
@@ -494,9 +549,11 @@ sub DrawTestPattern(st as object)
     if v = "play" or v = "signal" then
         DrawTpPlay(st)
     else if v = "menu" then
-        DrawPanel(st, { title: "Test Pattern", rows: TpMenuRows(st), sel: tp.sel, info: false, hint: "Left and right change it · OK picks · Back goes to the guide" })
+        DrawPanel(st, { title: "Test Pattern", rows: TpMenuRows(st), sel: tp.sel, info: false, hint: "Left and right change it · OK picks · Back asks to leave" })
     else if v = "pause" then
-        DrawPanel(st, { title: "Paused", rows: TpPauseRows(st), sel: tp.sel, info: false, hint: "OK picks · Play or Back carries on" })
+        DrawPanel(st, { title: "Paused", rows: TpPauseRows(st), sel: tp.sel, info: false, hint: "OK picks · Play carries on · Back asks to leave" })
+    else if v = "leave" then
+        DrawPanel(st, TpLeaveSpec(st))
     else if v = "results" then
         DrawPanel(st, { title: TpResultTitle(tp.result), rows: TpResultsRows(st), sel: tp.sel, info: false, hint: "OK picks · Back goes to the menu" })
     else if v = "initials" then

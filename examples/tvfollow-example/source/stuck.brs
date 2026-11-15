@@ -354,7 +354,7 @@ sub SpHardDrop(g as object)
     SpLock(g)
 end sub
 
-' Replay puts the piece aside, or swaps it with the one put aside, once a piece.
+' Hold (the options key) puts the piece aside, or swaps it with the one put aside, once a piece.
 sub SpHold(g as object)
     if g.state <> "play" or g.holdUsed then return
     g.holdUsed = true

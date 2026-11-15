@@ -334,7 +334,8 @@ namespace TVFollow.Tests
                     foreach (Match m in Regex.Matches(text, "pkg:/([\\w./-]+)(\"\\s*\\+)?"))
                     {
                         string path = m.Groups[1].Value;
-                        bool started = m.Groups[2].Success;
+                        // a path the code finishes itself, or one that names a folder ("pkg:/images/promos/")
+                        bool started = m.Groups[2].Success || path.EndsWith("/", StringComparison.Ordinal);
                         Check(started ? names.Exists(n => n.StartsWith(path, StringComparison.Ordinal)) : archive.GetEntry(path) != null,
                             from + " points at a missing " + path + (started ? "..." : ""));
                     }

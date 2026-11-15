@@ -636,7 +636,9 @@ function StuckChromeCable(st as object, s as object, a as object) as object
     s.DrawRect(hx, bt, bw, bh, c.cell1)
     DrawChevron(s, hx + bw \ 2, mid, Z(6, k), Z(3, k), false, c.white)
     hx = DrawRun(s, hx + bw + Z(12, k), ty, "FASTER", c.soft, f.bar, Z(1, k), Z(26, k))
-    hx = DrawRun(s, hx, ty, "REPLAY", c.white, f.bar, Z(1, k), Z(10, k))
+    ' the options key holds: its star, as the guide's bar draws it
+    DrawStar(s, hx + Z(8, k), mid, Z(8, k), Z(3, k), c.white)
+    hx = hx + Z(16, k) + Z(10, k)
     hx = DrawRun(s, hx, ty, "HOLD", c.soft, f.bar, Z(1, k), Z(26, k))
     hx = DrawRun(s, hx, ty, "PLAY", c.white, f.bar, Z(1, k), Z(10, k))
     DrawRun(s, hx, ty, "PAUSE", c.soft, f.bar, Z(1, k), 0)
@@ -701,7 +703,7 @@ function StuckChromePhosphor(st as object, s as object, a as object) as object
     right = Z(1232, k)
     s.DrawRect(left, Z(646, k), right - left, Z(2, k), c.full)
     ty = Z(650, k) + (Z(698, k) - Z(650, k) - f.bar.GetOneLineHeight()) \ 2
-    hints = "[<>] MOVE   [OK] TURN   [^] DROP   [V] FASTER   [REPLAY] HOLD   [PLAY] PAUSE"
+    hints = "[<>] MOVE   [OK] TURN   [^] DROP   [V] FASTER   [*] HOLD   [PLAY] PAUSE"
     DrawGlow(s, hints, left, ty, c.full, c.glow, f.bar, glow)
     fpsX = right / k
     if st.scan then DrawScanlines(st, s)
@@ -750,7 +752,7 @@ function StuckChromeVcr(st as object, s as object, a as object) as object
     DrawShadowed(s, labels[6], Z(868, k), Z(556, k), c.yellow, c.shadow, f.label, sh)
     slots.best = { x: 868, y: 580, align: "l", font: f.value, color: c.white, bg: c.bg }
 
-    DrawVcrBar(st, ":DROP", "OK:TURN  REPLAY:HOLD", ":PAUSE", false)
+    DrawVcrBar(st, ":DROP", "OK:TURN  PLAY:PAUSE", ":HOLD", false)
     vw = st.fonts.bar.GetOneLineWidth(st.version, 99999)
     ty = Z(646, k) + (Z(48, k) - st.fonts.bar.GetOneLineHeight()) \ 2
     fpsX = (Z(1224, k) - vw - Z(24, k)) / k
@@ -821,7 +823,7 @@ function StuckChromeRgb(st as object, s as object, a as object) as object
 
     s.DrawRect(left, Z(646, k), right - left, Z(2, k), c.rule)
     ty = Z(650, k) + (Z(698, k) - Z(650, k) - f.bar.GetOneLineHeight()) \ 2
-    hints = "[<>] MOVE   [OK] TURN   [^] DROP   [V] DROP FASTER   [REPLAY] HOLD   [PLAY] PAUSE"
+    hints = "[<>] MOVE   [OK] TURN   [^] DROP   [V] DROP FASTER   [*] HOLD   [PLAY] PAUSE"
     s.DrawText(hints, left, ty, c.dim, f.bar)
     fpsX = right / k
     return { wellX: 472, wellY: 112, slots: slots, nextBox: nextBox, holdBox: holdBox, fps: { x: fpsX, y: ty / k, align: "r", font: f.bar, color: c.dim, bg: c.bg } }
@@ -894,7 +896,7 @@ function StuckChromeB95(st as object, s as object, a as object) as object
     B95Edge(s, c1x, statusY, c1w, statusH, t, c.shadow, c.white)
     B95Edge(s, c2x, statusY, c2w, statusH, t, c.shadow, c.white)
     textY = statusY + (statusH - f.bar.GetOneLineHeight()) \ 2
-    hints = "Left and right move · OK turns · Up drops · Down drops faster · Replay holds · Play pauses"
+    hints = "Left and right move · OK turns · Up drops · Down drops faster · * holds · Play pauses"
     B95Text(s, B95Trim(hints, f.bar, c1w - Z(16, k), k, false), c1x + Z(8, k), textY, c.black, f.bar, k, false)
     B95Text(s, B95Trim(st.version, f.bar, c2w - Z(16, k), k, false), c2x + Z(8, k), textY, c.black, f.bar, k, false)
     ' the counter sits at the right of the window's menu bar

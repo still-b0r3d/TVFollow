@@ -178,6 +178,9 @@ function HandleKey(st as object, code as integer) as boolean
     ' the guide; the key that completes Agent Ø's code does nothing else (hijack.brs)
     if CheckHijackTrigger(st, code) then return true
     if code = 0 then
+        ' A Back within a second of a game dropping the player here is still the burst of presses
+        ' they used to leave the game, so it doesn't close b0r3d TV (GuardGuideBack).
+        if st.guideBackGuard <> invalid and st.guideBackGuard.TotalMilliseconds() < 1000 then return true
         return false
     else if code = 2 then
         MoveFocus(st, -1)
@@ -314,6 +317,11 @@ end sub
 sub Redraw(st as object)
     ' no 2D screen while b0r3d TV steps aside
     if st.screen = invalid then return
+    ' the guide's copy of channel 24's ad picture goes once the guide isn't showing that preview
+    ' (the highlight moved on, a channel, game or Settings opened), before this frame makes its own
+    if st.promoPreview <> invalid then
+        if PreviewGameId(st) <> "promo.breaks" then st.promoPreview = invalid
+    end if
     if st.mode = "saver" then
         DrawSaver(st)
     else if st.mode = "hijack" then
@@ -415,3 +423,9 @@ function ClockNow() as object
         mins: mins
     }
 end function
+
+' Marks the moment a game closed into the guide, so a Back pressed right after it (the same
+' burst the player used to leave the game) doesn't close b0r3d TV (HandleKey).
+sub GuardGuideBack(st as object)
+    st.guideBackGuard = CreateObject("roTimespan")
+end sub

@@ -1,6 +1,8 @@
 ' Commercial Breaks on channel 24: late-night station ads for b0r3d's own games and a public
 ' service announcement, one card every 8 seconds, in every look. Left and right skip, OK or
-' Play pauses, Back goes to the guide. Each ad says only what its game really has.
+' Play pauses, Back goes to the guide. Each ad says only what its game really has, beside a
+' picture from the game itself (Ruckus himself for the announcement): pkg:/images/promos/, cut
+' from the owner's own art. pixels marks pixel art, which is only ever blown up by whole numbers.
 
 function PromoSpots() as object
     return [
@@ -11,7 +13,10 @@ function PromoSpots() as object
             bullet1: "Fell the trees realm after realm, and take on each realm's boss.",
             bullet2: "Saws, bombs and upgrades to collect along the way.",
             cta: "PLAY IT FREE ON b0r3d.org",
-            accent: &hFF3B5CFF
+            accent: &hFF3B5CFF,
+            pic: "cs.jpg",
+            picName: "squirrel.jpg",
+            pixels: false
         },
         {
             tag: "NEW ON YOUR DESKTOP",
@@ -20,7 +25,10 @@ function PromoSpots() as object
             bullet1: "Pinball tables, solitaire, a paint program and a calculator.",
             bullet2: "A dial-up web browser, screensavers and online high scores.",
             cta: "START IT UP AT b0r3d.org/95",
-            accent: &h39FF88FF
+            accent: &h39FF88FF,
+            pic: "b95.jpg",
+            picName: "paint.jpg",
+            pixels: false
         },
         {
             tag: "TONIGHT'S CREATURE FEATURE",
@@ -29,7 +37,10 @@ function PromoSpots() as object
             bullet1: "A roguelike run across the city, with Ruckus in it somewhere.",
             bullet2: "Every run is a new map, and a run can be saved and picked up later.",
             cta: "PLAY IT ON b0r3d.org",
-            accent: &h00E5FFFF
+            accent: &h00E5FFFF,
+            pic: "zc.png",
+            picName: "creature.png",
+            pixels: true
         },
         {
             tag: "A PUBLIC SERVICE ANNOUNCEMENT",
@@ -38,7 +49,10 @@ function PromoSpots() as object
             bullet1: "A VCR, a cat cam, three games, a radio station and these commercials.",
             bullet2: "Leave the remote alone for a while and Ruckus comes by.",
             cta: "THIS HAS BEEN A TEST. STAY TUNED.",
-            accent: &hFFD700FF
+            accent: &hFFD700FF,
+            pic: "psa.jpg",
+            picName: "ruckus.jpg",
+            pixels: false
         },
         {
             tag: "ALSO PLAYING ON b0r3d.org",
@@ -47,7 +61,10 @@ function PromoSpots() as object
             bullet1: "Hold off the horde for ten minutes a stage, then the boss.",
             bullet2: "Three stages, each with its own online high scores.",
             cta: "PLAY IT ON b0r3d.org",
-            accent: &hFF7700FF
+            accent: &hFF7700FF,
+            pic: "ll.jpg",
+            picName: "loafed.jpg",
+            pixels: false
         }
     ]
 end function
@@ -66,6 +83,10 @@ end function
 
 sub OpenPromo(st as object)
     if st.promo = invalid then st.promo = NewPromoState()
+    ' the guide's copy of an ad's picture isn't needed while the channel is up, and a picture
+    ' file that wouldn't load gets another try
+    st.promoPreview = invalid
+    st.promoNoPic = invalid
     st.promo.timer.Mark()
     st.promo.frame.Mark()
     st.promo.clockTimer.Mark()
@@ -74,6 +95,8 @@ sub OpenPromo(st as object)
 end sub
 
 sub ClosePromo(st as object)
+    ' the channel's picture goes with it
+    st.promoPic = invalid
     st.mode = "guide"
     Redraw(st)
 end sub
@@ -213,6 +236,35 @@ function PromoTrim(st as object, text as string, font as object, maxW as integer
     return TrimToWidth(text, font, maxW)
 end function
 
+' Text wrapped at the spaces to fit maxW in the look's own lettering, at most maxLines lines; the
+' last one is cut to fit when there's more.
+function PromoWrap(st as object, text as string, font as object, maxW as integer, maxLines as integer, bold as boolean) as object
+    lines = []
+    line = ""
+    words = text.Split(" ")
+    n = words.Count()
+    i = 0
+    while i < n
+        attempt = words[i]
+        if line <> "" then attempt = line + " " + words[i]
+        if line = "" or GTextWidth(st, attempt, font, bold) <= maxW then
+            line = attempt
+            i = i + 1
+        else if lines.Count() < maxLines - 1 then
+            lines.Push(PromoTrim(st, line, font, maxW, bold))
+            line = ""
+        else
+            ' no lines left: the rest goes on this one, cut to fit below
+            while i < n
+                line = line + " " + words[i]
+                i = i + 1
+            end while
+        end if
+    end while
+    lines.Push(PromoTrim(st, line, font, maxW, bold))
+    return lines
+end function
+
 ' An ad's own colour, where the look allows one: the phosphor look has only its glow, and on
 ' b0r3d 95's grey the bright colours wouldn't read, so its text is navy there.
 function PromoAccent(st as object, spot as object) as dynamic
@@ -307,6 +359,130 @@ function PromoKit(st as object) as object
     }
 end function
 
+' An ad's picture, made the size it's drawn at: loaded from pkg:/images/promos/ and, when it's
+' drawn at another size (at 720p, in the guide's preview box, pixel art blown up by a whole
+' number so it stays crisp), copied once into a picture of that size, so a frame is a plain copy.
+' Only the ad on screen is kept, one for the channel ("screen") and one for the guide's preview
+' box ("preview", let go by Redraw once the guide stops showing it); another ad lets go of the old
+' picture before loading its own. Invalid when it can't be had (no picture memory, or a file that
+' won't load, which only that ad goes without): the ad is then text only.
+function PromoPicture(st as object, slot as string, spot as object, boxW as integer, boxH as integer) as dynamic
+    if spot.pic = "" or boxW < 16 or boxH < 16 then return invalid
+    key = spot.pic + "|" + boxW.ToStr() + "|" + boxH.ToStr()
+    held = st.promoPic
+    if slot = "preview" then held = st.promoPreview
+    if held <> invalid then
+        if held.key = key then return held.bmp
+    end if
+    if slot = "preview" then st.promoPreview = invalid else st.promoPic = invalid
+    ' a file that wouldn't load isn't tried again until the channel is opened again (OpenPromo)
+    if st.promoNoPic <> invalid then
+        if st.promoNoPic.DoesExist(spot.pic) then return invalid
+    end if
+    if PicturesFailing(st) then return invalid
+    src = invalid
+    try
+        src = CreateObject("roBitmap", "pkg:/images/promos/" + spot.pic)
+    catch e
+        src = invalid
+    end try
+    bw = 0
+    bh = 0
+    if src <> invalid then
+        bw = src.GetWidth()
+        bh = src.GetHeight()
+    end if
+    if bw < 1 or bh < 1 then
+        ' only this ad goes without its picture; PictureFailed is for running out of memory
+        print "b0r3d TV: the ad picture "; spot.pic; " didn't load"
+        if st.promoNoPic = invalid then st.promoNoPic = {}
+        st.promoNoPic[spot.pic] = true
+        return invalid
+    end if
+    sc = boxW / bw
+    if boxH / bh < sc then sc = boxH / bh
+    sharp = spot.pixels and sc >= 1
+    if sharp then sc = Int(sc)
+    pw = Int(bw * sc + 0.5)
+    ph = Int(bh * sc + 0.5)
+    pic = src
+    if pw <> bw or ph <> bh then
+        pic = NewPicture(pw, ph, false)
+        area = invalid
+        if pic <> invalid then area = CreateObject("roRegion", src, 0, 0, bw, bh)
+        if area = invalid then
+            PictureFailed(st)
+            return invalid
+        end if
+        if sharp then area.SetScaleMode(0) else area.SetScaleMode(1)
+        pic.DrawScaledObject(0, 0, pw / bw, ph / bh, area)
+    end if
+    held = { key: key, bmp: pic }
+    if slot = "preview" then st.promoPreview = held else st.promoPic = held
+    return pic
+end function
+
+' An ad's picture on the screen; the phosphor look sees it in its own glow (the tint multiplies).
+sub PromoBlit(st as object, s as object, pic as object, x as integer, y as integer)
+    if st.look = "phosphor" then
+        s.DrawObject(x, y, pic, st.kit.full)
+    else
+        s.DrawObject(x, y, pic)
+    end if
+end sub
+
+' The look's own frame round an ad's picture at x, y (w by h), drawn before the picture: b0r3d
+' 95 opens it in a window (only a sunken edge in the guide's small box), the VCR look gives it a
+' white edge and a hard shadow, the RGB LED lights a lit edge, the cable guide and the phosphor
+' terminal a bezel in the ad's colour. big is the channel's own screen.
+sub DrawPromoBezel(st as object, s as object, spot as object, x as integer, y as integer, w as integer, h as integer, big as boolean)
+    k = st.k
+    c = st.kit
+    t = Z(2, k)
+    if t < 1 then t = 1
+    if st.look = "b95" then
+        if big then
+            ' PromoWindowTop says how far this reaches above the picture
+            side = 4 * t + Z(4, k)
+            top = side + Z(40, k)
+            B95Raised(s, x - side, y - top, w + 2 * side, h + top + side, t, c)
+            DrawB95TitleBar(st, x - side + 2 * t + Z(2, k), y - top + 2 * t + Z(2, k), w + 2 * side - 4 * t - Z(4, k), spot.picName, false)
+        end if
+        B95Sunken(s, x - 2 * t, y - 2 * t, w + 4 * t, h + 4 * t, t, c, c.black)
+        return
+    end if
+    if st.look = "vcr" then
+        e = t
+        if big then
+            s.DrawRect(x - e + Z(6, k), y - e + Z(6, k), w + 2 * e, h + 2 * e, c.shadow)
+        end if
+        s.DrawRect(x - e, y - e, w + 2 * e, h + 2 * e, c.white)
+        return
+    end if
+    if st.look = "rgb" then
+        e = t
+        if big then e = Z(4, k)
+        s.DrawRect(x - e, y - e, w + 2 * e, h + 2 * e, c.frame)
+        if big then DrawRgbEdge(st, s, x - e, y - e, w + 2 * e, h + 2 * e)
+        return
+    end if
+    accent = PromoAccent(st, spot)
+    if big then
+        s.DrawRect(x - Z(4, k), y - Z(4, k), w + Z(8, k), h + Z(8, k), accent)
+        s.DrawRect(x - Z(2, k), y - Z(2, k), w + Z(4, k), h + Z(4, k), c.bg)
+    else
+        s.DrawRect(x - t, y - t, w + 2 * t, h + 2 * t, accent)
+    end if
+end sub
+
+' How far b0r3d 95's window (its title bar and edges) reaches above an ad's picture.
+function PromoWindowTop(st as object) as integer
+    if st.look <> "b95" then return 0
+    t = Z(2, st.k)
+    if t < 1 then t = 1
+    return 4 * t + Z(4, st.k) + Z(40, st.k)
+end function
+
 ' The full screen on channel 24: a header, the card, and the keys.
 sub DrawPromoScreen(st as object)
     s = st.screen
@@ -348,7 +524,9 @@ sub DrawPromoScreen(st as object)
 end sub
 
 ' One ad's card: its tag, title and line, two points about the game, and where to find it, with
-' the card's time running out along its bottom edge. Every line is cut to fit the card.
+' the card's time running out along its bottom edge. The ad's picture stands in a column of its
+' own on the right; without one (no picture memory) the words take the card's whole width. Every
+' line is wrapped or cut to fit its column.
 sub DrawPromoCard(st as object, s as object, spot as object, cx as integer, cy as integer, cw as integer, ch as integer, elapsed as integer, duration as integer, paused as boolean, kit as object, f as object)
     k = st.k
     borderW = Z(3, k)
@@ -364,6 +542,21 @@ sub DrawPromoCard(st as object, s as object, spot as object, cx as integer, cy a
     px = cx + Z(36, k)
     py = cy + Z(30, k)
     textW = cw - 2 * Z(36, k)
+    barH = Z(6, k)
+
+    ' the picture, 4:3 (720 by 540 at 1080p), standing in the middle of its column
+    pic = PromoPicture(st, "screen", spot, Z(480, k), Z(360, k))
+    if pic <> invalid then
+        colW = Z(512, k)
+        textW = textW - colW - Z(16, k)
+        pw = pic.GetWidth()
+        ph = pic.GetHeight()
+        lift = PromoWindowTop(st)
+        picX = cx + cw - Z(36, k) - colW + (colW - pw) \ 2
+        picY = cy + lift + (ch - barH - lift - ph) \ 2
+        DrawPromoBezel(st, s, spot, picX, picY, pw, ph, true)
+        PromoBlit(st, s, pic, picX, picY)
+    end if
 
     ' the tag, in a box
     tag = PromoTrim(st, spot.tag, f.badge, textW - Z(24, k), true)
@@ -374,29 +567,40 @@ sub DrawPromoCard(st as object, s as object, spot as object, cx as integer, cy a
     GText(st, s, tag, px + Z(12, k), py + Z(4, k), f.badge, ink, true)
     py = py + badgeH + Z(16, k)
 
-    GText(st, s, PromoTrim(st, spot.title, f.title, textW, true), px, py, f.title, kit.title, true)
-    py = py + f.title.GetOneLineHeight() + Z(12, k)
-    GText(st, s, PromoTrim(st, spot.sub, f.sub, textW, true), px, py, f.sub, ink, true)
-    py = py + f.sub.GetOneLineHeight() + Z(24, k)
+    for each line in PromoWrap(st, spot.title, f.title, textW, 2, true)
+        GText(st, s, line, px, py, f.title, kit.title, true)
+        py = py + f.title.GetOneLineHeight()
+    end for
+    py = py + Z(12, k)
+    for each line in PromoWrap(st, spot.sub, f.sub, textW, 2, true)
+        GText(st, s, line, px, py, f.sub, ink, true)
+        py = py + f.sub.GetOneLineHeight()
+    end for
+    py = py + Z(24, k)
 
     s.DrawRect(px, py, textW, Z(2, k), kit.rule)
     py = py + Z(20, k)
 
-    for each line in [spot.bullet1, spot.bullet2]
-        s.DrawRect(px, py + Z(8, k), Z(8, k), Z(8, k), accent)
-        GText(st, s, PromoTrim(st, line, f.bullet, textW - Z(20, k), false), px + Z(20, k), py, f.bullet, kit.bullet, false)
-        py = py + f.bullet.GetOneLineHeight() + Z(14, k)
-    end for
-
-    ' where to find it
+    ' where to find it, at the bottom; the two points stop short of it
     ctaH = Z(44, k)
     ctaY = cy + ch - ctaH - Z(26, k)
+    lineH = f.bullet.GetOneLineHeight()
+    for each point in [spot.bullet1, spot.bullet2]
+        if py + lineH > ctaY - Z(12, k) then exit for
+        s.DrawRect(px, py + Z(8, k), Z(8, k), Z(8, k), accent)
+        for each line in PromoWrap(st, point, f.bullet, textW - Z(20, k), 2, false)
+            if py + lineH > ctaY - Z(12, k) then exit for
+            GText(st, s, line, px + Z(20, k), py, f.bullet, kit.bullet, false)
+            py = py + lineH + Z(4, k)
+        end for
+        py = py + Z(10, k)
+    end for
+
     s.DrawRect(px, ctaY, textW, ctaH, kit.ctaRule)
     s.DrawRect(px + Z(2, k), ctaY + Z(2, k), textW - Z(4, k), ctaH - Z(4, k), kit.ctaBg)
     GText(st, s, PromoTrim(st, spot.cta, f.cta, textW - Z(36, k), true), px + Z(18, k), ctaY + (ctaH - f.cta.GetOneLineHeight()) \ 2, f.cta, ink, true)
 
     ' the card's time, along its bottom edge (full while paused)
-    barH = Z(6, k)
     barY = cy + ch - barH
     s.DrawRect(cx, barY, cw, barH, kit.barTrack)
     fillW = cw
@@ -408,7 +612,8 @@ sub DrawPromoCard(st as object, s as object, spot as object, cx as integer, cy a
     s.DrawRect(cx, barY, fillW, barH, accent)
 end sub
 
-' The guide's preview box: the ad that's on now (a new one every 8 s by the clock), cut to fit.
+' The guide's preview box: the ad that's on now (a new one every 8 s by the clock), its name and
+' its picture when the box has room for one, else its line and where to find it, cut to fit.
 sub DrawPromoPreview(st as object, x as integer, y as integer, w as integer, h as integer)
     s = st.screen
     k = st.k
@@ -434,6 +639,21 @@ sub DrawPromoPreview(st as object, x as integer, y as integer, w as integer, h a
     ty = ty + f.badge.GetOneLineHeight() + Z(6, k)
     GText(st, s, PromoTrim(st, spot.title, f.preview, tw, true), tx, ty, f.preview, kit.title, true)
     ty = ty + f.preview.GetOneLineHeight() + Z(6, k)
+
+    ' the picture under the ad's name, in the middle of the room left
+    room = y + h - Z(10, k) - ty
+    pic = invalid
+    if room >= Z(72, k) then pic = PromoPicture(st, "preview", spot, tw - Z(8, k), room - Z(8, k))
+    if pic <> invalid then
+        pw = pic.GetWidth()
+        ph = pic.GetHeight()
+        picX = x + (w - pw) \ 2
+        picY = ty + Z(4, k) + (room - Z(8, k) - ph) \ 2
+        DrawPromoBezel(st, s, spot, picX, picY, pw, ph, false)
+        PromoBlit(st, s, pic, picX, picY)
+        return
+    end if
+
     for each line in WrapText(spot.sub, f.badge, tw)
         if ty + f.badge.GetOneLineHeight() > y + h - Z(8, k) then exit for
         GText(st, s, PromoTrim(st, line, f.badge, tw, false), tx, ty, f.badge, kit.sub, false)

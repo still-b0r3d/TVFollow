@@ -78,6 +78,7 @@ sub CloseStuckPixels(st as object)
     sp.art = invalid
     sp.fx = []
     sp.view = "menu"
+    GuardGuideBack(st)
     st.mode = "guide"
     Redraw(st)
 end sub
@@ -106,6 +107,9 @@ function NewStuckPixels() as object
         scoresOnline: false,
         scoresFrom: "menu",
         howtoFrom: "menu",
+        leaveFrom: "menu",
+        leaveSel: 1,
+        toGuide: false,
         sounds: LoadStuckSounds()
     }
     if not InList(SpModes(), sp.mode) then sp.mode = "marathon"
@@ -286,8 +290,9 @@ end sub
 
 ' The run's over: its result, and its place on the table when it makes it. Marathon always
 ' counts; Sprint 40 and Cleanup count only when finished. Sprint 40 ranks by time, the others
-' by score.
-sub FinishSignal(st as object)
+' by score. leaving (the pause page's Back to the guide) ends in the guide once the initials
+' are saved.
+sub FinishSignal(st as object, leaving = false as boolean)
     sp = st.sp
     g = sp.g
     r = { how: g.state, mode: g.mode, score: g.score, lines: g.lines, level: g.level, time: g.elapsed, fixed: g.fixed, place: -1, value: g.score, saved: false }
@@ -297,9 +302,11 @@ sub FinishSignal(st as object)
     sp.result = r
     sp.fx = []
     sp.sel = 0
+    sp.toGuide = false
     if r.place >= 0 then
         sp.letters = [Mid(sp.initials, 1, 1), Mid(sp.initials, 2, 1), Mid(sp.initials, 3, 1)]
         sp.view = "initials"
+        sp.toGuide = leaving
     else
         sp.view = "results"
     end if
@@ -320,6 +327,12 @@ sub SaveStuckInitials(st as object)
     RegWrite("sp.initials", initials)
     sp.view = "results"
     sp.sel = 0
+    ' a run left from the pause page goes on to the guide; the post above carries on without
+    ' the game (its answer only needs st, BoardUrlEvent)
+    if sp.toGuide then
+        sp.toGuide = false
+        CloseStuckPixels(st)
+    end if
 end sub
 
 function LoadStuckScores(mode as string) as object
@@ -368,6 +381,8 @@ sub StuckKey(st as object, code as integer)
         StuckMenuKey(st, code)
     else if v = "pause" then
         StuckPauseKey(st, code)
+    else if v = "leave" then
+        StuckLeaveKey(st, code)
     else if v = "results" then
         StuckResultsKey(st, code)
     else if v = "initials" then
@@ -394,8 +409,8 @@ sub StuckKey(st as object, code as integer)
 end sub
 
 ' Left and right move (held, they slide), down drops faster while held, up drops it all the
-' way, OK and fast-forward turn right, rewind turns left, Replay holds, and Play, Back or the
-' options key pause.
+' way, OK, Replay and fast-forward turn right, rewind turns left, the options key holds, and
+' Play or Back pause. Only left, right and down care when they're let go.
 sub StuckPlayKey(st as object, code as integer)
     g = st.sp.g
     if code = 4 then
@@ -412,13 +427,13 @@ sub StuckPlayKey(st as object, code as integer)
         SpRelease(g, "down")
     else if code = 2 then
         SpPress(g, "drop")
-    else if code = 6 or code = 9 then
+    else if code = 6 or code = 7 or code = 9 then
         SpPress(g, "cw")
     else if code = 8 then
         SpPress(g, "ccw")
-    else if code = 7 then
+    else if code = 10 then
         SpPress(g, "hold")
-    else if code = 13 or code = 0 or code = 10 then
+    else if code = 13 or code = 0 then
         PauseStuck(st)
     end if
 end sub
@@ -441,7 +456,7 @@ sub StuckMenuKey(st as object, code as integer)
     if sp.sel > rows.Count() - 1 then sp.sel = 0
     id = rows[sp.sel].id
     if code = 0 then
-        CloseStuckPixels(st)
+        OpenStuckLeave(st)
     else if code = 2 or code = 3 then
         delta = 1
         if code = 2 then delta = -1
@@ -476,8 +491,10 @@ sub StuckPauseKey(st as object, code as integer)
     rows = StuckPauseRows(st)
     if sp.sel > rows.Count() - 1 then sp.sel = 0
     id = rows[sp.sel].id
-    if code = 0 or code = 13 then
+    if code = 13 then
         ResumeStuck(st)
+    else if code = 0 then
+        OpenStuckLeave(st)
     else if code = 2 or code = 3 then
         delta = 1
         if code = 2 then delta = -1
@@ -495,14 +512,52 @@ sub StuckPauseKey(st as object, code as integer)
             sp.howtoFrom = "pause"
             sp.view = "howto"
         else if id = "guide" then
-            if StuckScoreRanks(sp.g) then
-                FinishSignal(st)
-            else
-                CloseStuckPixels(st)
-            end if
+            LeaveStuckRun(st)
         end if
     end if
 end sub
+
+' The pause page's Back to the guide: a run whose score makes the table goes to the initials
+' first, and saving them goes on to the guide.
+sub LeaveStuckRun(st as object)
+    if StuckScoreRanks(st.sp.g) then
+        FinishSignal(st, true)
+    else
+        CloseStuckPixels(st)
+    end if
+end sub
+
+' Back on the menu or the pause page: the leave page, on Back to the guide. The page it came
+' from keeps its highlight for Stay here.
+sub OpenStuckLeave(st as object)
+    sp = st.sp
+    sp.leaveFrom = sp.view
+    sp.leaveSel = 1
+    sp.view = "leave"
+end sub
+
+' OK on Back to the guide does what that page's own Back to the guide row does; Stay here, Back
+' or Play go back to the page.
+sub StuckLeaveKey(st as object, code as integer)
+    sp = st.sp
+    pick = LeaveKey(sp, code)
+    if pick = "" then return
+    sp.view = sp.leaveFrom
+    if pick <> "guide" then return
+    if sp.leaveFrom = "pause" then
+        LeaveStuckRun(st)
+    else
+        CloseStuckPixels(st)
+    end if
+end sub
+
+function StuckLeaveSpec(st as object) as object
+    sp = st.sp
+    paused = (sp.leaveFrom = "pause")
+    ranks = false
+    if paused then ranks = StuckScoreRanks(sp.g)
+    return LeavePage("Leave Stuck Pixels?", LeaveEnds(paused, ranks), sp.leaveSel)
+end function
 
 ' Whether leaving a run from the pause menu would put it on its table, by FinishSignal's rule:
 ' Marathon always counts, Sprint 40 and Cleanup only once finished.
@@ -577,9 +632,11 @@ sub DrawStuck(st as object)
     if v = "play" or v = "signal" then
         DrawStuckPlay(st)
     else if v = "menu" then
-        DrawPanel(st, { title: "Stuck Pixels", rows: StuckMenuRows(st), sel: sp.sel, info: false, hint: "Left and right change it · OK picks · Back goes to the guide" })
+        DrawPanel(st, { title: "Stuck Pixels", rows: StuckMenuRows(st), sel: sp.sel, info: false, hint: "Left and right change it · OK picks · Back asks to leave" })
     else if v = "pause" then
-        DrawPanel(st, { title: "Paused", rows: StuckPauseRows(st), sel: sp.sel, info: false, hint: "OK picks · Play or Back carries on" })
+        DrawPanel(st, { title: "Paused", rows: StuckPauseRows(st), sel: sp.sel, info: false, hint: "OK picks · Play carries on · Back asks to leave" })
+    else if v = "leave" then
+        DrawPanel(st, StuckLeaveSpec(st))
     else if v = "results" then
         DrawPanel(st, { title: StuckResultTitle(sp.result), rows: StuckResultsRows(st), sel: sp.sel, info: false, hint: "OK picks · Back goes to the menu" })
     else if v = "initials" then
@@ -778,10 +835,10 @@ end function
 function StuckHowToRows() as object
     return [
         { label: "Move", value: "Left and right; hold one to slide" },
-        { label: "Turn", value: "OK or fast-forward turns right, rewind turns left" },
+        { label: "Turn", value: "OK, Replay or fast-forward turns right, rewind turns left" },
         { label: "Drop", value: "Down drops faster; up drops it all the way" },
-        { label: "Hold", value: "Replay puts the piece aside, or swaps it back, once a piece" },
-        { label: "Pause", value: "Play, Back or the options key" },
+        { label: "Hold", value: "The options key (*) puts the piece aside, or swaps it back, once a piece" },
+        { label: "Pause", value: "Play or Back" },
         { label: "Lines", value: "Fill a row from side to side and it clears" },
         { label: "Stuck pixels", value: "Now and then a piece comes with a stuck pixel that flickers. Its row has to be filled twice: the first time, the stuck pixel pops out for extra points and leaves a hole; fill that, and the row clears." },
         { label: "Modes", value: "Marathon gets faster every 10 lines. Sprint 40 is against the clock. Cleanup starts over rows of static." }

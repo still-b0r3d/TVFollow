@@ -252,3 +252,39 @@ sub DrawArrowShape(s as object, x as integer, y as integer, w as integer, h as i
         if tall > 0 then s.DrawRect(cx, y + (h - tall) \ 2, 1, tall, color)
     end for
 end sub
+
+' --- The games' leave page: Back on a game's menu or its pause page asks before going ---
+
+' The page's spec for DrawPanel: a line saying where leaving goes, then Back to the guide (the
+' highlight when the page opens, sel 1) and Stay here. ends says what leaving does to the run.
+function LeavePage(title as string, ends as string, sel as integer) as object
+    rows = [
+        { label: "Back to the b0r3d TV guide.", value: "", kind: "info", dim: true },
+        { id: "guide", label: "Back to the guide", value: ends, kind: "open" },
+        { id: "stay", label: "Stay here", value: "", kind: "open" }
+    ]
+    return { title: title, rows: rows, sel: sel, info: false, hint: "OK picks · Play or Back stays here" }
+end function
+
+' What leaving a paused run does, in the pause page's words ("" from a menu, with no run).
+function LeaveEnds(paused as boolean, ranks as boolean) as string
+    if not paused then return ""
+    if ranks then return "Your score goes on the table first"
+    return "This run ends"
+end function
+
+' A key on a leave page: "guide" or "stay" once it's answered, "" when it only moved the
+' highlight. gm is the game's own state, whose leaveSel is the highlight. Back and Play stay.
+function LeaveKey(gm as object, code as integer) as string
+    if code = 0 or code = 13 then return "stay"
+    rows = LeavePage("", "", 1).rows
+    if gm.leaveSel < 1 or gm.leaveSel > rows.Count() - 1 then gm.leaveSel = 1
+    if code = 2 or code = 3 then
+        delta = 1
+        if code = 2 then delta = -1
+        gm.leaveSel = PanelStep(rows, gm.leaveSel, delta)
+    else if code = 6 then
+        return rows[gm.leaveSel].id
+    end if
+    return ""
+end function

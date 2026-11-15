@@ -25,6 +25,7 @@ sub CloseSnake(st as object)
     sn.g = invalid
     sn.art = invalid
     sn.view = "menu"
+    GuardGuideBack(st)
     st.mode = "guide"
     Redraw(st)
 end sub
@@ -53,6 +54,9 @@ function NewSnakeGame() as object
         scoresOnline: false,
         scoresFrom: "menu",
         howtoFrom: "menu",
+        leaveFrom: "menu",
+        leaveSel: 1,
+        toGuide: false,
         sounds: LoadSnakeSounds()
     }
     return sn
@@ -184,9 +188,12 @@ sub ResumeSnake(st as object)
     Redraw(st)
 end sub
 
-sub FinishSnakeSignal(st as object)
+' The run's over: its result, and its place on its arena's table. leaving (the pause page's Back
+' to the guide) ends in the guide once the initials are saved.
+sub FinishSnakeSignal(st as object, leaving = false as boolean)
     sn = st.snake
     g = sn.g
+    sn.toGuide = false
     if g = invalid then
         sn.view = "menu"
         sn.sel = 0
@@ -213,6 +220,7 @@ sub FinishSnakeSignal(st as object)
     if r.place >= 0 then
         sn.letters = [Mid(sn.initials, 1, 1), Mid(sn.initials, 2, 1), Mid(sn.initials, 3, 1)]
         sn.view = "initials"
+        sn.toGuide = leaving
     else
         sn.view = "results"
     end if
@@ -234,6 +242,12 @@ sub SaveSnakeInitials(st as object)
     RegWrite("sp.initials", initials)
     sn.view = "results"
     sn.sel = 0
+    ' a run left from the pause page goes on to the guide; the post above carries on without
+    ' the game (its answer only needs st, BoardUrlEvent)
+    if sn.toGuide then
+        sn.toGuide = false
+        CloseSnake(st)
+    end if
 end sub
 
 function LoadSnakeScores(mode = "wrap" as string) as object
@@ -305,6 +319,8 @@ sub SnakeKey(st as object, code as integer)
         SnakeMenuKey(st, code)
     else if v = "pause" then
         SnakePauseKey(st, code)
+    else if v = "leave" then
+        SnakeLeaveKey(st, code)
     else if v = "results" then
         SnakeResultsKey(st, code)
     else if v = "initials" then
@@ -359,7 +375,7 @@ sub SnakeMenuKey(st as object, code as integer)
     if sn.sel > rows.Count() - 1 then sn.sel = 0
     id = rows[sn.sel].id
     if code = 0 then
-        CloseSnake(st)
+        OpenSnakeLeave(st)
     else if code = 2 or code = 3 then
         delta = 1
         if code = 2 then delta = -1
@@ -388,8 +404,13 @@ sub SnakePauseKey(st as object, code as integer)
     rows = SnakePauseRows(st)
     if sn.sel > rows.Count() - 1 then sn.sel = 0
     id = rows[sn.sel].id
-    if code = 0 or code = 13 then
+    if code = 13 then
         ResumeSnake(st)
+        return
+    end if
+    if code = 0 then
+        OpenSnakeLeave(st)
+        Redraw(st)
         return
     end if
     if code = 2 or code = 3 then
@@ -411,14 +432,52 @@ sub SnakePauseKey(st as object, code as integer)
             sn.view = "howto"
             Redraw(st)
         else if id = "guide" then
-            if SnakeScoreRanks(sn.g) then
-                FinishSnakeSignal(st)
-            else
-                CloseSnake(st)
-            end if
+            LeaveSnakeRun(st)
         end if
     end if
 end sub
+
+' The pause page's Back to the guide: a run whose score makes the table goes to the initials
+' first, and saving them goes on to the guide.
+sub LeaveSnakeRun(st as object)
+    if SnakeScoreRanks(st.snake.g) then
+        FinishSnakeSignal(st, true)
+    else
+        CloseSnake(st)
+    end if
+end sub
+
+' Back on the menu or the pause page: the leave page, on Back to the guide. The page it came
+' from keeps its highlight for Stay here.
+sub OpenSnakeLeave(st as object)
+    sn = st.snake
+    sn.leaveFrom = sn.view
+    sn.leaveSel = 1
+    sn.view = "leave"
+end sub
+
+' OK on Back to the guide does what that page's own Back to the guide row does; Stay here, Back
+' or Play go back to the page.
+sub SnakeLeaveKey(st as object, code as integer)
+    sn = st.snake
+    pick = LeaveKey(sn, code)
+    if pick <> "" then sn.view = sn.leaveFrom
+    if pick <> "guide" then
+        Redraw(st)
+    else if sn.leaveFrom = "pause" then
+        LeaveSnakeRun(st)
+    else
+        CloseSnake(st)
+    end if
+end sub
+
+function SnakeLeaveSpec(st as object) as object
+    sn = st.snake
+    paused = (sn.leaveFrom = "pause")
+    ranks = false
+    if paused then ranks = SnakeScoreRanks(sn.g)
+    return LeavePage("Leave Snake?", LeaveEnds(paused, ranks), sn.leaveSel)
+end function
 
 sub SnakeResultsKey(st as object, code as integer)
     sn = st.snake
@@ -472,7 +531,8 @@ sub SnakeInitialsKey(st as object, code as integer)
             sn.sel = PanelStep(rows, sn.sel, 1)
         end if
     end if
-    Redraw(st)
+    ' (saving a left run has already drawn the guide)
+    if st.mode = "snake" then Redraw(st)
 end sub
 
 ' --- Panel Rows ---
@@ -612,9 +672,11 @@ sub DrawSnake(st as object)
     if v = "play" or v = "signal" then
         DrawSnakePlay(st)
     else if v = "menu" then
-        DrawPanel(st, { title: "Snake", rows: SnakeMenuRows(st), sel: sn.sel, info: false, hint: "Left and right change the arena · OK picks · Back goes to the guide" })
+        DrawPanel(st, { title: "Snake", rows: SnakeMenuRows(st), sel: sn.sel, info: false, hint: "Left and right change the arena · OK picks · Back asks to leave" })
     else if v = "pause" then
-        DrawPanel(st, { title: "Paused", rows: SnakePauseRows(st), sel: sn.sel, info: false, hint: "OK picks · Play or Back carries on" })
+        DrawPanel(st, { title: "Paused", rows: SnakePauseRows(st), sel: sn.sel, info: false, hint: "OK picks · Play carries on · Back asks to leave" })
+    else if v = "leave" then
+        DrawPanel(st, SnakeLeaveSpec(st))
     else if v = "results" then
         DrawPanel(st, { title: SnakeResultsTitle(sn), rows: SnakeResultsRows(st), sel: sn.sel, info: false, hint: "OK picks · Back goes to the menu" })
     else if v = "initials" then
