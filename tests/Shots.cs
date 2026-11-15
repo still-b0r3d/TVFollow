@@ -14,7 +14,8 @@ namespace TVFollow.Tests
     //                                             and draw every step, off screen (a quick look)
     //   TVFollowTests.exe --screenshots <folder>  the same on screen, in front of a plain backdrop,
     //                                             captured as Windows shows it (for the docs);
-    //                                             also the tray menu
+    //                                             also the tray menu, the remotes, Settings
+    //                                             and TVFollow's window
     //   TVFollowTests.exe --probe                 list the Rokus on this network and their inputs
     //                                             (only reads)
     class ShownTv : FoundTv
@@ -130,6 +131,7 @@ namespace TVFollow.Tests
                     SaveTwoTvs(folder, tv);
                 }
                 SaveDeveloperTools(folder, tv);
+                SaveMainWindow(folder, tv);
             }
             if (backdrop != null) backdrop.Close();
             try { Directory.Delete(Settings.Dir, true); } catch { }
@@ -155,6 +157,7 @@ namespace TVFollow.Tests
                 List<Controller> tvs = Controller.For(s);
                 var remote = new RemoteForm(s, tvs, tvs[0], layouts[i]);
                 remote.Show();
+                OnBackdrop(remote);
                 DateTime until = DateTime.UtcNow.AddSeconds(2);
                 while (DateTime.UtcNow < until) { Application.DoEvents(); Thread.Sleep(30); } // inputs arrive
                 WaitFor(() => true);
@@ -238,7 +241,7 @@ namespace TVFollow.Tests
                     using (var window = new SettingsForm(s, follower, tray))
                     {
                         window.StartPosition = FormStartPosition.Manual;
-                        window.Location = new Point(area.Left + 80, area.Top + 20);
+                        window.Location = new Point(area.Left + 80, area.Top + 40);
                         window.TopMost = true;
                         window.Show();
                         WaitFor(() => Text(window).Contains("1.  Living Room TV  ·  Living room") && Text(window).Contains("2.  Office TV  ·  Office"));
@@ -250,6 +253,7 @@ namespace TVFollow.Tests
 
                 var remote = new RemoteForm(s, tvs, tvs[1], RemoteForm.Classic);
                 remote.Show();
+                OnBackdrop(remote);
                 DateTime until = DateTime.UtcNow.AddSeconds(2);
                 while (DateTime.UtcNow < until) { Application.DoEvents(); Thread.Sleep(30); } // inputs arrive
                 WaitFor(() => true);
@@ -289,7 +293,8 @@ namespace TVFollow.Tests
                         Place(window, area);
                         window.Show();
                         WaitFor(() => Text(window).Contains("Living Room TV") && Text(window).Contains("showing this PC"));
-                        Save(window, folder, "10-settings");
+                        // the first page with every page listed (10-settings is the one without)
+                        Save(window, folder, "15-settings-0-tvs");
                         string[] pages =
                         {
                             SettingsForm.FollowingPage, SettingsForm.RemotePage, SettingsForm.PcPage, SettingsForm.UpdatesPage,
@@ -313,15 +318,55 @@ namespace TVFollow.Tests
             }
         }
 
+        // TVFollow's window: following, the living-room TV on and showing this PC, and a few days
+        // of presses saved
+        static void SaveMainWindow(string folder, FakeTv tv)
+        {
+            tv.ControlMode = "enabled";
+            tv.PowerMode = "PowerOn";
+            tv.App = "tvinput.hdmi1";
+            var s = new Settings { Port = tv.Port };
+            s.Tvs.Add(new TvSettings { Ip = tv.Ip, Serial = tv.Serial, Input = "hdmi1", Name = tv.Name });
+            s.PressesAllTime = 214;
+            s.PressesToday = 6;
+            s.PressesDay = DateTime.Now.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+            int every = MainForm.RefreshMs;
+            MainForm.RefreshMs = 150;
+            try
+            {
+                var follower = new Follower(s, Controller.For(s)); // not started
+                using (var tray = new Tray(follower))
+                using (var window = new MainForm(follower, tray))
+                {
+                    Place(window, Screen.PrimaryScreen.WorkingArea);
+                    window.Show();
+                    WaitFor(() => Text(window).Contains("showing this PC") && !Text(window).Contains("Asking"));
+                    Save(window, folder, "17-main-window");
+                    window.Close();
+                }
+            }
+            finally { MainForm.RefreshMs = every; }
+        }
+
         static void Place(Form window, Rectangle area)
         {
             window.StartPosition = FormStartPosition.Manual;
             if (onScreen)
             {
                 window.TopMost = true;
-                window.Location = new Point(area.Left + 80, area.Top + 20);
+                // 40 down, so the 24 pixels of backdrop round the picture stay on the screen
+                window.Location = new Point(area.Left + 80, area.Top + 40);
             }
             else window.Location = new Point(-20000, -20000);
+        }
+
+        // The remote puts itself above the taskbar corner of the screen the pointer is on, where
+        // the backdrop may not reach and other windows would get into the picture: move it onto
+        // the backdrop. Moved, it stays put when its inputs arrive.
+        static void OnBackdrop(Form remote)
+        {
+            Rectangle area = Screen.PrimaryScreen.WorkingArea;
+            remote.Location = new Point(area.Left + 80, area.Top + 40);
         }
 
         public static int Probe()

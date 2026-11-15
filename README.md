@@ -165,7 +165,7 @@ Right-click the icon → **Settings…**, or **TVFollow → Settings…** in TVF
 Pick a page from the list down the left (the arrow keys work too). Changes apply straight
 away.
 
-![The Settings window](docs/images/10-settings.png)
+![The Settings window on its TV page, with its pages listed down the left](docs/images/10-settings.png)
 
 - **TV:** which TV and whether it's answering, and the input your PC is on (for each
   TV, numbered, when there are several). **Add or change TVs…** runs setup again: tick a
@@ -233,6 +233,8 @@ If the TV asks, first sign up for Roku's free developer program at
 [developer.roku.com](https://developer.roku.com), with the Roku account the TV uses. The
 developer tools say when developer mode is on. To turn it off, press the same code and
 choose **Disable installer and restart**.
+
+![The App on the TV page: b0r3d TV 0.75 on the TV, the three ways to push an app, and Open on the TV, Remove, Screenshot and App log](docs/images/15-settings-6-app.png)
 
 **Push an app** (on **App on the TV**):
 
